@@ -27,6 +27,11 @@ export function sideLabel(championship: Championship, ref: TeamRef): string {
     const source = championship.matches.find((match) => match.id === ref.matchId);
     const prefix = ref.type === "winner" ? "Winner" : "Loser";
     if (!source) return `${prefix} TBD`;
+    const homeId = resolveTeamId(championship, source.home);
+    const awayId = resolveTeamId(championship, source.away);
+    if (homeId && awayId) {
+      return `${prefix}: ${teamName(championship, homeId)} / ${teamName(championship, awayId)}`;
+    }
     return `${prefix}: ${stageLabel(source.stage, source.round)}`;
   }
   return "TBD";
