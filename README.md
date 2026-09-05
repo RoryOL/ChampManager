@@ -19,12 +19,13 @@ The interface is built as an Android-first phone app. On a desktop browser it si
 
 ## Install on your phone (APK)
 
-1. Download **ChampManager.apk** from the latest GitHub Actions run on `main`: **Actions → Android APK → Artifacts**.
-2. Open the file on your Android phone.
-3. If Android blocks it, allow **Install unknown apps** for your Files or Chrome app, then install.
-4. Open **ChampManager** from the launcher.
+Download the APK from GitHub (this is a direct file, not an in-chat link):
 
-This is a debug-signed APK (fine for sideloading; not a Play Store build).
+**https://github.com/RoryOL/ChampManager/raw/main/releases/ChampManager.apk**
+
+On a phone, open that URL in Chrome. If Android blocks the install, allow **Install unknown apps** for Chrome, then install. Open **ChampManager** from the launcher.
+
+This is a debug-signed APK (fine for sideloading; not a Play Store build). A copy also lands on **Actions → Android APK → Artifacts** after each push to `main`.
 
 To rebuild it locally (needs JDK 21 and the Android SDK):
 

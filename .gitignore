@@ -6,6 +6,7 @@ coverage
 *.tsbuildinfo
 ChampManager.apk
 *.apk
+!releases/ChampManager.apk
 *.aab
 android/.gradle
 android/app/build
