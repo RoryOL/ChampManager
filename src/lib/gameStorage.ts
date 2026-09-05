@@ -4,10 +4,68 @@ import type { Championship, GameSave, NewsItem, Score, Tactics, TeamSheet } from
 
 const STORAGE_KEY = "champ-manager:game-v1";
 
+type LegacyTactics = {
+  mentality?: Tactics["mentality"];
+  style?: "possession" | "direct";
+  pressing?: "low" | "medium" | "high";
+  build?: Tactics["build"];
+  puckout?: Tactics["puckout"];
+  shape?: Tactics["shape"];
+};
+
+function isTactics(value: unknown): value is Tactics {
+  if (!value || typeof value !== "object") return false;
+  const tactics = value as Tactics;
+  return (
+    (tactics.mentality === "contain" || tactics.mentality === "balanced" || tactics.mentality === "attacking") &&
+    (tactics.build === "direct" || tactics.build === "running") &&
+    (tactics.puckout === "contest" || tactics.puckout === "short") &&
+    (tactics.shape === "sweeper" || tactics.shape === "traditional")
+  );
+}
+
+export function migrateTactics(raw: unknown): Tactics {
+  if (isTactics(raw)) return raw;
+  const legacy = (raw ?? {}) as LegacyTactics;
+  return {
+    mentality:
+      legacy.mentality === "contain" || legacy.mentality === "attacking" || legacy.mentality === "balanced"
+        ? legacy.mentality
+        : DEFAULT_TACTICS.mentality,
+    build: legacy.build ?? (legacy.style === "direct" ? "direct" : "running"),
+    puckout: legacy.puckout ?? (legacy.pressing === "high" ? "contest" : "short"),
+    shape: legacy.shape ?? "traditional",
+  };
+}
+
+export function migrateSave(raw: unknown): GameSave | null {
+  if (!raw || typeof raw !== "object") return null;
+  const parsed = raw as {
+    version?: number;
+    clubId?: string;
+    seed?: number;
+    tactics?: unknown;
+    sheet?: GameSave["sheet"];
+    matches?: GameSave["matches"];
+    inbox?: GameSave["inbox"];
+  };
+  if (!parsed.clubId || !parsed.sheet || !Array.isArray(parsed.matches)) return null;
+  if (parsed.version !== 1 && parsed.version !== 2) return null;
+  return {
+    version: 2,
+    clubId: parsed.clubId,
+    seed: typeof parsed.seed === "number" ? parsed.seed : 1,
+    tactics: migrateTactics(parsed.tactics),
+    sheet: parsed.sheet,
+    matches: parsed.matches,
+    inbox: Array.isArray(parsed.inbox) ? parsed.inbox : [],
+  };
+}
+
 export function newSave(clubId: string): GameSave {
   const championship = structuredClone(seedChampionship);
   return {
-    version: 1,
+    version: 2,
     clubId,
     seed: Math.floor(Math.random() * 1_000_000_000),
     tactics: DEFAULT_TACTICS,
@@ -48,9 +106,7 @@ export function loadSave(): GameSave | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as GameSave;
-    if (parsed.version !== 1 || !parsed.clubId) return null;
-    return parsed;
+    return migrateSave(JSON.parse(raw));
   } catch {
     return null;
   }

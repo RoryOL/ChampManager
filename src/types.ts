@@ -99,25 +99,43 @@ export type StandingRow = TeamStats & {
 
 export type PageId = "home" | "squad" | "tactics" | "fixtures" | "table";
 
+export type PositionLine = "GK" | "FB" | "HB" | "MF" | "HF" | "FF";
+
+export type PositionFamiliarity = Record<PositionLine, number>;
+
 export type Tactics = {
   mentality: "contain" | "balanced" | "attacking";
-  style: "possession" | "direct";
-  pressing: "low" | "medium" | "high";
+  build: "direct" | "running";
+  puckout: "contest" | "short";
+  shape: "sweeper" | "traditional";
 };
 
 export type PlayerRatings = {
-  handling: number;
-  tackling: number;
-  pace: number;
+  speed: number;
+  aerialReach: number;
   stamina: number;
-  striking: number;
-  scoring: number;
+  strength: number;
+  acceleration: number;
+  firstTouch: number;
+  highFielding: number;
+  strikingDistance: number;
+  vision: number;
+  hooking: number;
   passing: number;
+  offTheBall: number;
+  manMarking: number;
+  workrate: number;
+  underPressure: number;
+  composure: number;
+  frees: number;
+  sidelines: number;
+  puckoutReach: number;
+  familiarity: PositionFamiliarity;
   overall: number;
 };
 
 export type RatedPlayer = SquadPlayer & {
-  position: string;
+  position: PositionLine;
   ratings: PlayerRatings;
 };
 
@@ -129,11 +147,24 @@ export type NewsItem = {
   matchId?: string;
 };
 
+export type MatchEventKind =
+  | "point"
+  | "goal"
+  | "wide"
+  | "save"
+  | "free"
+  | "sixtyFive"
+  | "sideline"
+  | "hook"
+  | "puckout"
+  | "half"
+  | "full";
+
 export type MatchEvent = {
   minute: number;
   teamId: string;
   playerName: string;
-  kind: "point" | "goal" | "wide" | "save" | "half" | "full";
+  kind: MatchEventKind;
   text: string;
 };
 
@@ -150,7 +181,7 @@ export type TeamSheet = {
 };
 
 export type GameSave = {
-  version: 1;
+  version: 2;
   clubId: string;
   seed: number;
   tactics: Tactics;

@@ -1,23 +1,18 @@
-import type { PlayerRatings, RatedPlayer, Tactics, TeamSheet } from "../types";
+import type {
+  PlayerRatings,
+  PositionFamiliarity,
+  PositionLine,
+  RatedPlayer,
+  Tactics,
+  TeamSheet,
+} from "../types";
+import {
+  ADJACENT_LINES,
+  POSITION_LINES,
+  XV_SLOTS,
+  type AttributeKey,
+} from "./attributes";
 import { latestLineup, squadFor } from "./squads";
-
-const POSITIONS = [
-  "GK",
-  "FB",
-  "FB",
-  "FB",
-  "HB",
-  "HB",
-  "HB",
-  "MF",
-  "MF",
-  "HF",
-  "HF",
-  "HF",
-  "FF",
-  "FF",
-  "FF",
-];
 
 const STAR_FLOOR: Record<string, number> = {
   "Tony Kelly": 19,
@@ -54,10 +49,66 @@ const STAR_FLOOR: Record<string, number> = {
   "Niall Deasy": 13,
 };
 
+const STAR_BIAS: Record<string, Partial<Record<AttributeKey, number>>> = {
+  "Tony Kelly": {
+    frees: 19,
+    vision: 19,
+    strikingDistance: 18,
+    passing: 18,
+    composure: 18,
+    firstTouch: 18,
+    underPressure: 18,
+    sidelines: 16,
+  },
+  "Shane O'Donnell": {
+    speed: 19,
+    acceleration: 18,
+    firstTouch: 18,
+    offTheBall: 18,
+    composure: 17,
+    strikingDistance: 16,
+  },
+  "Peter Duggan": {
+    frees: 18,
+    strikingDistance: 18,
+    aerialReach: 18,
+    highFielding: 16,
+    composure: 16,
+  },
+  "John Conlon": {
+    workrate: 18,
+    highFielding: 17,
+    underPressure: 17,
+    strength: 16,
+    firstTouch: 16,
+  },
+  "Mark Rodgers": {
+    offTheBall: 17,
+    strikingDistance: 17,
+    frees: 16,
+    composure: 16,
+    speed: 16,
+  },
+  "Aidan McCarthy": { frees: 18, composure: 17, strikingDistance: 16, underPressure: 16 },
+  "Danny Russell": { frees: 17, strikingDistance: 16, composure: 16, offTheBall: 15 },
+  "David Fitzgerald": { stamina: 18, workrate: 17, speed: 16, highFielding: 16, passing: 15 },
+  "Diarmuid Ryan": { speed: 17, aerialReach: 16, stamina: 16, strikingDistance: 15 },
+  "Podge Collins": { firstTouch: 17, workrate: 17, vision: 16, offTheBall: 16 },
+  "Conor Cleary": { strength: 17, manMarking: 17, aerialReach: 16, hooking: 16 },
+  "Aron Shanagher": { aerialReach: 17, highFielding: 16, strength: 16, offTheBall: 15 },
+  "Adam Hogan": { manMarking: 17, hooking: 16, speed: 15, underPressure: 15 },
+  "Eibhear Quilligan": { puckoutReach: 17, highFielding: 16, composure: 15, aerialReach: 15 },
+  "Niall Deasy": { frees: 17, composure: 16, strikingDistance: 15 },
+  "David Reidy": { frees: 16, passing: 16, vision: 15 },
+  "Cathal Malone": { stamina: 16, workrate: 16, highFielding: 15 },
+  "Seadna Morey": { manMarking: 16, hooking: 15, speed: 15 },
+};
+
 export const DEFAULT_TACTICS: Tactics = {
   mentality: "balanced",
-  style: "possession",
-  pressing: "medium",
+  build: "running",
+  puckout: "contest",
+  shape: "traditional",
 };
 
 function hash(text: string): number {
@@ -74,8 +125,100 @@ function stat(seed: number, min: number, max: number): number {
   return min + (seed % span);
 }
 
-export function positionForIndex(index: number): string {
-  return POSITIONS[index] ?? "SUB";
+export function clampStat(value: number): number {
+  return Math.max(1, Math.min(20, Math.round(value)));
+}
+
+export function positionForIndex(index: number): PositionLine {
+  return XV_SLOTS[index] ?? XV_SLOTS[index % XV_SLOTS.length] ?? "MF";
+}
+
+function lineBias(line: PositionLine, key: AttributeKey): number {
+  const table: Record<PositionLine, Partial<Record<AttributeKey, number>>> = {
+    GK: {
+      puckoutReach: 4,
+      highFielding: 2,
+      aerialReach: 2,
+      composure: 2,
+      speed: -2,
+      offTheBall: -3,
+      frees: -4,
+      sidelines: -3,
+    },
+    FB: {
+      strength: 3,
+      manMarking: 3,
+      aerialReach: 2,
+      hooking: 2,
+      speed: -1,
+      frees: -3,
+      strikingDistance: -2,
+    },
+    HB: {
+      stamina: 2,
+      passing: 2,
+      aerialReach: 1,
+      highFielding: 1,
+      strikingDistance: 1,
+      sidelines: 1,
+      manMarking: 1,
+    },
+    MF: {
+      stamina: 3,
+      workrate: 2,
+      highFielding: 2,
+      speed: 1,
+      passing: 1,
+      strikingDistance: 1,
+    },
+    HF: {
+      firstTouch: 2,
+      vision: 2,
+      passing: 2,
+      strikingDistance: 2,
+      offTheBall: 1,
+      frees: 1,
+      sidelines: 1,
+    },
+    FF: {
+      offTheBall: 3,
+      composure: 2,
+      strikingDistance: 2,
+      frees: 2,
+      firstTouch: 1,
+      manMarking: -2,
+      puckoutReach: -3,
+    },
+  };
+  return table[line][key] ?? 0;
+}
+
+function rollStat(
+  seed: number,
+  shift: number,
+  base: number,
+  line: PositionLine,
+  key: AttributeKey,
+  floor: number,
+): number {
+  const wobble = stat(seed >> shift, -2, 2);
+  const raw = base + lineBias(line, key) + wobble;
+  const lifted = floor > 0 ? Math.max(raw, floor - 4) : raw;
+  return clampStat(lifted);
+}
+
+function familiarityFor(seed: number, natural: PositionLine, floor: number): PositionFamiliarity {
+  const result = {} as PositionFamiliarity;
+  for (const line of POSITION_LINES) {
+    if (line === natural) {
+      result[line] = clampStat(Math.max(16, floor - 1, 14 + stat(seed >> 2, 0, 4)));
+    } else if (ADJACENT_LINES[natural].includes(line)) {
+      result[line] = clampStat(11 + stat(seed >> (4 + POSITION_LINES.indexOf(line)), 0, 4));
+    } else {
+      result[line] = clampStat(5 + stat(seed >> (8 + POSITION_LINES.indexOf(line)), 0, 5));
+    }
+  }
+  return result;
 }
 
 export function ratePlayer(teamId: string, name: string, index: number): PlayerRatings {
@@ -83,32 +226,61 @@ export function ratePlayer(teamId: string, name: string, index: number): PlayerR
   const position = positionForIndex(index);
   const floor = STAR_FLOOR[name] ?? 0;
   const base = Math.max(floor - 2, stat(seed, 10, 15));
-  const handling = clamp(position === "GK" ? base + 3 : base - 3 + stat(seed >> 3, 0, 2));
-  const tackling = clamp(position === "GK" ? base - 2 : /B$/.test(position) ? base + 2 : base);
-  const pace = clamp(base + stat(seed >> 6, -1, 2));
-  const stamina = clamp(position === "MF" ? base + 2 : base + stat(seed >> 8, -1, 1));
-  const striking = clamp(position === "GK" ? base - 1 : /F$/.test(position) ? base + 2 : base);
-  const scoring = clamp(/F$/.test(position) ? Math.max(base + 1, floor) : base - 2);
-  const passing = clamp(base + stat(seed >> 10, -1, 2));
-  const overall = clamp(
+  const keys: AttributeKey[] = [
+    "speed",
+    "aerialReach",
+    "stamina",
+    "strength",
+    "acceleration",
+    "firstTouch",
+    "highFielding",
+    "strikingDistance",
+    "vision",
+    "hooking",
+    "passing",
+    "offTheBall",
+    "manMarking",
+    "workrate",
+    "underPressure",
+    "composure",
+    "frees",
+    "sidelines",
+    "puckoutReach",
+  ];
+  const ratings = {} as Record<AttributeKey, number>;
+  keys.forEach((key, i) => {
+    ratings[key] = rollStat(seed, 3 + i * 2, base, position, key, floor);
+  });
+  const bias = STAR_BIAS[name];
+  if (bias) {
+    for (const [key, value] of Object.entries(bias) as [AttributeKey, number][]) {
+      ratings[key] = clampStat(Math.max(ratings[key], value));
+    }
+  }
+  const familiarity = familiarityFor(seed, position, floor);
+  const overall = clampStat(
     Math.round(
-      (handling + tackling + pace + stamina + striking + scoring + passing) / 7,
+      (ratings.speed +
+        ratings.aerialReach +
+        ratings.stamina +
+        ratings.firstTouch +
+        ratings.highFielding +
+        ratings.strikingDistance +
+        ratings.vision +
+        ratings.passing +
+        ratings.offTheBall +
+        ratings.workrate +
+        ratings.composure +
+        ratings.frees * 1.15 +
+        familiarity[position]) /
+        13,
     ),
   );
   return {
-    handling,
-    tackling,
-    pace,
-    stamina,
-    striking,
-    scoring,
-    passing,
+    ...ratings,
+    familiarity,
     overall: Math.max(overall, floor || overall),
   };
-}
-
-function clamp(value: number): number {
-  return Math.max(1, Math.min(20, value));
 }
 
 export function ratedSquad(teamId: string): RatedPlayer[] {
@@ -144,39 +316,154 @@ export function sheetPlayers(teamId: string, sheet: TeamSheet): RatedPlayer[] {
     .filter((player): player is RatedPlayer => Boolean(player));
 }
 
-export function sideStrength(teamId: string, sheet: TeamSheet, tactics: Tactics): {
-  attack: number;
-  defence: number;
-} {
-  const xv = sheetPlayers(teamId, sheet);
-  const attackPool = xv.filter((player) => /F$|MF/.test(player.position));
-  const defencePool = xv.filter((player) => /B$|GK/.test(player.position));
-  const attack =
-    average(attackPool.map((player) => (player.ratings.scoring + player.ratings.striking) / 2)) || 12;
-  const defence =
-    average(defencePool.map((player) => (player.ratings.tackling + player.ratings.handling) / 2)) || 12;
-
-  let attackMod = 0;
-  let defenceMod = 0;
-  if (tactics.mentality === "attacking") {
-    attackMod += 1.4;
-    defenceMod -= 0.8;
-  }
-  if (tactics.mentality === "contain") {
-    attackMod -= 0.9;
-    defenceMod += 1.3;
-  }
-  if (tactics.style === "direct") attackMod += 0.5;
-  if (tactics.pressing === "high") {
-    attackMod += 0.4;
-    defenceMod -= 0.3;
-  }
-  if (tactics.pressing === "low") defenceMod += 0.4;
-
-  return { attack: attack + attackMod, defence: defence + defenceMod };
-}
-
 function average(values: number[]): number {
   if (values.length === 0) return 0;
   return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function slotLine(index: number): PositionLine {
+  return XV_SLOTS[index] ?? "MF";
+}
+
+function usedInSlot(player: RatedPlayer, index: number): number {
+  const line = slotLine(index);
+  const fam = player.ratings.familiarity[line] / 20;
+  return 0.62 + 0.38 * fam;
+}
+
+export type SideProfile = {
+  attack: number;
+  defence: number;
+  aerial: number;
+  running: number;
+  hooking: number;
+  deadBall: number;
+  halfBackHands: number;
+  puckout: number;
+  pressure: number;
+  freeTaker: RatedPlayer | undefined;
+  sidelineTaker: RatedPlayer | undefined;
+  keeper: RatedPlayer | undefined;
+};
+
+export function pickSpecialist(xv: RatedPlayer[], key: AttributeKey): RatedPlayer | undefined {
+  if (xv.length === 0) return undefined;
+  return [...xv].sort((a, b) => b.ratings[key] - a.ratings[key])[0];
+}
+
+export function designatedRoles(xv: RatedPlayer[]): {
+  freeTaker?: string;
+  sidelineTaker?: string;
+  puckoutKeeper?: string;
+} {
+  return {
+    freeTaker: pickSpecialist(xv, "frees")?.name,
+    sidelineTaker: pickSpecialist(xv, "sidelines")?.name,
+    puckoutKeeper: xv[0]?.name,
+  };
+}
+
+export function sideProfile(teamId: string, sheet: TeamSheet, tactics: Tactics): SideProfile {
+  const xv = sheetPlayers(teamId, sheet);
+  const scaled = (index: number, keys: AttributeKey[]) => {
+    const player = xv[index];
+    if (!player) return 12;
+    const mean = average(keys.map((key) => player.ratings[key]));
+    return mean * usedInSlot(player, index);
+  };
+
+  const forwards = [9, 10, 11, 12, 13, 14];
+  const backs = [0, 1, 2, 3, 4, 5, 6];
+  const mids = [7, 8];
+  const halfBacks = [4, 5, 6];
+  const midfield = [...halfBacks, ...mids];
+
+  let attack =
+    average([
+      ...forwards.map((i) => scaled(i, ["strikingDistance", "offTheBall", "composure", "firstTouch", "frees"])),
+      ...mids.map((i) => scaled(i, ["strikingDistance", "vision", "passing", "workrate"])),
+    ]) || 12;
+  let defence =
+    average(backs.map((i) => scaled(i, ["hooking", "manMarking", "strength", "highFielding", "aerialReach"]))) ||
+    12;
+  const aerial =
+    average(midfield.map((i) => scaled(i, ["highFielding", "aerialReach", "strength"]))) || 12;
+  const running =
+    average(
+      [...mids, ...forwards].map((i) =>
+        scaled(i, ["speed", "acceleration", "firstTouch", "passing", "vision", "offTheBall"]),
+      ),
+    ) || 12;
+  const hooking = average(backs.map((i) => scaled(i, ["hooking", "strength", "workrate"]))) || 12;
+  const halfBackHands =
+    average(halfBacks.map((i) => scaled(i, ["firstTouch", "passing", "vision", "underPressure"]))) || 12;
+  const keeper = xv[0];
+  const puckout = keeper
+    ? keeper.ratings.puckoutReach * usedInSlot(keeper, 0)
+    : 12;
+  const freeTaker = pickSpecialist(xv, "frees");
+  const sidelineTaker = pickSpecialist(xv, "sidelines");
+  const deadBall = freeTaker
+    ? (freeTaker.ratings.frees * 1.2 + freeTaker.ratings.composure + freeTaker.ratings.underPressure) / 3.2
+    : 12;
+  const pressure = average(xv.map((player) => player.ratings.underPressure)) || 12;
+
+  if (tactics.mentality === "attacking") {
+    attack += 1.4;
+    defence -= 0.8;
+  }
+  if (tactics.mentality === "contain") {
+    attack -= 0.9;
+    defence += 1.3;
+  }
+  if (tactics.build === "direct") {
+    attack += 0.35 + (aerial - 12) * 0.12;
+  } else {
+    attack += 0.25 + (running - 12) * 0.14;
+  }
+  if (tactics.puckout === "contest") {
+    attack += (puckout + aerial - 24) * 0.08;
+  } else {
+    attack += (halfBackHands - 12) * 0.12;
+    defence += 0.2;
+  }
+  if (tactics.shape === "sweeper") {
+    defence += 1.6;
+    attack -= 0.7;
+  }
+
+  return {
+    attack,
+    defence,
+    aerial,
+    running,
+    hooking,
+    deadBall,
+    halfBackHands,
+    puckout,
+    pressure,
+    freeTaker,
+    sidelineTaker,
+    keeper,
+  };
+}
+
+export function sideStrength(
+  teamId: string,
+  sheet: TeamSheet,
+  tactics: Tactics,
+): { attack: number; defence: number } {
+  const profile = sideProfile(teamId, sheet, tactics);
+  return { attack: profile.attack, defence: profile.defence };
+}
+
+export function clubTactics(teamId: string): Tactics {
+  const value = hash(teamId);
+  const mentalities: Tactics["mentality"][] = ["contain", "balanced", "balanced", "attacking"];
+  return {
+    mentality: mentalities[value % mentalities.length] ?? "balanced",
+    build: (value >> 3) % 2 === 0 ? "direct" : "running",
+    puckout: (value >> 5) % 2 === 0 ? "contest" : "short",
+    shape: (value >> 7) % 3 === 0 ? "sweeper" : "traditional",
+  };
 }

@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { seedChampionship } from "../data/championship";
 import { simulateMatch } from "../lib/matchEngine";
-import { DEFAULT_TACTICS, defaultSheet } from "../lib/players";
+import { clubTactics, defaultSheet } from "../lib/players";
 import { resolveMatchSides, teamById } from "../lib/resolve";
 import { nextBatch } from "../lib/schedule";
 import { formatScore, formatScoreWithTotal, matchPlayed, stageLabel } from "../lib/scoring";
@@ -140,8 +140,8 @@ export function useGame() {
           awayId,
           homeSheet: homeId === save.clubId ? save.sheet : defaultSheet(homeId),
           awaySheet: awayId === save.clubId ? save.sheet : defaultSheet(awayId),
-          homeTactics: homeId === save.clubId ? save.tactics : DEFAULT_TACTICS,
-          awayTactics: awayId === save.clubId ? save.tactics : DEFAULT_TACTICS,
+          homeTactics: homeId === save.clubId ? save.tactics : clubTactics(homeId),
+          awayTactics: awayId === save.clubId ? save.tactics : clubTactics(awayId),
           seed: save.seed,
         });
       })

@@ -477,3 +477,120 @@ button {
   margin-bottom: 8px;
   color: var(--muted);
 }
+
+.tactic-copy {
+  margin: 6px 0 10px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.choice-stack {
+  display: grid;
+  gap: 8px;
+}
+
+.choice-stack button {
+  display: grid;
+  gap: 4px;
+  text-align: left;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+
+.choice-stack strong {
+  font-size: 15px;
+}
+
+.choice-stack span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.choice-stack .is-active {
+  background: var(--saffron);
+  color: #102033;
+}
+
+.choice-stack .is-active span {
+  color: #3b4a5c;
+}
+
+.player-card header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.player-card header p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.player-card header b {
+  color: var(--saffron);
+  font-size: 28px;
+  line-height: 1;
+}
+
+.attr-group h4 {
+  margin: 14px 0 8px;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--saffron);
+}
+
+.attr-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(64px, 1fr) 22px;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  margin-bottom: 5px;
+}
+
+.attr-bar {
+  height: 6px;
+  background: #102033;
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+.attr-bar i {
+  display: block;
+  height: 100%;
+  background: var(--saffron);
+}
+
+.attr-row em {
+  font-style: normal;
+  text-align: right;
+  color: var(--ink);
+}
+
+.fam-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.fam-grid div {
+  background: var(--surface-2);
+  border-radius: 8px;
+  padding: 8px 4px;
+  text-align: center;
+}
+
+.fam-grid span {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.fam-grid .is-natural {
+  outline: 1px solid var(--saffron);
+}
