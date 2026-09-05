@@ -78,6 +78,8 @@ export const ATTRIBUTE_GROUPS: AttributeGroup[] = [
   },
 ];
 
+export const ATTRIBUTE_KEYS: AttributeKey[] = ATTRIBUTE_GROUPS.flatMap((group) => group.keys);
+
 export const ATTRIBUTE_LABELS: Record<AttributeKey, string> = {
   speed: "Speed",
   aerialReach: "Aerial reach",

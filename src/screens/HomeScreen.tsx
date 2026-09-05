@@ -4,7 +4,7 @@ import { ClubBadge } from "../components/ClubBadge";
 import { compactName, sideLabel } from "../lib/display";
 import { resolveMatchSides, teamById, teamGroup } from "../lib/resolve";
 import { formatDate, stageLabel } from "../lib/scoring";
-import { averageFatigue, PRESEASON_WEEKS, TRAINING_OPTIONS } from "../lib/training";
+import { averageFatigue, averageMatchOverall, averageSharpness, PRESEASON_WEEKS, TRAINING_OPTIONS } from "../lib/training";
 import { ratedSquad } from "../lib/players";
 
 type Props = {
@@ -32,9 +32,13 @@ export function HomeScreen({
   const group = teamGroup(championship, save.clubId);
   const sides = nextMatch ? resolveMatchSides(championship, nextMatch) : null;
   const [focus, setFocus] = useState<TrainingFocus>("skills");
-  const names = ratedSquad(save.clubId).map((player) => player.name);
+  const squad = ratedSquad(save.clubId);
+  const names = squad.map((player) => player.name);
   const fatigue = averageFatigue(save.condition, names);
+  const sharpness = averageSharpness(save.condition, names);
+  const form = averageMatchOverall(squad, save.condition, save.sheet.starters);
   const preseason = save.phase === "preseason";
+  const formDelta = Math.round((form.match - form.ability) * 10) / 10;
 
   return (
     <div className="screen">
@@ -51,17 +55,23 @@ export function HomeScreen({
 
       <section className="card">
         <p className="kicker">{preseason ? `Preseason · week ${Math.min(save.preseasonWeek, PRESEASON_WEEKS)} of ${PRESEASON_WEEKS}` : "Condition"}</p>
-        <h3>Panel fatigue {fatigue}</h3>
+        <h3>
+          Panel fatigue {fatigue} · sharpness {sharpness}
+        </h3>
         <div className="attr-bar fatigue-bar">
           <i className={fatigue >= 78 ? "is-warn" : ""} style={{ width: `${fatigue}%` }} />
         </div>
+        <p className="xv-form">
+          Championship XV match rating {form.match}
+          {formDelta !== 0 ? ` (${formDelta > 0 ? "+" : ""}${formDelta})` : ""} · ability {form.ability}
+        </p>
         <p className="tactic-copy">
           {fatigue >= 78
-            ? "The group is overtrained. A recovery week will pay you back in championship."
+            ? "The group is overtrained. Match ratings are down — a recovery week will pay you back in championship."
             : preseason
-              ? "Train them up before Round 1. Heavy weeks raise sharpness and fatigue together."
+              ? "Each session lifts specific match stats on the squad card (up to +4). Natural ability does not change."
               : save.trainingDue
-                ? "A midweek session is available before the next championship match."
+                ? "A midweek session is available. Pick a focus and those bars will move on the squad."
                 : "The next championship day is the priority."}
         </p>
         {save.trainingDue ? (

@@ -141,9 +141,15 @@ export type RatedPlayer = SquadPlayer & {
   ratings: PlayerRatings;
 };
 
+export type AttributeBoosts = Partial<
+  Record<Exclude<keyof PlayerRatings, "familiarity" | "overall">, number>
+>;
+
 export type PlayerCondition = {
   fatigue: number;
   sharpness: number;
+  /** Match-form lifts on 1–20 stats. Natural ability does not change. */
+  boosts?: AttributeBoosts;
 };
 
 export type TrainingFocus = "fitness" | "skills" | "setpieces" | "challenge" | "recovery";

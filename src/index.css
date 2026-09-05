@@ -680,7 +680,7 @@ html.native-app .device {
 
 .attr-row {
   display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(64px, 1fr) 22px;
+  grid-template-columns: minmax(0, 1.1fr) minmax(64px, 1fr) 22px 26px;
   align-items: center;
   gap: 8px;
   font-size: 12px;
@@ -700,10 +700,58 @@ html.native-app .device {
   background: var(--saffron);
 }
 
+.attr-bar i.is-up {
+  background: #7dce8a;
+}
+
+.attr-bar i.is-down,
+.attr-bar i.is-warn,
+.fatigue-bar i.is-warn {
+  background: #e05a5a;
+}
+
 .attr-row em {
   font-style: normal;
   text-align: right;
   color: var(--ink);
+}
+
+.delta {
+  min-height: 1em;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: right;
+}
+
+.delta.is-up,
+.mini-row em.is-up,
+.player-list i.is-up,
+.player-card header b.is-up {
+  color: #7dce8a;
+}
+
+.delta.is-down,
+.mini-row em.is-down,
+.player-list i.is-down,
+.player-card header b.is-down {
+  color: #f0a3a3;
+}
+
+.mini-row em small {
+  display: block;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.xv-form {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+
+.hint--tight {
+  margin: 8px 0 0;
+  font-size: 12px;
 }
 
 .fam-grid {

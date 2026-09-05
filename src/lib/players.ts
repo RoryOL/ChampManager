@@ -15,7 +15,7 @@ import {
   type AttributeKey,
 } from "./attributes";
 import { latestLineup, squadFor } from "./squads";
-import { conditionFor, freshnessFactor } from "./training";
+import { conditionFor, matchStat } from "./training";
 
 const STAR_FLOOR: Record<string, number> = {
   "Tony Kelly": 19,
@@ -261,7 +261,20 @@ export function ratePlayer(teamId: string, name: string, index: number): PlayerR
     }
   }
   const familiarity = familiarityFor(seed, position, floor);
-  const overall = clampStat(
+  const overall = computeOverall(ratings, familiarity, position);
+  return {
+    ...ratings,
+    familiarity,
+    overall: Math.max(overall, floor || overall),
+  };
+}
+
+export function computeOverall(
+  ratings: Record<AttributeKey, number>,
+  familiarity: PositionFamiliarity,
+  position: PositionLine,
+): number {
+  return clampStat(
     Math.round(
       (ratings.speed +
         ratings.aerialReach +
@@ -279,11 +292,6 @@ export function ratePlayer(teamId: string, name: string, index: number): PlayerR
         13,
     ),
   );
-  return {
-    ...ratings,
-    familiarity,
-    overall: Math.max(overall, floor || overall),
-  };
 }
 
 export function ratedSquad(teamId: string): RatedPlayer[] {
@@ -372,9 +380,17 @@ export type SideProfile = {
   keeper: RatedPlayer | undefined;
 };
 
-export function pickSpecialist(xv: RatedPlayer[], key: AttributeKey): RatedPlayer | undefined {
+export function pickSpecialist(
+  xv: RatedPlayer[],
+  key: AttributeKey,
+  condition: Record<string, PlayerCondition> = {},
+): RatedPlayer | undefined {
   if (xv.length === 0) return undefined;
-  return [...xv].sort((a, b) => b.ratings[key] - a.ratings[key])[0];
+  return [...xv].sort(
+    (a, b) =>
+      matchStat(b.ratings[key], conditionFor(b.name, condition), key) -
+      matchStat(a.ratings[key], conditionFor(a.name, condition), key),
+  )[0];
 }
 
 export function designatedRoles(xv: RatedPlayer[]): {
@@ -399,9 +415,9 @@ export function sideProfile(
   const scaled = (index: number, keys: AttributeKey[]) => {
     const player = xv[index];
     if (!player) return 12;
-    const mean = average(keys.map((key) => player.ratings[key]));
-    const fresh = freshnessFactor(conditionFor(player.name, condition));
-    return mean * usedInSlot(player, index) * fresh;
+    const form = conditionFor(player.name, condition);
+    const mean = average(keys.map((key) => matchStat(player.ratings[key], form, key)));
+    return mean * usedInSlot(player, index);
   };
 
   const forwards = [9, 10, 11, 12, 13, 14];
@@ -431,14 +447,20 @@ export function sideProfile(
     average(halfBacks.map((i) => scaled(i, ["firstTouch", "passing", "vision", "underPressure"]))) || 12;
   const keeper = xv[0];
   const puckout = keeper
-    ? keeper.ratings.puckoutReach * usedInSlot(keeper, 0)
+    ? matchStat(keeper.ratings.puckoutReach, conditionFor(keeper.name, condition), "puckoutReach") *
+      usedInSlot(keeper, 0)
     : 12;
-  const freeTaker = pickSpecialist(xv, "frees");
-  const sidelineTaker = pickSpecialist(xv, "sidelines");
+  const freeTaker = pickSpecialist(xv, "frees", condition);
+  const sidelineTaker = pickSpecialist(xv, "sidelines", condition);
   const deadBall = freeTaker
-    ? (freeTaker.ratings.frees * 1.2 + freeTaker.ratings.composure + freeTaker.ratings.underPressure) / 3.2
+    ? (matchStat(freeTaker.ratings.frees, conditionFor(freeTaker.name, condition), "frees") * 1.2 +
+        matchStat(freeTaker.ratings.composure, conditionFor(freeTaker.name, condition), "composure") +
+        matchStat(freeTaker.ratings.underPressure, conditionFor(freeTaker.name, condition), "underPressure")) /
+      3.2
     : 12;
-  const pressure = average(xv.map((player) => player.ratings.underPressure)) || 12;
+  const pressure =
+    average(xv.map((player) => matchStat(player.ratings.underPressure, conditionFor(player.name, condition), "underPressure"))) ||
+    12;
 
   if (tactics.mentality === "attacking") {
     attack += 1.4;

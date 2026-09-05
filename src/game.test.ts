@@ -11,7 +11,13 @@ import {
 import { clubTactics, DEFAULT_TACTICS, defaultSheet, ratePlayer, ratedSquad, sideStrength } from "./lib/players";
 import { nextBatch } from "./lib/schedule";
 import { matchPlayed } from "./lib/scoring";
-import { applyTraining, defaultCondition, isOvertrained } from "./lib/training";
+import {
+  applyTraining,
+  defaultCondition,
+  isOvertrained,
+  matchRatings,
+  matchStat,
+} from "./lib/training";
 import type { Tactics } from "./types";
 
 describe("new game championship", () => {
@@ -207,6 +213,34 @@ describe("training", () => {
     expect(first.condition[squad[0].name]?.sharpness ?? 0).toBeGreaterThan(defaultCondition().sharpness);
     expect(second.overtrained.length).toBeGreaterThan(0);
     expect(isOvertrained(second.condition[squad[0].name] ?? defaultCondition())).toBe(true);
+  });
+
+  it("lifts the trained match stats on the squad card", () => {
+    const squad = ratedSquad("ballyea").slice(0, 4);
+    const player = squad[0];
+    const start = Object.fromEntries(squad.map((item) => [item.name, defaultCondition()]));
+    const afterSkills = applyTraining(squad, start, "skills");
+    const form = afterSkills.condition[player.name] ?? defaultCondition();
+    expect(matchStat(player.ratings.firstTouch, form, "firstTouch")).toBe(player.ratings.firstTouch + 1);
+    expect(matchStat(player.ratings.passing, form, "passing")).toBe(player.ratings.passing + 1);
+    expect(matchStat(player.ratings.speed, form, "speed")).toBe(player.ratings.speed);
+    expect(afterSkills.summary).toMatch(/first touch/i);
+  });
+
+  it("caps match-form boosts and lets fatigue hide them until recovery", () => {
+    const squad = ratedSquad("ballyea").slice(0, 2);
+    const player = squad[0];
+    let condition = Object.fromEntries(squad.map((item) => [item.name, defaultCondition()]));
+    for (let week = 0; week < 4; week += 1) {
+      condition = applyTraining(squad, condition, "fitness").condition;
+    }
+    const heavy = condition[player.name] ?? defaultCondition();
+    expect(heavy.boosts?.speed).toBe(4);
+    expect(matchStat(player.ratings.speed, heavy, "speed")).toBeLessThan(player.ratings.speed + 4);
+    const recovered = applyTraining(squad, condition, "recovery").condition[player.name] ?? defaultCondition();
+    expect(recovered.fatigue).toBeLessThan(heavy.fatigue);
+    expect(matchStat(player.ratings.speed, recovered, "speed")).toBe(player.ratings.speed + 4);
+    expect(matchRatings(player, recovered).overall).toBeGreaterThanOrEqual(player.ratings.overall);
   });
 });
 

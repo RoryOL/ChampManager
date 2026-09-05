@@ -5,6 +5,7 @@ import { TacticControls } from "../components/TacticControls";
 import { compactName, sideLabel } from "../lib/display";
 import { momentumAt, scoreFromEvents } from "../lib/matchEngine";
 import { ratedSquad, swapPlayersInSheet } from "../lib/players";
+import { conditionFor, matchRatings } from "../lib/training";
 import { resolveMatchSides, teamById } from "../lib/resolve";
 import { formatScore } from "../lib/scoring";
 
@@ -126,7 +127,9 @@ export function MatchScreen({
                         {player.position} · {onField ? "XV" : "Bench"}
                       </em>
                     </span>
-                    <i>{player.ratings.overall}</i>
+                    <i>
+                      {matchRatings(player, conditionFor(player.name, save.condition)).overall}
+                    </i>
                   </button>
                 </li>
               );
