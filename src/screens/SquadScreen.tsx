@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import type { GameSave, RatedPlayer } from "../types";
 import { ATTRIBUTE_GROUPS, ATTRIBUTE_LABELS, LINE_LABELS, POSITION_LINES } from "../lib/attributes";
 import { designatedRoles, ratedSquad, sheetPlayers } from "../lib/players";
@@ -19,7 +20,7 @@ function roleTags(player: RatedPlayer, roles: ReturnType<typeof designatedRoles>
 
 function PlayerDetail({ player }: { player: RatedPlayer }) {
   return (
-    <section className="card player-card">
+    <section className="player-card" id="player-detail">
       <header>
         <div>
           <h3>{player.name}</h3>
@@ -68,6 +69,12 @@ export function SquadScreen({ save, picked, onTapPlayer }: Props) {
   const xv = sheetPlayers(save.clubId, save.sheet);
   const roles = designatedRoles(xv);
   const selected = picked ? byName.get(picked) : undefined;
+  const detailRef = useRef<HTMLLIElement | null>(null);
+
+  useEffect(() => {
+    if (!picked) return;
+    detailRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
+  }, [picked]);
 
   return (
     <div className="screen">
@@ -91,12 +98,11 @@ export function SquadScreen({ save, picked, onTapPlayer }: Props) {
           </div>
         ))}
       </div>
-      {selected ? <PlayerDetail player={selected} /> : null}
       <h3 className="list-title">Squad</h3>
       <ul className="player-list">
         {[...starters, ...rest].map((player) =>
           player ? (
-            <li key={player.name}>
+            <li key={player.name} ref={picked === player.name ? detailRef : undefined}>
               <button
                 type="button"
                 className={picked === player.name ? "is-picked" : ""}
@@ -112,6 +118,7 @@ export function SquadScreen({ save, picked, onTapPlayer }: Props) {
                 </span>
                 <i>{player.ratings.overall}</i>
               </button>
+              {selected?.name === player.name ? <PlayerDetail player={selected} /> : null}
             </li>
           ) : null,
         )}

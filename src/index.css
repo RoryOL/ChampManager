@@ -516,6 +516,13 @@ button {
   color: #3b4a5c;
 }
 
+.player-card {
+  margin-top: 8px;
+  padding: 12px;
+  background: var(--surface-2);
+  border-radius: 12px;
+}
+
 .player-card header {
   display: flex;
   justify-content: space-between;
