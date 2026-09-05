@@ -1,0 +1,20 @@
+{
+  "name": "ChampManager",
+  "install": "npm ci || npm install",
+  "terminals": [
+    {
+      "name": "dev",
+      "command": "npm run dev"
+    }
+  ],
+  "ports": [
+    {
+      "name": "client",
+      "port": 5173
+    },
+    {
+      "name": "api",
+      "port": 3001
+    }
+  ]
+}
