@@ -106,32 +106,6 @@ export const MENTALITY_OPTIONS: { value: Tactics["mentality"]; title: string; co
   { value: "attacking", title: "Attacking", copy: "Push up, leave space behind, and hunt a score from every possession." },
 ];
 
-export const BUILD_OPTIONS: { value: Tactics["build"]; title: string; copy: string }[] = [
-  {
-    value: "direct",
-    title: "Direct long ball",
-    copy: "Go long early. Aerials, striking from distance, goals and 65s decide it.",
-  },
-  {
-    value: "running",
-    title: "Running through midfield",
-    copy: "Carry and support through the middle. First touch, passing and off-the-ball running.",
-  },
-];
-
-export const PUCKOUT_OPTIONS: { value: Tactics["puckout"]; title: string; copy: string }[] = [
-  {
-    value: "contest",
-    title: "Contest the middle",
-    copy: "Launch on the midfielders. Puck-out reach and high fielding win primary possession.",
-  },
-  {
-    value: "short",
-    title: "Short to the half-backs",
-    copy: "Work it short. Half-back first touch and passing keep the sliotar; fewer long scores.",
-  },
-];
-
 export const SHAPE_OPTIONS: { value: Tactics["shape"]; title: string; copy: string }[] = [
   {
     value: "traditional",
@@ -144,3 +118,23 @@ export const SHAPE_OPTIONS: { value: Tactics["shape"]; title: string; copy: stri
     copy: "Drop a seventh defender. Cuts goals against you; your own attack has less room.",
   },
 ];
+
+export function clampDial(value: number): number {
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+export function buildLabel(value: number): string {
+  if (value < 25) return "Short passing";
+  if (value < 45) return "Running game";
+  if (value < 60) return "Mixed build-up";
+  if (value < 80) return "Longer ball";
+  return "Direct long ball";
+}
+
+export function puckoutLabel(value: number): string {
+  if (value < 25) return "Short to the half-backs";
+  if (value < 45) return "Mostly short";
+  if (value < 60) return "Mixed restarts";
+  if (value < 80) return "Mostly long";
+  return "Long contest in midfield";
+}

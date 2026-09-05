@@ -1,4 +1,5 @@
 import type {
+  PlayerCondition,
   PlayerRatings,
   PositionFamiliarity,
   PositionLine,
@@ -10,9 +11,11 @@ import {
   ADJACENT_LINES,
   POSITION_LINES,
   XV_SLOTS,
+  clampDial,
   type AttributeKey,
 } from "./attributes";
 import { latestLineup, squadFor } from "./squads";
+import { conditionFor, freshnessFactor } from "./training";
 
 const STAR_FLOOR: Record<string, number> = {
   "Tony Kelly": 19,
@@ -106,8 +109,8 @@ const STAR_BIAS: Record<string, Partial<Record<AttributeKey, number>>> = {
 
 export const DEFAULT_TACTICS: Tactics = {
   mentality: "balanced",
-  build: "running",
-  puckout: "contest",
+  build: 42,
+  puckout: 58,
   shape: "traditional",
 };
 
@@ -316,6 +319,29 @@ export function sheetPlayers(teamId: string, sheet: TeamSheet): RatedPlayer[] {
     .filter((player): player is RatedPlayer => Boolean(player));
 }
 
+export function swapPlayersInSheet(sheet: TeamSheet, first: string, second: string): TeamSheet {
+  const starters = [...sheet.starters];
+  const subs = [...sheet.subs];
+  const i = starters.indexOf(first);
+  const j = starters.indexOf(second);
+  const a = subs.indexOf(first);
+  const b = subs.indexOf(second);
+  if (i >= 0 && j >= 0) {
+    [starters[i], starters[j]] = [starters[j], starters[i]];
+  } else if (i >= 0 && b >= 0) {
+    starters[i] = second;
+    subs[b] = first;
+  } else if (j >= 0 && a >= 0) {
+    starters[j] = first;
+    subs[a] = second;
+  } else if (i >= 0) {
+    starters[i] = second;
+  } else if (j >= 0) {
+    starters[j] = first;
+  }
+  return { starters, subs };
+}
+
 function average(values: number[]): number {
   if (values.length === 0) return 0;
   return values.reduce((sum, value) => sum + value, 0) / values.length;
@@ -363,13 +389,19 @@ export function designatedRoles(xv: RatedPlayer[]): {
   };
 }
 
-export function sideProfile(teamId: string, sheet: TeamSheet, tactics: Tactics): SideProfile {
+export function sideProfile(
+  teamId: string,
+  sheet: TeamSheet,
+  tactics: Tactics,
+  condition: Record<string, PlayerCondition> = {},
+): SideProfile {
   const xv = sheetPlayers(teamId, sheet);
   const scaled = (index: number, keys: AttributeKey[]) => {
     const player = xv[index];
     if (!player) return 12;
     const mean = average(keys.map((key) => player.ratings[key]));
-    return mean * usedInSlot(player, index);
+    const fresh = freshnessFactor(conditionFor(player.name, condition));
+    return mean * usedInSlot(player, index) * fresh;
   };
 
   const forwards = [9, 10, 11, 12, 13, 14];
@@ -416,17 +448,11 @@ export function sideProfile(teamId: string, sheet: TeamSheet, tactics: Tactics):
     attack -= 0.9;
     defence += 1.3;
   }
-  if (tactics.build === "direct") {
-    attack += 0.35 + (aerial - 12) * 0.12;
-  } else {
-    attack += 0.25 + (running - 12) * 0.14;
-  }
-  if (tactics.puckout === "contest") {
-    attack += (puckout + aerial - 24) * 0.08;
-  } else {
-    attack += (halfBackHands - 12) * 0.12;
-    defence += 0.2;
-  }
+  const direct = clampDial(tactics.build) / 100;
+  const longPuck = clampDial(tactics.puckout) / 100;
+  attack += direct * (0.4 + (aerial - 12) * 0.12) + (1 - direct) * (0.28 + (running - 12) * 0.14);
+  attack += longPuck * (puckout + aerial - 24) * 0.08 + (1 - longPuck) * (halfBackHands - 12) * 0.12;
+  defence += (1 - longPuck) * 0.22;
   if (tactics.shape === "sweeper") {
     defence += 1.6;
     attack -= 0.7;
@@ -462,8 +488,8 @@ export function clubTactics(teamId: string): Tactics {
   const mentalities: Tactics["mentality"][] = ["contain", "balanced", "balanced", "attacking"];
   return {
     mentality: mentalities[value % mentalities.length] ?? "balanced",
-    build: (value >> 3) % 2 === 0 ? "direct" : "running",
-    puckout: (value >> 5) % 2 === 0 ? "contest" : "short",
+    build: 18 + ((value >> 3) % 70),
+    puckout: 16 + ((value >> 5) % 72),
     shape: (value >> 7) % 3 === 0 ? "sweeper" : "traditional",
   };
 }

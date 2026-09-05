@@ -3,6 +3,7 @@ import { seedChampionship } from "./data/championship";
 import { migrateSave } from "./lib/gameStorage";
 import {
   freeConversionChance,
+  momentumAt,
   scoreFromEvents,
   simulateMatch,
   sixtyFiveChance,
@@ -10,6 +11,7 @@ import {
 import { clubTactics, DEFAULT_TACTICS, defaultSheet, ratePlayer, ratedSquad, sideStrength } from "./lib/players";
 import { nextBatch } from "./lib/schedule";
 import { matchPlayed } from "./lib/scoring";
+import { applyTraining, defaultCondition, isOvertrained } from "./lib/training";
 import type { Tactics } from "./types";
 
 describe("new game championship", () => {
@@ -105,8 +107,8 @@ describe("match engine", () => {
       matchId: "g1-r1-a",
       homeId: "ballyea",
       awayId: "inagh-kilnamona",
-      homeTactics: { ...DEFAULT_TACTICS, build: "direct", puckout: "contest" },
-      awayTactics: { ...DEFAULT_TACTICS, puckout: "short" },
+      homeTactics: { ...DEFAULT_TACTICS, build: 88, puckout: 82 },
+      awayTactics: { ...DEFAULT_TACTICS, puckout: 18 },
       seed: 99,
     });
     const kinds = new Set(result.events.map((event) => event.kind));
@@ -140,8 +142,8 @@ describe("match engine", () => {
   });
 
   it("leans on goals more from a direct long-ball game than a running game", () => {
-    const direct: Tactics = { ...DEFAULT_TACTICS, build: "direct", puckout: "contest" };
-    const running: Tactics = { ...DEFAULT_TACTICS, build: "running", puckout: "short" };
+    const direct: Tactics = { ...DEFAULT_TACTICS, build: 92, puckout: 80 };
+    const running: Tactics = { ...DEFAULT_TACTICS, build: 12, puckout: 18 };
     let directGoals = 0;
     let runningGoals = 0;
     for (let seed = 1; seed <= 24; seed += 1) {
@@ -164,10 +166,52 @@ describe("match engine", () => {
     }
     expect(directGoals).toBeGreaterThan(runningGoals);
   });
+
+  it("stops the first half on the half-time whistle", () => {
+    const first = simulateMatch({
+      matchId: "g1-r1-a",
+      homeId: "ballyea",
+      awayId: "inagh-kilnamona",
+      period: "first",
+      seed: 11,
+    });
+    expect(first.events.at(-1)?.kind).toBe("half");
+    expect(first.events.some((event) => event.kind === "full")).toBe(false);
+  });
+
+  it("shifts momentum toward the team that scores", () => {
+    const result = simulateMatch({
+      matchId: "g1-r1-a",
+      homeId: "ballyea",
+      awayId: "inagh-kilnamona",
+      seed: 3,
+    });
+    const goal = result.events.find((event) => event.kind === "goal");
+    expect(typeof momentumAt(result.events)).toBe("number");
+    if (goal) {
+      expect(goal.momentum).toBeGreaterThanOrEqual(4);
+      expect(goal.momentum).toBeLessThanOrEqual(96);
+    }
+  });
+});
+
+describe("training", () => {
+  it("raises sharpness and fatigue, and flags overtraining", () => {
+    const squad = ratedSquad("ballyea").slice(0, 3);
+    const start = Object.fromEntries(squad.map((player) => [player.name, defaultCondition()]));
+    const first = applyTraining(squad, start, "challenge");
+    const tired = Object.fromEntries(
+      squad.map((player) => [player.name, { fatigue: 80, sharpness: 70 }]),
+    );
+    const second = applyTraining(squad, tired, "fitness");
+    expect(first.condition[squad[0].name]?.sharpness ?? 0).toBeGreaterThan(defaultCondition().sharpness);
+    expect(second.overtrained.length).toBeGreaterThan(0);
+    expect(isOvertrained(second.condition[squad[0].name] ?? defaultCondition())).toBe(true);
+  });
 });
 
 describe("save migration", () => {
-  it("upgrades v1 soccer-style tactics to hurling knobs", () => {
+  it("upgrades v1 soccer-style tactics to spectrum dials", () => {
     const migrated = migrateSave({
       version: 1,
       clubId: "ballyea",
@@ -177,13 +221,11 @@ describe("save migration", () => {
       matches: [],
       inbox: [],
     });
-    expect(migrated?.version).toBe(2);
-    expect(migrated?.tactics).toEqual({
-      mentality: "attacking",
-      build: "direct",
-      puckout: "contest",
-      shape: "traditional",
-    });
+    expect(migrated?.version).toBe(3);
+    expect(migrated?.tactics.mentality).toBe("attacking");
+    expect(migrated?.tactics.build).toBeGreaterThan(60);
+    expect(migrated?.tactics.puckout).toBeGreaterThan(60);
+    expect(migrated?.phase).toBe("season");
   });
 });
 

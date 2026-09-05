@@ -105,8 +105,10 @@ export type PositionFamiliarity = Record<PositionLine, number>;
 
 export type Tactics = {
   mentality: "contain" | "balanced" | "attacking";
-  build: "direct" | "running";
-  puckout: "contest" | "short";
+  /** 0 = short passing / running game, 100 = direct long ball */
+  build: number;
+  /** 0 = short puck-outs to half-backs, 100 = long contest in midfield */
+  puckout: number;
   shape: "sweeper" | "traditional";
 };
 
@@ -139,6 +141,15 @@ export type RatedPlayer = SquadPlayer & {
   ratings: PlayerRatings;
 };
 
+export type PlayerCondition = {
+  fatigue: number;
+  sharpness: number;
+};
+
+export type TrainingFocus = "fitness" | "skills" | "setpieces" | "challenge" | "recovery";
+
+export type CalendarPhase = "preseason" | "season";
+
 export type NewsItem = {
   id: string;
   title: string;
@@ -166,6 +177,7 @@ export type MatchEvent = {
   playerName: string;
   kind: MatchEventKind;
   text: string;
+  momentum?: number;
 };
 
 export type SimulatedMatch = {
@@ -181,11 +193,17 @@ export type TeamSheet = {
 };
 
 export type GameSave = {
-  version: 2;
+  version: 3;
   clubId: string;
   seed: number;
   tactics: Tactics;
   sheet: TeamSheet;
   matches: { id: string; homeScore: Score | null; awayScore: Score | null }[];
   inbox: NewsItem[];
+  phase: CalendarPhase;
+  preseasonWeek: number;
+  condition: Record<string, PlayerCondition>;
+  trainingDue: boolean;
 };
+
+export type LivePhase = "first" | "half-time" | "second" | "finished";

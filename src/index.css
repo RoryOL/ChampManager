@@ -405,13 +405,126 @@ html.native-app .device {
   background: var(--you);
 }
 
+.club-strip {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 10px;
+  margin-bottom: 8px;
+}
+
+.club-strip button {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.club-strip .is-active {
+  background: var(--saffron);
+  color: #102033;
+  font-weight: 700;
+}
+
+.dial {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.dial input {
+  width: 100%;
+  accent-color: var(--saffron);
+}
+
+.speed-row {
+  display: flex;
+  gap: 4px;
+}
+
+.speed-row button {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+
+.speed-row .is-active {
+  background: var(--saffron);
+  color: #102033;
+  font-weight: 700;
+}
+
 .match-bar {
   display: flex;
   justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
   color: var(--saffron);
   text-transform: uppercase;
   letter-spacing: 0.12em;
   font-size: 12px;
+}
+
+.momentum {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(90px, 2fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.momentum span:last-child {
+  text-align: right;
+}
+
+.momentum-track {
+  height: 10px;
+  border-radius: 99px;
+  background: #3d4f6a;
+  overflow: hidden;
+}
+
+.momentum-track i {
+  display: block;
+  height: 100%;
+  background: var(--saffron);
+}
+
+.ht-panel {
+  flex: 1;
+  overflow: auto;
+}
+
+.ht-list {
+  margin-top: 8px;
+}
+
+.warn {
+  color: #f0a3a3;
+  font-size: 13px;
+}
+
+.attr-bar i.is-warn,
+.fatigue-bar i.is-warn {
+  background: #e05a5a;
+}
+
+.fatigue-bar {
+  margin: 8px 0 10px;
+  height: 8px;
 }
 
 .scoreboard {

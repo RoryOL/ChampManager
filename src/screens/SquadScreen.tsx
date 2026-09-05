@@ -1,11 +1,17 @@
 import { useEffect, useRef } from "react";
-import type { GameSave, RatedPlayer } from "../types";
+import type { GameSave, PlayerCondition, RatedPlayer, Team } from "../types";
+import { ClubBadge } from "../components/ClubBadge";
 import { ATTRIBUTE_GROUPS, ATTRIBUTE_LABELS, LINE_LABELS, POSITION_LINES } from "../lib/attributes";
-import { designatedRoles, ratedSquad, sheetPlayers } from "../lib/players";
+import { compactName } from "../lib/display";
+import { defaultSheet, designatedRoles, ratedSquad, sheetPlayers } from "../lib/players";
 import { FORMATION_ROWS } from "../lib/squads";
+import { conditionFor, isOvertrained } from "../lib/training";
 
 type Props = {
   save: GameSave;
+  teams: Team[];
+  viewTeamId: string;
+  onViewTeam: (teamId: string) => void;
   picked: string | null;
   onTapPlayer: (name: string) => void;
 };
@@ -18,7 +24,15 @@ function roleTags(player: RatedPlayer, roles: ReturnType<typeof designatedRoles>
   return tags;
 }
 
-function PlayerDetail({ player }: { player: RatedPlayer }) {
+function PlayerDetail({
+  player,
+  condition,
+  showCondition,
+}: {
+  player: RatedPlayer;
+  condition?: PlayerCondition;
+  showCondition: boolean;
+}) {
   return (
     <section className="player-card" id="player-detail">
       <header>
@@ -26,10 +40,31 @@ function PlayerDetail({ player }: { player: RatedPlayer }) {
           <h3>{player.name}</h3>
           <p>
             {LINE_LABELS[player.position]} · overall {player.ratings.overall}
+            {showCondition && condition ? ` · fatigue ${condition.fatigue}` : ""}
           </p>
         </div>
         <b>{player.ratings.overall}</b>
       </header>
+      {showCondition && condition ? (
+        <div className="attr-group">
+          <h4>Condition</h4>
+          <div className="attr-row">
+            <span>Fatigue</span>
+            <div className="attr-bar">
+              <i className={isOvertrained(condition) ? "is-warn" : ""} style={{ width: `${condition.fatigue}%` }} />
+            </div>
+            <em>{condition.fatigue}</em>
+          </div>
+          <div className="attr-row">
+            <span>Sharpness</span>
+            <div className="attr-bar">
+              <i style={{ width: `${condition.sharpness}%` }} />
+            </div>
+            <em>{condition.sharpness}</em>
+          </div>
+          {isOvertrained(condition) ? <p className="warn">Overtrained — back off or championship form will dip.</p> : null}
+        </div>
+      ) : null}
       {ATTRIBUTE_GROUPS.map((group) => (
         <div key={group.id} className="attr-group">
           <h4>{group.label}</h4>
@@ -59,14 +94,16 @@ function PlayerDetail({ player }: { player: RatedPlayer }) {
   );
 }
 
-export function SquadScreen({ save, picked, onTapPlayer }: Props) {
-  const squad = ratedSquad(save.clubId);
+export function SquadScreen({ save, teams, viewTeamId, onViewTeam, picked, onTapPlayer }: Props) {
+  const ownTeam = viewTeamId === save.clubId;
+  const squad = ratedSquad(viewTeamId);
   const byName = new Map(squad.map((player) => [player.name, player]));
-  const starters = save.sheet.starters
+  const sheet = ownTeam ? save.sheet : defaultSheet(viewTeamId);
+  const starters = sheet.starters
     .map((name) => byName.get(name))
     .filter((player): player is RatedPlayer => Boolean(player));
-  const rest = squad.filter((player) => !save.sheet.starters.includes(player.name));
-  const xv = sheetPlayers(save.clubId, save.sheet);
+  const rest = squad.filter((player) => !sheet.starters.includes(player.name));
+  const xv = sheetPlayers(viewTeamId, sheet);
   const roles = designatedRoles(xv);
   const selected = picked ? byName.get(picked) : undefined;
   const detailRef = useRef<HTMLLIElement | null>(null);
@@ -78,7 +115,24 @@ export function SquadScreen({ save, picked, onTapPlayer }: Props) {
 
   return (
     <div className="screen">
-      <p className="hint">Tap a name to inspect hurling attributes. Tap a second name to swap, Champ Man style.</p>
+      <p className="hint">
+        {ownTeam
+          ? "Tap a name to inspect attributes. Tap a second name to swap."
+          : "Scouting view — inspect any championship panel. Swap is only for your own club."}
+      </p>
+      <div className="club-strip">
+        {teams.map((team) => (
+          <button
+            key={team.id}
+            type="button"
+            className={viewTeamId === team.id ? "is-active" : ""}
+            onClick={() => onViewTeam(team.id)}
+          >
+            <ClubBadge team={team} size="sm" />
+            {compactName(team)}
+          </button>
+        ))}
+      </div>
       <div className="mini-pitch">
         {FORMATION_ROWS.map((row) => (
           <div key={row.label} className="mini-row">
@@ -98,7 +152,7 @@ export function SquadScreen({ save, picked, onTapPlayer }: Props) {
           </div>
         ))}
       </div>
-      <h3 className="list-title">Squad</h3>
+      <h3 className="list-title">{ownTeam ? "Your squad" : "Squad"}</h3>
       <ul className="player-list">
         {[...starters, ...rest].map((player) =>
           player ? (
@@ -112,13 +166,20 @@ export function SquadScreen({ save, picked, onTapPlayer }: Props) {
                 <span>
                   <strong>{player.name}</strong>
                   <em>
-                    {player.position} · {save.sheet.starters.includes(player.name) ? "XV" : "Bench"}
-                    {roleTags(player, roles, save.sheet.starters.includes(player.name)).map((tag) => ` · ${tag}`)}
+                    {player.position} · {sheet.starters.includes(player.name) ? "XV" : "Bench"}
+                    {roleTags(player, roles, sheet.starters.includes(player.name)).map((tag) => ` · ${tag}`)}
+                    {ownTeam && isOvertrained(conditionFor(player.name, save.condition)) ? " · Tired" : ""}
                   </em>
                 </span>
                 <i>{player.ratings.overall}</i>
               </button>
-              {selected?.name === player.name ? <PlayerDetail player={selected} /> : null}
+              {selected?.name === player.name ? (
+                <PlayerDetail
+                  player={selected}
+                  condition={ownTeam ? conditionFor(selected.name, save.condition) : undefined}
+                  showCondition={ownTeam}
+                />
+              ) : null}
             </li>
           ) : null,
         )}

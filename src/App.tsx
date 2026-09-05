@@ -29,10 +29,13 @@ export default function App() {
       {game.save && game.live && (
         <MatchScreen
           championship={game.championship}
+          save={game.save}
           live={game.live}
           onAdvance={game.advanceLive}
           onSkip={game.skipMatch}
           onClose={game.closeLive}
+          onContinueSecond={game.continueSecondHalf}
+          onSkipRest={game.skipRest}
         />
       )}
 
@@ -53,11 +56,18 @@ export default function App() {
               onGoToMatch={game.goToMatch}
               onSkip={game.skipMatch}
               onResign={game.resign}
+              onTrain={game.trainWeek}
             />
           )}
           {page === "squad" && (
             <SquadScreen
               save={game.save}
+              teams={game.championship.teams}
+              viewTeamId={game.viewTeamId ?? game.save.clubId}
+              onViewTeam={(teamId) => {
+                game.setViewTeamId(teamId);
+                game.setPicked(null);
+              }}
               picked={game.picked}
               onTapPlayer={game.tapPlayer}
             />

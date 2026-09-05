@@ -1,6 +1,17 @@
 import { seedChampionship } from "../data/championship";
 import { DEFAULT_TACTICS, defaultSheet } from "./players";
-import type { Championship, GameSave, NewsItem, Score, Tactics, TeamSheet } from "../types";
+import { clampDial } from "./attributes";
+import { defaultCondition, ensureCondition, squadNames } from "./training";
+import type {
+  CalendarPhase,
+  Championship,
+  GameSave,
+  NewsItem,
+  PlayerCondition,
+  Score,
+  Tactics,
+  TeamSheet,
+} from "../types";
 
 const STORAGE_KEY = "champ-manager:game-v1";
 
@@ -8,8 +19,8 @@ type LegacyTactics = {
   mentality?: Tactics["mentality"];
   style?: "possession" | "direct";
   pressing?: "low" | "medium" | "high";
-  build?: Tactics["build"];
-  puckout?: Tactics["puckout"];
+  build?: Tactics["build"] | "direct" | "running";
+  puckout?: Tactics["puckout"] | "contest" | "short";
   shape?: Tactics["shape"];
 };
 
@@ -18,23 +29,37 @@ function isTactics(value: unknown): value is Tactics {
   const tactics = value as Tactics;
   return (
     (tactics.mentality === "contain" || tactics.mentality === "balanced" || tactics.mentality === "attacking") &&
-    (tactics.build === "direct" || tactics.build === "running") &&
-    (tactics.puckout === "contest" || tactics.puckout === "short") &&
+    typeof tactics.build === "number" &&
+    typeof tactics.puckout === "number" &&
     (tactics.shape === "sweeper" || tactics.shape === "traditional")
   );
 }
 
 export function migrateTactics(raw: unknown): Tactics {
-  if (isTactics(raw)) return raw;
+  if (isTactics(raw)) {
+    return { ...raw, build: clampDial(raw.build), puckout: clampDial(raw.puckout) };
+  }
   const legacy = (raw ?? {}) as LegacyTactics;
+  const build =
+    typeof legacy.build === "number"
+      ? legacy.build
+      : legacy.build === "direct" || legacy.style === "direct"
+        ? 80
+        : 28;
+  const puckout =
+    typeof legacy.puckout === "number"
+      ? legacy.puckout
+      : legacy.puckout === "contest" || legacy.pressing === "high"
+        ? 78
+        : 24;
   return {
     mentality:
       legacy.mentality === "contain" || legacy.mentality === "attacking" || legacy.mentality === "balanced"
         ? legacy.mentality
         : DEFAULT_TACTICS.mentality,
-    build: legacy.build ?? (legacy.style === "direct" ? "direct" : "running"),
-    puckout: legacy.puckout ?? (legacy.pressing === "high" ? "contest" : "short"),
-    shape: legacy.shape ?? "traditional",
+    build: clampDial(build),
+    puckout: clampDial(puckout),
+    shape: legacy.shape === "sweeper" || legacy.shape === "traditional" ? legacy.shape : "traditional",
   };
 }
 
@@ -48,24 +73,39 @@ export function migrateSave(raw: unknown): GameSave | null {
     sheet?: GameSave["sheet"];
     matches?: GameSave["matches"];
     inbox?: GameSave["inbox"];
+    phase?: CalendarPhase;
+    preseasonWeek?: number;
+    condition?: Record<string, PlayerCondition>;
+    trainingDue?: boolean;
   };
   if (!parsed.clubId || !parsed.sheet || !Array.isArray(parsed.matches)) return null;
-  if (parsed.version !== 1 && parsed.version !== 2) return null;
+  if (parsed.version !== 1 && parsed.version !== 2 && parsed.version !== 3) return null;
+  const names = squadNames(parsed.clubId);
+  const returning = parsed.version === 1 || parsed.version === 2;
   return {
-    version: 2,
+    version: 3,
     clubId: parsed.clubId,
     seed: typeof parsed.seed === "number" ? parsed.seed : 1,
     tactics: migrateTactics(parsed.tactics),
     sheet: parsed.sheet,
     matches: parsed.matches,
     inbox: Array.isArray(parsed.inbox) ? parsed.inbox : [],
+    phase: parsed.phase === "preseason" || parsed.phase === "season" ? parsed.phase : returning ? "season" : "preseason",
+    preseasonWeek:
+      typeof parsed.preseasonWeek === "number"
+        ? parsed.preseasonWeek
+        : returning
+          ? 7
+          : 1,
+    condition: ensureCondition(names, parsed.condition ?? {}, returning ? { fatigue: 28, sharpness: 58 } : defaultCondition()),
+    trainingDue: typeof parsed.trainingDue === "boolean" ? parsed.trainingDue : !returning,
   };
 }
 
 export function newSave(clubId: string): GameSave {
   const championship = structuredClone(seedChampionship);
   return {
-    version: 2,
+    version: 3,
     clubId,
     seed: Math.floor(Math.random() * 1_000_000_000),
     tactics: DEFAULT_TACTICS,
@@ -76,6 +116,10 @@ export function newSave(clubId: string): GameSave {
       awayScore: match.awayScore,
     })),
     inbox: [],
+    phase: "preseason",
+    preseasonWeek: 1,
+    condition: ensureCondition(squadNames(clubId), {}, defaultCondition()),
+    trainingDue: true,
   };
 }
 
@@ -130,4 +174,8 @@ export function withTactics(save: GameSave, tactics: Tactics): GameSave {
 
 export function withSheet(save: GameSave, sheet: TeamSheet): GameSave {
   return { ...save, sheet };
+}
+
+export function withCondition(save: GameSave, condition: Record<string, PlayerCondition>): GameSave {
+  return { ...save, condition };
 }
