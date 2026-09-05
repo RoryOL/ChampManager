@@ -72,6 +72,20 @@ button {
   }
 }
 
+html.native-app,
+html.native-app body,
+html.native-app #root {
+  background: var(--bg);
+}
+
+html.native-app .device {
+  max-width: none;
+  height: 100dvh;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
 .status-bar {
   display: flex;
   justify-content: space-between;

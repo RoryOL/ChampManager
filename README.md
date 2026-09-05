@@ -15,9 +15,27 @@ The app is a late-90s Championship Manager-style game for the **TUS Clare Senior
 - **Group 3:** Clooney-Quin, Cratloe, Feakle, O'Callaghan's Mills
 - **Group 4:** Kilmaley, Newmarket-on-Fergus, Wolfe Tones, Sixmilebridge
 
-The interface is built as an Android-first phone app (standalone-capable). On a desktop it sits in a device frame.
+The interface is built as an Android-first phone app. On a desktop browser it sits in a device frame. On a phone or in the APK it fills the screen.
 
-## Run locally
+## Install on your phone (APK)
+
+1. Download **ChampManager.apk** from the latest GitHub Actions run on `main`: **Actions → Android APK → Artifacts**.
+2. Open the file on your Android phone.
+3. If Android blocks it, allow **Install unknown apps** for your Files or Chrome app, then install.
+4. Open **ChampManager** from the launcher.
+
+This is a debug-signed APK (fine for sideloading; not a Play Store build).
+
+To rebuild it locally (needs JDK 21 and the Android SDK):
+
+```bash
+npm install
+npm run apk
+```
+
+That writes `ChampManager.apk` in the repo root.
+
+## Run in a browser
 
 ```bash
 npm install
@@ -29,4 +47,4 @@ npm test
 npm run build
 ```
 
-A save is stored in the browser. Use **Resign** to start again with another club.
+A save is stored on the device. Use **Resign** to start again with another club.
