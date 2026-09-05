@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { GameSave, PlayerCondition, RatedPlayer, Team } from "../types";
 import { ClubBadge } from "../components/ClubBadge";
-import { ATTRIBUTE_GROUPS, ATTRIBUTE_LABELS, LINE_LABELS, POSITION_LINES, type AttributeKey } from "../lib/attributes";
+import { ATTRIBUTE_GROUPS, ATTRIBUTE_KEYS, ATTRIBUTE_LABELS, LINE_LABELS, POSITION_LINES, type AttributeKey } from "../lib/attributes";
 import { compactName } from "../lib/display";
 import { defaultSheet, designatedRoles, ratedSquad, sheetPlayers } from "../lib/players";
 import { FORMATION_ROWS } from "../lib/squads";
@@ -47,14 +47,21 @@ function PlayerDetail({
 }) {
   const match = showCondition && condition ? matchRatings(player, condition) : player.ratings;
   const overallDelta = match.overall - player.ratings.overall;
+  const trainingLifts =
+    showCondition && condition
+      ? ATTRIBUTE_KEYS.map((key) => {
+          const delta = matchStat(player.ratings[key], condition, key) - player.ratings[key];
+          return delta !== 0 ? `${ATTRIBUTE_LABELS[key].toLowerCase()} ${formatDelta(delta)}` : null;
+        }).filter((item): item is string => Boolean(item))
+      : [];
   return (
     <section className="player-card" id="player-detail">
       <header>
         <div>
           <h3>{player.name}</h3>
           <p>
-            {LINE_LABELS[player.position]} · match {match.overall}
-            {overallDelta !== 0 ? ` (${formatDelta(overallDelta)})` : ""} · ability {player.ratings.overall}
+            {LINE_LABELS[player.position]} · {match.overall}
+            {overallDelta !== 0 ? ` (${formatDelta(overallDelta)} from training)` : ""}
             {showCondition && condition ? ` · fatigue ${condition.fatigue}` : ""}
           </p>
         </div>
@@ -79,11 +86,13 @@ function PlayerDetail({
             <em>{condition.sharpness}</em>
             <span className="delta" />
           </div>
+          {trainingLifts.length > 0 ? <p className="form-line">Profile stats: {trainingLifts.join(" · ")}</p> : null}
           {isOvertrained(condition) ? (
-            <p className="warn">Overtrained — match ratings are down until you recover.</p>
+            <p className="warn">Overtrained — profile stats are down until you recover.</p>
           ) : (
             <p className="hint hint--tight">
-              Bars are match form. Training lifts the stats you work on; the ability number does not change.
+              Training can lift these numbers a little (up to +4). The bars are the current profile; green is the change
+              from their natural rating.
             </p>
           )}
         </div>
@@ -152,7 +161,7 @@ export function SquadScreen({ save, teams, viewTeamId, onViewTeam, picked, onTap
     <div className="screen">
       <p className="hint">
         {ownTeam
-          ? "Pitch numbers are match form. Train, then tap a name — the bars that session works will move. Tap a second name to swap."
+          ? "Pitch numbers are current profile stats. Train, then tap a name — those bars move a little. Tap a second name to swap."
           : "Scouting view — inspect any championship panel. Swap is only for your own club."}
       </p>
       <div className="club-strip">

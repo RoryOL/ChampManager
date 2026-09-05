@@ -109,6 +109,8 @@ export type Tactics = {
   build: number;
   /** 0 = short puck-outs to half-backs, 100 = long contest in midfield */
   puckout: number;
+  /** 0 = light tackling, 100 = aggressive — more hooks, more frees and bookings given away */
+  aggression: number;
   shape: "sweeper" | "traditional";
 };
 
@@ -148,7 +150,7 @@ export type AttributeBoosts = Partial<
 export type PlayerCondition = {
   fatigue: number;
   sharpness: number;
-  /** Match-form lifts on 1–20 stats. Natural ability does not change. */
+  /** Small training lifts on 1–20 profile stats. Natural ability is the unboosted baseline. */
   boosts?: AttributeBoosts;
 };
 
@@ -173,6 +175,7 @@ export type MatchEventKind =
   | "sixtyFive"
   | "sideline"
   | "hook"
+  | "booking"
   | "puckout"
   | "half"
   | "full";

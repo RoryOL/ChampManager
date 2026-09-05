@@ -3,10 +3,13 @@ import { seedChampionship } from "./data/championship";
 import { migrateSave } from "./lib/gameStorage";
 import {
   freeConversionChance,
+  mistimedFoulChance,
   momentumAt,
   scoreFromEvents,
   simulateMatch,
   sixtyFiveChance,
+  tackleChance,
+  yellowOnFoulChance,
 } from "./lib/matchEngine";
 import { clubTactics, DEFAULT_TACTICS, defaultSheet, ratePlayer, ratedSquad, sideStrength } from "./lib/players";
 import { nextBatch } from "./lib/schedule";
@@ -218,6 +221,50 @@ describe("match engine", () => {
       expect(goal.momentum).toBeLessThanOrEqual(96);
     }
   });
+
+  it("lets aggressive tackling win more hooks but concede more frees and yellows", () => {
+    expect(tackleChance(12, 92)).toBeGreaterThan(tackleChance(12, 12));
+    expect(mistimedFoulChance(92)).toBeGreaterThan(mistimedFoulChance(12));
+    expect(yellowOnFoulChance(92)).toBeGreaterThan(yellowOnFoulChance(12));
+
+    const homeSheet = defaultSheet("ballyea");
+    const homePlayers = new Set(homeSheet.starters);
+    const aggressive = { ...DEFAULT_TACTICS, aggression: 94 };
+    const light = { ...DEFAULT_TACTICS, aggression: 8 };
+    let aggressiveHooks = 0;
+    let lightHooks = 0;
+    let aggressiveFrees = 0;
+    let lightFrees = 0;
+    let aggressiveYellows = 0;
+    let lightYellows = 0;
+    for (let seed = 1; seed <= 20; seed += 1) {
+      const hot = simulateMatch({
+        matchId: "g1-r1-a",
+        homeId: "ballyea",
+        awayId: "inagh-kilnamona",
+        homeTactics: aggressive,
+        awayTactics: light,
+        seed,
+      });
+      const cold = simulateMatch({
+        matchId: "g1-r1-a",
+        homeId: "ballyea",
+        awayId: "inagh-kilnamona",
+        homeTactics: light,
+        awayTactics: light,
+        seed,
+      });
+      aggressiveHooks += hot.events.filter((event) => event.kind === "hook" && homePlayers.has(event.playerName)).length;
+      lightHooks += cold.events.filter((event) => event.kind === "hook" && homePlayers.has(event.playerName)).length;
+      aggressiveFrees += hot.events.filter((event) => event.kind === "free" && event.teamId === "inagh-kilnamona").length;
+      lightFrees += cold.events.filter((event) => event.kind === "free" && event.teamId === "inagh-kilnamona").length;
+      aggressiveYellows += hot.events.filter((event) => event.kind === "booking" && event.teamId === "ballyea").length;
+      lightYellows += cold.events.filter((event) => event.kind === "booking" && event.teamId === "ballyea").length;
+    }
+    expect(aggressiveHooks).toBeGreaterThan(lightHooks);
+    expect(aggressiveFrees).toBeGreaterThan(lightFrees);
+    expect(aggressiveYellows).toBeGreaterThan(lightYellows);
+  });
 });
 
 describe("training", () => {
@@ -244,6 +291,7 @@ describe("training", () => {
     expect(matchStat(player.ratings.passing, form, "passing")).toBe(player.ratings.passing + 1);
     expect(matchStat(player.ratings.speed, form, "speed")).toBe(player.ratings.speed);
     expect(afterSkills.summary).toMatch(/first touch/i);
+    expect(afterSkills.summary).toMatch(/player profile/i);
   });
 
   it("caps match-form boosts and lets fatigue hide them until recovery", () => {
@@ -278,6 +326,7 @@ describe("save migration", () => {
     expect(migrated?.tactics.mentality).toBe("attacking");
     expect(migrated?.tactics.build).toBeGreaterThan(60);
     expect(migrated?.tactics.puckout).toBeGreaterThan(60);
+    expect(migrated?.tactics.aggression).toBeGreaterThan(30);
     expect(migrated?.phase).toBe("season");
   });
 });

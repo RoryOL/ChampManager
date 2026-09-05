@@ -749,9 +749,10 @@ html.native-app .device {
   font-size: 13px;
 }
 
-.hint--tight {
+.form-line {
   margin: 8px 0 0;
-  font-size: 12px;
+  font-size: 13px;
+  color: #7dce8a;
 }
 
 .fam-grid {

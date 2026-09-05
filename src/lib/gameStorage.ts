@@ -21,6 +21,7 @@ type LegacyTactics = {
   pressing?: "low" | "medium" | "high";
   build?: Tactics["build"] | "direct" | "running";
   puckout?: Tactics["puckout"] | "contest" | "short";
+  aggression?: number;
   shape?: Tactics["shape"];
 };
 
@@ -37,7 +38,14 @@ function isTactics(value: unknown): value is Tactics {
 
 export function migrateTactics(raw: unknown): Tactics {
   if (isTactics(raw)) {
-    return { ...raw, build: clampDial(raw.build), puckout: clampDial(raw.puckout) };
+    const aggression =
+      typeof (raw as Tactics).aggression === "number" ? (raw as Tactics).aggression : DEFAULT_TACTICS.aggression;
+    return {
+      ...raw,
+      build: clampDial(raw.build),
+      puckout: clampDial(raw.puckout),
+      aggression: clampDial(aggression),
+    };
   }
   const legacy = (raw ?? {}) as LegacyTactics;
   const build =
@@ -59,6 +67,7 @@ export function migrateTactics(raw: unknown): Tactics {
         : DEFAULT_TACTICS.mentality,
     build: clampDial(build),
     puckout: clampDial(puckout),
+    aggression: clampDial(typeof legacy.aggression === "number" ? legacy.aggression : DEFAULT_TACTICS.aggression),
     shape: legacy.shape === "sweeper" || legacy.shape === "traditional" ? legacy.shape : "traditional",
   };
 }

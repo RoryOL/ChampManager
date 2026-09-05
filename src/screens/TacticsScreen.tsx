@@ -10,8 +10,8 @@ export function TacticsScreen({ save, onChange }: Props) {
   return (
     <div className="screen">
       <p className="hint">
-        Build-up and puck-outs are dials, not switches. Slide toward short passing or long ball, and toward short or
-        long restarts.
+        Build-up, puck-outs and aggression are dials. Slide tackling from light to aggressive — you win more hooks, but
+        give away more frees and bookings.
       </p>
       <TacticControls tactics={save.tactics} onChange={onChange} />
     </div>

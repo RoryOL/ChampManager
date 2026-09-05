@@ -111,6 +111,7 @@ export const DEFAULT_TACTICS: Tactics = {
   mentality: "balanced",
   build: 42,
   puckout: 58,
+  aggression: 46,
   shape: "traditional",
 };
 
@@ -442,7 +443,7 @@ export function sideProfile(
         scaled(i, ["speed", "acceleration", "firstTouch", "passing", "vision", "offTheBall"]),
       ),
     ) || 12;
-  const hooking = average(backs.map((i) => scaled(i, ["hooking", "strength", "workrate"]))) || 12;
+  let hooking = average(backs.map((i) => scaled(i, ["hooking", "strength", "workrate"]))) || 12;
   const halfBackHands =
     average(halfBacks.map((i) => scaled(i, ["firstTouch", "passing", "vision", "underPressure"]))) || 12;
   const keeper = xv[0];
@@ -479,6 +480,9 @@ export function sideProfile(
     defence += 1.6;
     attack -= 0.7;
   }
+  const physical = clampDial(tactics.aggression ?? 46) / 100;
+  hooking += physical * 2.4;
+  defence += physical * 0.9;
 
   return {
     attack,
@@ -512,6 +516,7 @@ export function clubTactics(teamId: string): Tactics {
     mentality: mentalities[value % mentalities.length] ?? "balanced",
     build: 18 + ((value >> 3) % 70),
     puckout: 16 + ((value >> 5) % 72),
+    aggression: 14 + ((value >> 9) % 74),
     shape: (value >> 7) % 3 === 0 ? "sweeper" : "traditional",
   };
 }

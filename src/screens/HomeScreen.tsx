@@ -69,9 +69,9 @@ export function HomeScreen({
           {fatigue >= 78
             ? "The group is overtrained. Match ratings are down — a recovery week will pay you back in championship."
             : preseason
-              ? "Each session lifts specific match stats on the squad card (up to +4). Natural ability does not change."
+              ? "Each session slightly changes stats on the player profile (up to +4). Open Squad after you train."
               : save.trainingDue
-                ? "A midweek session is available. Pick a focus and those bars will move on the squad."
+                ? "A midweek session is available. Pick a focus and those profile stats will move a little."
                 : "The next championship day is the priority."}
         </p>
         {save.trainingDue ? (

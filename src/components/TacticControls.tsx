@@ -1,5 +1,5 @@
 import type { Tactics } from "../types";
-import { buildLabel, MENTALITY_OPTIONS, puckoutLabel, SHAPE_OPTIONS } from "../lib/attributes";
+import { aggressionLabel, buildLabel, MENTALITY_OPTIONS, puckoutLabel, SHAPE_OPTIONS } from "../lib/attributes";
 
 type Props = {
   tactics: Tactics;
@@ -59,6 +59,28 @@ export function TacticControls({ tactics, onChange, compact = false }: Props) {
             onChange={(event) => onChange({ ...tactics, puckout: Number(event.target.value) })}
           />
           <span>Long</span>
+        </label>
+      </section>
+      <section className="card">
+        <h3>Aggression</h3>
+        <p className="tactic-copy">
+          Light tackling on the left, aggressive on the right. Currently <strong>{aggressionLabel(tactics.aggression)}</strong>
+          {tactics.aggression >= 80
+            ? " — hooks land more often, but you will give away frees and yellow cards."
+            : tactics.aggression < 25
+              ? " — fewer frees given away, fewer blocks."
+              : "."}
+        </p>
+        <label className="dial">
+          <span>Light</span>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={tactics.aggression ?? 46}
+            onChange={(event) => onChange({ ...tactics, aggression: Number(event.target.value) })}
+          />
+          <span>Aggressive</span>
         </label>
       </section>
       <section className="card">

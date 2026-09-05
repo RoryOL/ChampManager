@@ -52,6 +52,19 @@ export function sidelineChance(sidelines: number, strikingDistance: number): num
   return Math.min(0.72, Math.max(0.1, 0.06 + sidelines * 0.028 + strikingDistance * 0.008));
 }
 
+export function tackleChance(hooking: number, aggression: number): number {
+  const physical = clampDial(aggression) / 100;
+  return Math.min(0.36, Math.max(0.06, 0.08 + hooking * 0.005 + physical * 0.09));
+}
+
+export function mistimedFoulChance(aggression: number): number {
+  return Math.min(0.32, Math.max(0.03, 0.035 + (clampDial(aggression) / 100) * 0.22));
+}
+
+export function yellowOnFoulChance(aggression: number): number {
+  return Math.min(0.4, Math.max(0.02, 0.04 + (clampDial(aggression) / 100) * 0.3));
+}
+
 export function nextMomentum(
   current: number,
   event: Pick<MatchEvent, "kind" | "teamId" | "text">,
@@ -72,6 +85,9 @@ export function nextMomentum(
     case "save":
     case "hook":
       delta = -5;
+      break;
+    case "booking":
+      delta = -7;
       break;
     case "wide":
       delta = -3;
@@ -245,7 +261,7 @@ export function simulateMatch(options: {
       }
     }
 
-    if (random() < 0.1 + opp.hooking * 0.005) {
+    if (random() < tackleChance(opp.hooking, oppTactics.aggression ?? 46)) {
       const defender = pickName(oppNames.slice(0, 7), random);
       push({
         minute,
@@ -254,6 +270,22 @@ export function simulateMatch(options: {
         kind: "hook",
         text: `Hooked and blocked — ${defender} kills the attack.`,
       });
+      return;
+    }
+
+    if (random() < mistimedFoulChance(oppTactics.aggression ?? 46)) {
+      const defender = pickName(oppNames.slice(0, 7), random);
+      const defendingId = teamId === options.homeId ? options.awayId : options.homeId;
+      if (random() < yellowOnFoulChance(oppTactics.aggression ?? 46)) {
+        push({
+          minute,
+          teamId: defendingId,
+          playerName: defender,
+          kind: "booking",
+          text: `Yellow card — ${defender} overcooks the challenge.`,
+        });
+      }
+      attemptSetPiece(teamId, "free", profile, minute);
       return;
     }
 

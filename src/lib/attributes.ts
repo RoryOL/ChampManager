@@ -103,7 +103,7 @@ export const ATTRIBUTE_LABELS: Record<AttributeKey, string> = {
 };
 
 export const MENTALITY_OPTIONS: { value: Tactics["mentality"]; title: string; copy: string }[] = [
-  { value: "contain", title: "Contain", copy: "Sit in, foul less in the scoring zone, and play for the next ball." },
+  { value: "contain", title: "Contain", copy: "Sit in, keep shape, and play for the next ball." },
   { value: "balanced", title: "Balanced", copy: "Standard championship shape — contest both ends." },
   { value: "attacking", title: "Attacking", copy: "Push up, leave space behind, and hunt a score from every possession." },
 ];
@@ -139,4 +139,12 @@ export function puckoutLabel(value: number): string {
   if (value < 60) return "Mixed restarts";
   if (value < 80) return "Mostly long";
   return "Long contest in midfield";
+}
+
+export function aggressionLabel(value: number): string {
+  if (value < 25) return "Light";
+  if (value < 45) return "Mostly light";
+  if (value < 60) return "Measured";
+  if (value < 80) return "Physical";
+  return "Aggressive";
 }

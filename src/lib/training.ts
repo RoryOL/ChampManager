@@ -31,27 +31,27 @@ export const TRAINING_OPTIONS: {
   {
     value: "fitness",
     title: "Fitness",
-    copy: "Lifts speed, acceleration and stamina on the squad card (up to +4). Fatigue climbs fast.",
+    copy: "Slight lift to speed, acceleration and stamina on the player profile (up to +4). Fatigue climbs fast.",
   },
   {
     value: "skills",
     title: "Skills",
-    copy: "Lifts first touch, passing, striking from distance and vision — those bars move after the session.",
+    copy: "Slight lift to first touch, passing, striking from distance and vision on the player profile.",
   },
   {
     value: "setpieces",
     title: "Set pieces",
-    copy: "Lifts frees, sidelines and puck-out reach. Useful, not a full session.",
+    copy: "Slight lift to frees, sidelines and puck-out reach on the player profile. Useful, not a full session.",
   },
   {
     value: "challenge",
     title: "Challenge game",
-    copy: "Lifts workrate, composure, under pressure and off the ball. Biggest sharpness gain, heaviest legs.",
+    copy: "Slight lift to workrate, composure, under pressure and off the ball. Biggest sharpness gain, heaviest legs.",
   },
   {
     value: "recovery",
     title: "Recovery",
-    copy: "Cuts fatigue so banked form shows through. Match ratings hold; sharpness holds.",
+    copy: "Cuts fatigue so trained profile stats show through. Sharpness holds.",
   },
 ];
 
@@ -216,7 +216,7 @@ export function applyTraining(
       ? `${label} is done, but ${overtrained.length} player${overtrained.length === 1 ? " is" : "s are"} overtrained. The work is banked, yet match ratings look heavy until you recover.`
       : focus === "recovery"
         ? "Recovery week lands. Legs are fresher, so banked match ratings show through again."
-        : `${label} session is in the book. Match ratings for ${lifted} are up — open the squad to see the bars move. Natural ability stays the same.`;
+        : `${label} session is in the book. ${lifted.charAt(0).toUpperCase()}${lifted.slice(1)} are up on the player profiles — open the squad to see the numbers move.`;
 
   return { condition: next, overtrained, summary };
 }
