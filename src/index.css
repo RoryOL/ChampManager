@@ -22,6 +22,11 @@ body,
   height: 100%;
 }
 
+#root {
+  display: flex;
+  justify-content: center;
+}
+
 body {
   margin: 0;
   background: #07090d;
@@ -44,9 +49,9 @@ button {
 }
 
 .device {
-  width: min(430px, 100%);
+  width: 100%;
+  max-width: 430px;
   height: 100dvh;
-  margin: 0 auto;
   background: var(--bg);
   display: flex;
   flex-direction: column;
