@@ -7,8 +7,8 @@ function groupMatch(
   date: string,
   homeTeamId: string,
   awayTeamId: string,
-  home: [number, number],
-  away: [number, number],
+  _home: [number, number],
+  _away: [number, number],
   venue?: string,
 ): Match {
   return {
@@ -20,8 +20,8 @@ function groupMatch(
     venue,
     home: { type: "team", teamId: homeTeamId },
     away: { type: "team", teamId: awayTeamId },
-    homeScore: { goals: home[0], points: home[1] },
-    awayScore: { goals: away[0], points: away[1] },
+    homeScore: null,
+    awayScore: null,
   };
 }
 

@@ -1,0 +1,16 @@
+{
+  "name": "ChampManager",
+  "short_name": "ChampManager",
+  "description": "Clare SHC championship manager",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0c121c",
+  "theme_color": "#102033",
+  "icons": [
+    {
+      "src": "/sliotar.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

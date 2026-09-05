@@ -1,25 +1,21 @@
-# ChampManager
+The app is a late-90s Championship Manager-style game for the **TUS Clare Senior Hurling Championship**. You take charge of one of the 16 senior clubs. Squads come from 2026 championship line-outs; the matches themselves are simulated.
 
-Championship management for the **TUS Clare Senior Hurling Championship**.
+## How to play
 
-The app is seeded with the 2026 Clare SHC field: 16 senior clubs in four groups of four, the completed group-stage scorelines, the quarter-final draw, and the relegation play-off pairings.
+1. Pick a club
+2. Set your fifteen (tap two players to swap) and tactics
+3. Go to the next championship match
+4. Watch the commentary engine or skip to the result
+5. Other ties in that round are simulated around you
 
-## What it does
-
-- Tracks group tables with GAA scoring (a goal is worth three points)
-- Applies Clare SHC tie-breakers: results between tied teams, then score difference, then scores for
-- Records knockout and relegation results in goals and points
-- Advances winners (and relegation losers) through the bracket automatically
-- Shows championship squads scraped from numbered Clare Echo line-outs
-
-Squads use the last published championship fifteen for each club, plus anyone named as a substitute in those reports. Line-outs are attributed to the original match report.
-
-## 2026 reference groups
+## 2026 groups
 
 - **Group 1:** Ballyea, Inagh-Kilnamona, Clonlara, St Joseph's Doora-Barefield
 - **Group 2:** Éire Óg, Crusheen, Scariff, Broadford
 - **Group 3:** Clooney-Quin, Cratloe, Feakle, O'Callaghan's Mills
 - **Group 4:** Kilmaley, Newmarket-on-Fergus, Wolfe Tones, Sixmilebridge
+
+The interface is built as an Android-first phone app (standalone-capable). On a desktop it sits in a device frame.
 
 ## Run locally
 
@@ -33,4 +29,4 @@ npm test
 npm run build
 ```
 
-Results you enter are stored in the browser. Use **Reset 2026** to restore the published group-stage results and outstanding knockout ties.
+A save is stored in the browser. Use **Resign** to start again with another club.

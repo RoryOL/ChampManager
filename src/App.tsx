@@ -1,94 +1,74 @@
 import { useState } from "react";
-import type { Match, PageId } from "./types";
-import { useChampionship } from "./hooks/useChampionship";
-import { ScoreModal } from "./components/ScoreModal";
-import { OverviewPage } from "./pages/OverviewPage";
-import { GroupsPage } from "./pages/GroupsPage";
-import { FixturesPage } from "./pages/FixturesPage";
-import { KnockoutPage } from "./pages/KnockoutPage";
-import { ClubsPage } from "./pages/ClubsPage";
-
-const nav: { id: PageId; label: string }[] = [
-  { id: "overview", label: "Overview" },
-  { id: "groups", label: "Groups" },
-  { id: "fixtures", label: "Fixtures" },
-  { id: "knockout", label: "Knockout" },
-  { id: "clubs", label: "Clubs" },
-];
+import type { PageId } from "./types";
+import { useGame } from "./hooks/useGame";
+import { BottomNav } from "./components/BottomNav";
+import { teamById } from "./lib/resolve";
+import { compactName } from "./lib/display";
+import { ClubSelectScreen } from "./screens/ClubSelectScreen";
+import { HomeScreen } from "./screens/HomeScreen";
+import { SquadScreen } from "./screens/SquadScreen";
+import { TacticsScreen } from "./screens/TacticsScreen";
+import { FixturesScreen } from "./screens/FixturesScreen";
+import { TableScreen } from "./screens/TableScreen";
+import { MatchScreen } from "./screens/MatchScreen";
 
 export default function App() {
-  const { championship, recordScore, reset } = useChampionship();
-  const [page, setPage] = useState<PageId>("overview");
-  const [selected, setSelected] = useState<Match | null>(null);
-  const selectedMatch = selected
-    ? championship.matches.find((match) => match.id === selected.id) ?? null
-    : null;
+  const game = useGame();
+  const [page, setPage] = useState<PageId>("home");
+  const club = game.save ? teamById(game.championship, game.save.clubId) : undefined;
 
   return (
-    <div className="shell">
-      <header className="masthead">
-        <div className="masthead__brand">
-          <span className="sliotar" aria-hidden="true" />
-          <div>
-            <p>ChampManager</p>
-            <strong>Clare SHC {championship.year}</strong>
-          </div>
-        </div>
-        <nav className="masthead__nav" aria-label="Championship sections">
-          {nav.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className={page === item.id ? "nav-link is-active" : "nav-link"}
-              onClick={() => setPage(item.id)}
-            >
-              {item.label}
-            </button>
-          ))}
-        </nav>
-        <button
-          type="button"
-          className="btn btn--small"
-          onClick={() => {
-            if (window.confirm("Reset all results back to the 2026 Clare SHC reference data?")) {
-              reset();
-            }
-          }}
-        >
-          Reset 2026
-        </button>
-      </header>
+    <div className="device">
+      <div className="status-bar" aria-hidden="true">
+        <span>ChampManager</span>
+        <span>SHC 26</span>
+      </div>
 
-      <main>
-        {page === "overview" && (
-          <OverviewPage championship={championship} onSelectMatch={setSelected} />
-        )}
-        {page === "groups" && <GroupsPage championship={championship} />}
-        {page === "fixtures" && (
-          <FixturesPage championship={championship} onSelectMatch={setSelected} />
-        )}
-        {page === "knockout" && (
-          <KnockoutPage championship={championship} onSelectMatch={setSelected} />
-        )}
-        {page === "clubs" && <ClubsPage championship={championship} onSelectMatch={setSelected} />}
-      </main>
+      {!game.save && <ClubSelectScreen onTakeCharge={game.takeCharge} />}
 
-      <footer className="site-foot">
-        <p>
-          {championship.sponsor} · {championship.trophy} · {championship.county} GAA club hurling
-        </p>
-      </footer>
-
-      {selectedMatch && (
-        <ScoreModal
-          championship={championship}
-          match={selectedMatch}
-          onClose={() => setSelected(null)}
-          onSave={(homeScore, awayScore) => {
-            recordScore(selectedMatch.id, homeScore, awayScore);
-            setSelected(null);
-          }}
+      {game.save && game.live && (
+        <MatchScreen
+          championship={game.championship}
+          live={game.live}
+          onAdvance={game.advanceLive}
+          onSkip={game.skipMatch}
+          onClose={game.closeLive}
         />
+      )}
+
+      {game.save && !game.live && (
+        <>
+          <header className="app-bar">
+            <div>
+              <p>Clare SHC 2026</p>
+              <h1>{club ? compactName(club) : "ChampManager"}</h1>
+            </div>
+          </header>
+          {page === "home" && (
+            <HomeScreen
+              championship={game.championship}
+              save={game.save}
+              nextMatch={game.nextUserMatch}
+              batchLabel={game.batch?.label ?? null}
+              onGoToMatch={game.goToMatch}
+              onSkip={game.skipMatch}
+              onResign={game.resign}
+            />
+          )}
+          {page === "squad" && (
+            <SquadScreen
+              save={game.save}
+              picked={game.picked}
+              onTapPlayer={game.tapPlayer}
+            />
+          )}
+          {page === "tactics" && <TacticsScreen save={game.save} onChange={game.setTactics} />}
+          {page === "fixtures" && (
+            <FixturesScreen championship={game.championship} save={game.save} />
+          )}
+          {page === "table" && <TableScreen championship={game.championship} save={game.save} />}
+          <BottomNav page={page} onChange={setPage} />
+        </>
       )}
     </div>
   );

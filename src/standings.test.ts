@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import { seedChampionship } from "./data/championship";
 import { formatScore, scoreTotal } from "./lib/scoring";
 import { resolveTeamId } from "./lib/resolve";
+import { applyResults } from "./lib/results";
 import { computeStats, groupStandings, rankTeams } from "./lib/standings";
+
+const historical = applyResults(seedChampionship);
 
 describe("hurling scoring", () => {
   it("counts a goal as three points", () => {
@@ -13,8 +16,8 @@ describe("hurling scoring", () => {
 
 describe("2026 Clare SHC group tables", () => {
   function groupRows(groupId: "1" | "2" | "3" | "4") {
-    const group = seedChampionship.groups.find((item) => item.id === groupId)!;
-    const matches = seedChampionship.matches.filter(
+    const group = historical.groups.find((item) => item.id === groupId)!;
+    const matches = historical.matches.filter(
       (match) => match.stage === "group" && match.groupId === groupId,
     );
     return groupStandings(group.teamIds, matches, true);
@@ -71,7 +74,7 @@ describe("2026 Clare SHC group tables", () => {
     expect(rows[0].points).toBe(6);
 
     const tied = ["wolfe-tones", "sixmilebridge", "newmarket"];
-    const matches = seedChampionship.matches.filter(
+    const matches = historical.matches.filter(
       (match) => match.stage === "group" && match.groupId === "4",
     );
     const mini = computeStats(tied, matches);
@@ -92,18 +95,18 @@ describe("2026 knockout draw from group positions", () => {
     ] as const;
 
     for (const [id, home, away] of pairings) {
-      const match = seedChampionship.matches.find((item) => item.id === id)!;
-      expect(resolveTeamId(seedChampionship, match.home)).toBe(home);
-      expect(resolveTeamId(seedChampionship, match.away)).toBe(away);
+      const match = historical.matches.find((item) => item.id === id)!;
+      expect(resolveTeamId(historical, match.home)).toBe(home);
+      expect(resolveTeamId(historical, match.away)).toBe(away);
     }
   });
 
   it("resolves the relegation semi-final pairings", () => {
-    const rel1 = seedChampionship.matches.find((item) => item.id === "rel-sf-1")!;
-    const rel2 = seedChampionship.matches.find((item) => item.id === "rel-sf-2")!;
-    expect(resolveTeamId(seedChampionship, rel1.home)).toBe("ocallaghans-mills");
-    expect(resolveTeamId(seedChampionship, rel1.away)).toBe("crusheen");
-    expect(resolveTeamId(seedChampionship, rel2.home)).toBe("st-josephs");
-    expect(resolveTeamId(seedChampionship, rel2.away)).toBe("newmarket");
+    const rel1 = historical.matches.find((item) => item.id === "rel-sf-1")!;
+    const rel2 = historical.matches.find((item) => item.id === "rel-sf-2")!;
+    expect(resolveTeamId(historical, rel1.home)).toBe("ocallaghans-mills");
+    expect(resolveTeamId(historical, rel1.away)).toBe("crusheen");
+    expect(resolveTeamId(historical, rel2.home)).toBe("st-josephs");
+    expect(resolveTeamId(historical, rel2.away)).toBe("newmarket");
   });
 });

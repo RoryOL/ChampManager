@@ -97,4 +97,64 @@ export type StandingRow = TeamStats & {
   status: "quarter-final" | "safe" | "relegation" | "pending";
 };
 
-export type PageId = "overview" | "groups" | "fixtures" | "knockout" | "clubs";
+export type PageId = "home" | "squad" | "tactics" | "fixtures" | "table";
+
+export type Tactics = {
+  mentality: "contain" | "balanced" | "attacking";
+  style: "possession" | "direct";
+  pressing: "low" | "medium" | "high";
+};
+
+export type PlayerRatings = {
+  handling: number;
+  tackling: number;
+  pace: number;
+  stamina: number;
+  striking: number;
+  scoring: number;
+  passing: number;
+  overall: number;
+};
+
+export type RatedPlayer = SquadPlayer & {
+  position: string;
+  ratings: PlayerRatings;
+};
+
+export type NewsItem = {
+  id: string;
+  title: string;
+  body: string;
+  date: string;
+  matchId?: string;
+};
+
+export type MatchEvent = {
+  minute: number;
+  teamId: string;
+  playerName: string;
+  kind: "point" | "goal" | "wide" | "save" | "half" | "full";
+  text: string;
+};
+
+export type SimulatedMatch = {
+  matchId: string;
+  homeScore: Score;
+  awayScore: Score;
+  events: MatchEvent[];
+};
+
+export type TeamSheet = {
+  starters: string[];
+  subs: string[];
+};
+
+export type GameSave = {
+  version: 1;
+  clubId: string;
+  seed: number;
+  tactics: Tactics;
+  sheet: TeamSheet;
+  matches: { id: string; homeScore: Score | null; awayScore: Score | null }[];
+  inbox: NewsItem[];
+};

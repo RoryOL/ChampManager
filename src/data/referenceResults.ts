@@ -1,0 +1,28 @@
+import type { Score } from "../types";
+
+export const referenceResults: Record<string, { home: Score; away: Score }> = {
+  "g1-r1-a": { home: { goals: 0, points: 19 }, away: { goals: 0, points: 29 } },
+  "g1-r1-b": { home: { goals: 0, points: 22 }, away: { goals: 0, points: 18 } },
+  "g1-r2-a": { home: { goals: 0, points: 25 }, away: { goals: 0, points: 12 } },
+  "g1-r2-b": { home: { goals: 1, points: 17 }, away: { goals: 2, points: 14 } },
+  "g1-r3-a": { home: { goals: 5, points: 25 }, away: { goals: 5, points: 16 } },
+  "g1-r3-b": { home: { goals: 0, points: 20 }, away: { goals: 0, points: 20 } },
+  "g2-r1-a": { home: { goals: 0, points: 22 }, away: { goals: 0, points: 27 } },
+  "g2-r1-b": { home: { goals: 4, points: 18 }, away: { goals: 0, points: 18 } },
+  "g2-r2-a": { home: { goals: 2, points: 20 }, away: { goals: 1, points: 21 } },
+  "g2-r2-b": { home: { goals: 3, points: 14 }, away: { goals: 2, points: 16 } },
+  "g2-r3-a": { home: { goals: 4, points: 20 }, away: { goals: 0, points: 23 } },
+  "g2-r3-b": { home: { goals: 2, points: 14 }, away: { goals: 2, points: 27 } },
+  "g3-r1-a": { home: { goals: 0, points: 28 }, away: { goals: 0, points: 18 } },
+  "g3-r1-b": { home: { goals: 0, points: 21 }, away: { goals: 1, points: 18 } },
+  "g3-r2-a": { home: { goals: 4, points: 15 }, away: { goals: 1, points: 24 } },
+  "g3-r2-b": { home: { goals: 4, points: 17 }, away: { goals: 0, points: 13 } },
+  "g3-r3-a": { home: { goals: 1, points: 21 }, away: { goals: 0, points: 12 } },
+  "g3-r3-b": { home: { goals: 2, points: 18 }, away: { goals: 2, points: 17 } },
+  "g4-r1-a": { home: { goals: 1, points: 22 }, away: { goals: 1, points: 17 } },
+  "g4-r1-b": { home: { goals: 2, points: 21 }, away: { goals: 3, points: 16 } },
+  "g4-r2-a": { home: { goals: 2, points: 16 }, away: { goals: 1, points: 21 } },
+  "g4-r2-b": { home: { goals: 3, points: 20 }, away: { goals: 0, points: 15 } },
+  "g4-r3-a": { home: { goals: 1, points: 22 }, away: { goals: 2, points: 17 } },
+  "g4-r3-b": { home: { goals: 0, points: 25 }, away: { goals: 1, points: 18 } },
+};
