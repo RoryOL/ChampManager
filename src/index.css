@@ -549,6 +549,86 @@ main {
   font-size: 2.4rem;
 }
 
+.club-detail h3 {
+  font-size: 1.55rem;
+}
+
+.club-detail h4 {
+  margin: 1rem 0 0.5rem;
+  font-size: 1.05rem;
+}
+
+.squad-block {
+  margin: 1.2rem 0 1.4rem;
+}
+
+.xv-pitch {
+  background:
+    linear-gradient(180deg, rgba(33, 87, 58, 0.16), rgba(33, 87, 58, 0.28));
+  border: 1px solid rgba(33, 87, 58, 0.28);
+  padding: 0.85rem 0.7rem;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.xv-row__label {
+  display: block;
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 0.25rem;
+}
+
+.xv-row__players {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.player-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  padding: 0.28rem 0.55rem 0.28rem 0.3rem;
+  font-size: 0.82rem;
+}
+
+.player-chip em {
+  font-style: normal;
+  font-weight: 700;
+  min-width: 1.3rem;
+  text-align: center;
+  color: var(--navy);
+}
+
+.panel-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.source,
+.source a {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.match-xvs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.8rem;
+  margin-top: 1rem;
+}
+
+.match-xvs h3 {
+  font-size: 1.3rem;
+  margin-bottom: 0.4rem;
+}
+
 .result-strip {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
@@ -599,7 +679,9 @@ main {
 }
 
 .modal {
-  width: min(560px, 100%);
+  width: min(760px, 100%);
+  max-height: calc(100vh - 2rem);
+  overflow: auto;
   background: var(--paper);
   padding: 1.3rem 1.3rem 1.1rem;
   box-shadow: var(--shadow);
@@ -690,7 +772,8 @@ main {
   .club-grid,
   .result-strip,
   .bracket,
-  .stat-row {
+  .stat-row,
+  .match-xvs {
     grid-template-columns: 1fr;
   }
 

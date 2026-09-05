@@ -10,6 +10,9 @@ The app is seeded with the 2026 Clare SHC field: 16 senior clubs in four groups 
 - Applies Clare SHC tie-breakers: results between tied teams, then score difference, then scores for
 - Records knockout and relegation results in goals and points
 - Advances winners (and relegation losers) through the bracket automatically
+- Shows championship squads scraped from numbered Clare Echo line-outs
+
+Squads use the last published championship fifteen for each club, plus anyone named as a substitute in those reports. Line-outs are attributed to the original match report.
 
 ## 2026 reference groups
 

@@ -48,6 +48,24 @@ export type Match = {
   awayScore: Score | null;
 };
 
+export type Player = {
+  number: number;
+  name: string;
+};
+
+export type TeamLineup = {
+  matchId: string;
+  teamId: string;
+  starters: Player[];
+  subs: Player[];
+  source: string;
+};
+
+export type SquadPlayer = Player & {
+  starts: number;
+  appearances: number;
+};
+
 export type Championship = {
   title: string;
   shortTitle: string;

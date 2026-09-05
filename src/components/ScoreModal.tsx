@@ -3,6 +3,8 @@ import type { Championship, Match, Score } from "../types";
 import { formatScoreWithTotal, isValidScore, scoreTotal, stageLabel } from "../lib/scoring";
 import { matchTitle } from "../lib/display";
 import { resolveMatchSides, teamById } from "../lib/resolve";
+import { lineupFor } from "../lib/squads";
+import { StartingXv } from "./StartingXv";
 
 type Props = {
   championship: Championship;
@@ -116,6 +118,22 @@ export function ScoreModal({ championship, match, onClose, onSave }: Props) {
             </button>
           </div>
         </form>
+
+        {homeId && awayId && (lineupFor(match.id, homeId) || lineupFor(match.id, awayId)) && (
+          <div className="match-xvs">
+            {[homeId, awayId].map((teamId) => {
+              const xv = lineupFor(match.id, teamId);
+              const team = teamById(championship, teamId);
+              if (!xv || !team) return null;
+              return (
+                <section key={teamId}>
+                  <h3>{team.name}</h3>
+                  <StartingXv lineup={xv} compact />
+                </section>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

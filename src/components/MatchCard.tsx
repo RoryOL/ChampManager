@@ -3,6 +3,7 @@ import { formatDate, formatScore, matchPlayed, scoreTotal, stageLabel } from "..
 import { sideLabel } from "../lib/display";
 import { TeamLine } from "./TeamLine";
 import { resolveMatchSides } from "../lib/resolve";
+import { lineupsForMatch } from "../lib/squads";
 
 type Props = {
   championship: Championship;
@@ -17,6 +18,7 @@ export function MatchCard({ championship, match, onSelect }: Props) {
   const awayTotal = match.awayScore ? scoreTotal(match.awayScore) : null;
   const homeWin = played && homeTotal !== null && awayTotal !== null && homeTotal > awayTotal;
   const awayWin = played && homeTotal !== null && awayTotal !== null && awayTotal > homeTotal;
+  const hasLineup = lineupsForMatch(match.id).length > 0;
 
   return (
     <button type="button" className="match-card" onClick={() => onSelect(match)}>
@@ -48,7 +50,10 @@ export function MatchCard({ championship, match, onSelect }: Props) {
         </span>
       </div>
       {match.venue && <p className="match-card__venue">{match.venue}</p>}
-      <span className="match-card__action">{played ? "Edit result" : "Enter result"}</span>
+      <span className="match-card__action">
+        {played ? "Edit result" : "Enter result"}
+        {hasLineup ? " · Line-out" : ""}
+      </span>
     </button>
   );
 }
