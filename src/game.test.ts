@@ -13,6 +13,7 @@ import { nextBatch } from "./lib/schedule";
 import { matchPlayed } from "./lib/scoring";
 import {
   applyTraining,
+  averageMatchOverall,
   defaultCondition,
   isOvertrained,
   matchRatings,
@@ -27,6 +28,24 @@ describe("new game championship", () => {
 });
 
 describe("player ratings", () => {
+  it("reports Ballyea XV ability near the panel stars", () => {
+    const squad = ratedSquad("ballyea");
+    const sheet = defaultSheet("ballyea");
+    const form = averageMatchOverall(
+      squad,
+      Object.fromEntries(squad.map((player) => [player.name, defaultCondition()])),
+      sheet.starters,
+    );
+    const overalls = sheet.starters.map((name) => {
+      const player = squad.find((item) => item.name === name);
+      return { name, overall: player?.ratings.overall ?? null };
+    });
+    expect(overalls.every((row) => row.overall !== null)).toBe(true);
+    expect(form.ability).toBeGreaterThan(10);
+    expect(form.ability).toBeLessThan(16);
+    expect(form.match).toBe(form.ability);
+  });
+
   it("keeps Tony Kelly at the top of the Ballyea panel", () => {
     const kelly = ratedSquad("ballyea").find((player) => player.name === "Tony Kelly");
     expect(kelly?.ratings.overall).toBeGreaterThanOrEqual(17);
