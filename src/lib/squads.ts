@@ -1,8 +1,9 @@
+import { extraPanelFor, normalizePlayerName } from "../data/playerProfiles";
 import { matchLineups } from "../data/lineups";
 import type { Player, SquadPlayer, TeamLineup } from "../types";
 
 function keyFor(player: Player): string {
-  return player.name.toLowerCase().replace(/[’']/g, "'");
+  return normalizePlayerName(player.name);
 }
 
 export function lineupFor(matchId: string, teamId: string): TeamLineup | undefined {
@@ -49,6 +50,25 @@ export function squadFor(teamId: string): SquadPlayer[] {
         seen.set(key, { ...player, starts: 0, appearances: 1 });
       }
     }
+  }
+
+  const usedNumbers = new Set([...seen.values()].map((player) => player.number));
+  let spare = 16;
+  const nextNumber = () => {
+    while (usedNumbers.has(spare)) spare += 1;
+    const number = spare;
+    usedNumbers.add(number);
+    spare += 1;
+    return number;
+  };
+
+  for (const extra of extraPanelFor(teamId)) {
+    const key = keyFor(extra);
+    if (seen.has(key)) continue;
+    const number =
+      extra.number > 0 && !usedNumbers.has(extra.number) ? extra.number : nextNumber();
+    usedNumbers.add(number);
+    seen.set(key, { name: extra.name, number, starts: 0, appearances: 0 });
   }
 
   return [...seen.values()].sort((a, b) => {

@@ -293,6 +293,7 @@ export type SimulatedMatch = {
   awayStats: TeamMatchStats;
   players: PlayerMatchStats[];
   coachReport: string[];
+  gameSeed?: number;
 };
 
 export type TeamSheet = {

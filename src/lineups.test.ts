@@ -40,6 +40,14 @@ describe("2026 championship line-outs", () => {
     expect(squad.find((player) => player.name === "Paul Rodgers")?.starts).toBe(2);
   });
 
+  it("adds 2025 championship names who are missing from the stored 2026 line-outs", () => {
+    const clooney = squadFor("clooney-quin");
+    expect(clooney.some((player) => player.name === "Cillian Duggan")).toBe(true);
+    expect(clooney.find((player) => player.name === "Jimmy Corry")?.appearances).toBe(0);
+    expect(squadFor("ballyea").some((player) => player.name === "Daragh Moylan")).toBe(true);
+    expect(squadFor("clonlara").some((player) => player.name === "Colm O'Meara")).toBe(true);
+  });
+
   it("only stores numbered players from published reports", () => {
     for (const lineup of matchLineups) {
       for (const player of [...lineup.starters, ...lineup.subs]) {

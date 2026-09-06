@@ -155,6 +155,7 @@ export function useGame() {
             awayName: awayTeam ? compactName(awayTeam) : awayId,
             period: isUser && mode === "first" ? "first" : "full",
             seed: save.seed,
+            gameSeed: save.seed,
           });
         })
         .filter((item): item is SimulatedMatch => Boolean(item));
@@ -222,7 +223,7 @@ export function useGame() {
           sheet.starters,
           sheet.subs,
           extras?.base?.tactics ?? base.tactics,
-          ratedSquad(base.clubId),
+          ratedSquad(base.clubId, base.seed),
         ),
         trainingDue: true,
       };
@@ -241,7 +242,7 @@ export function useGame() {
         ...next,
         condition: applyMatchMood(
           next.condition,
-          ratedSquad(base.clubId),
+          ratedSquad(base.clubId, base.seed),
           current.openingSheet,
           sheet,
           current.user.players,
@@ -305,6 +306,7 @@ export function useGame() {
         startAway: first.awayScore,
         startMomentum: momentumAt(first.events),
         seed: save.seed,
+        gameSeed: save.seed,
       });
       const combined = combineHalves(first, second, {
         clubId: save.clubId,
@@ -373,7 +375,7 @@ export function useGame() {
   const trainWeek = useCallback(
     (focus: TrainingFocus) => {
       if (!save || !save.trainingDue) return;
-      const squad = ratedSquad(save.clubId);
+      const squad = ratedSquad(save.clubId, save.seed);
       const result = applyTraining(squad, save.condition, focus);
       const date =
         save.phase === "preseason"

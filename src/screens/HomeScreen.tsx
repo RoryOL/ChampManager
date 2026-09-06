@@ -32,7 +32,7 @@ export function HomeScreen({
   const group = teamGroup(championship, save.clubId);
   const sides = nextMatch ? resolveMatchSides(championship, nextMatch) : null;
   const [focus, setFocus] = useState<TrainingFocus>("skills");
-  const squad = ratedSquad(save.clubId);
+  const squad = ratedSquad(save.clubId, save.seed);
   const names = squad.map((player) => player.name);
   const fitness = averageFitness(save.condition, names);
   const sharpness = averageSharpness(save.condition, names);

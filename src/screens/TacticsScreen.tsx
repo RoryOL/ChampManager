@@ -8,7 +8,7 @@ type Props = {
 };
 
 export function TacticsScreen({ save, onChange }: Props) {
-  const xv = sheetPlayers(save.clubId, save.sheet);
+  const xv = sheetPlayers(save.clubId, save.sheet, save.seed);
   return (
     <div className="screen">
       <p className="hint">

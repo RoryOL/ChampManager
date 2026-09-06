@@ -197,6 +197,7 @@ export function statsFromEvents(
     homeTactics?: Tactics;
     awayTactics?: Tactics;
     upTo?: number;
+    gameSeed?: number;
   },
 ): { players: PlayerMatchStats[]; homeStats: TeamMatchStats; awayStats: TeamMatchStats } {
   const rows = new Map<string, PlayerMatchStats>();
@@ -225,8 +226,8 @@ export function statsFromEvents(
     }
   }
 
-  const homeSquad = ratedSquad(options.homeId);
-  const awaySquad = ratedSquad(options.awayId);
+  const homeSquad = ratedSquad(options.homeId, options.gameSeed);
+  const awaySquad = ratedSquad(options.awayId, options.gameSeed);
   const byName = new Map(
     [...homeSquad.map((player) => [player.name, { player, teamId: options.homeId }] as const),
      ...awaySquad.map((player) => [player.name, { player, teamId: options.awayId }] as const)],
@@ -344,6 +345,7 @@ export function combineHalves(
     awaySheet: second.awaySheet,
     homeTactics: second.homeTactics,
     awayTactics: second.awayTactics,
+    gameSeed: first.gameSeed ?? second.gameSeed,
   });
   const coachReport = buildCoachReport({
     clubId: names.clubId,
@@ -390,6 +392,7 @@ export function liveStats(
     homeTactics: sim.homeTactics,
     awayTactics: sim.awayTactics,
     upTo: cursor,
+    gameSeed: sim.gameSeed,
   });
 }
 

@@ -172,6 +172,8 @@ export function simulateMatch(options: {
   startAway?: Score;
   startMomentum?: number;
   seed: number;
+  /** Career seed for player attributes. Omit in tests so ratings stay name-stable. */
+  gameSeed?: number;
 }): SimulatedMatch {
   const period = options.period ?? "full";
   const seedKey = period === "second" ? `${options.seed}:${options.matchId}:second` : `${options.seed}:${options.matchId}`;
@@ -181,8 +183,8 @@ export function simulateMatch(options: {
   const awaySheet = options.awaySheet ?? defaultSheet(options.awayId);
   const homeTactics = options.homeTactics ?? clubTactics(options.homeId);
   const awayTactics = options.awayTactics ?? clubTactics(options.awayId);
-  const home = sideProfile(options.homeId, homeSheet, homeTactics, options.homeCondition);
-  const away = sideProfile(options.awayId, awaySheet, awayTactics, options.awayCondition);
+  const home = sideProfile(options.homeId, homeSheet, homeTactics, options.homeCondition, options.gameSeed);
+  const away = sideProfile(options.awayId, awaySheet, awayTactics, options.awayCondition, options.gameSeed);
   const homeDirect = clampDial(homeTactics.build) / 100;
   const awayDirect = clampDial(awayTactics.build) / 100;
   const homeLongPuck = clampDial(homeTactics.puckout) / 100;
@@ -654,6 +656,7 @@ export function simulateMatch(options: {
     awayCondition: options.awayCondition,
     homeTactics,
     awayTactics,
+    gameSeed: options.gameSeed,
   });
   const coachReport = buildCoachReport({
     clubId: options.clubId,
@@ -686,6 +689,7 @@ export function simulateMatch(options: {
     awayStats: tallied.awayStats,
     players: tallied.players,
     coachReport,
+    gameSeed: options.gameSeed,
   };
 }
 

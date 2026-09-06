@@ -87,8 +87,8 @@ export function MatchDetailScreen({ championship, save, match, report, onBack, o
               homeStats={report.homeStats}
               awayStats={report.awayStats}
               players={report.players}
-              homeSquad={homeId ? ratedSquad(homeId) : []}
-              awaySquad={awayId ? ratedSquad(awayId) : []}
+              homeSquad={homeId ? ratedSquad(homeId, save.seed) : []}
+              awaySquad={awayId ? ratedSquad(awayId, save.seed) : []}
               homeCondition={homeId === save.clubId ? save.condition : undefined}
               awayCondition={awayId === save.clubId ? save.condition : undefined}
             />

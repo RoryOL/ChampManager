@@ -65,11 +65,11 @@ export function MatchScreen({
     if (live.phase === "finished") setPane("stats");
   }, [live.phase]);
 
-  const squad = useMemo(() => ratedSquad(save.clubId), [save.clubId]);
+  const squad = useMemo(() => ratedSquad(save.clubId, save.seed), [save.clubId, save.seed]);
   const byName = useMemo(() => new Map(squad.map((player) => [player.name, player])), [squad]);
-  const homeSquad = useMemo(() => (homeId ? ratedSquad(homeId) : []), [homeId]);
-  const awaySquad = useMemo(() => (awayId ? ratedSquad(awayId) : []), [awayId]);
-  const htXv = useMemo(() => sheetPlayers(save.clubId, htSheet), [htSheet, save.clubId]);
+  const homeSquad = useMemo(() => (homeId ? ratedSquad(homeId, save.seed) : []), [homeId, save.seed]);
+  const awaySquad = useMemo(() => (awayId ? ratedSquad(awayId, save.seed) : []), [awayId, save.seed]);
+  const htXv = useMemo(() => sheetPlayers(save.clubId, htSheet, save.seed), [htSheet, save.clubId, save.seed]);
   const chart = liveStats(live.user, Math.max(live.cursor, 1), {
     home: homeId === save.clubId ? save.condition : undefined,
     away: awayId === save.clubId ? save.condition : undefined,
