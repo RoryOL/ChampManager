@@ -1,4 +1,5 @@
 import type {
+  MatchClimate,
   PlayerCondition,
   PlayerGrade,
   PlayerRatings,
@@ -80,6 +81,7 @@ export const DEFAULT_TACTICS: Tactics = {
   puckout: 58,
   aggression: 46,
   pressure: 48,
+  shooting: 50,
   shape: "traditional",
 };
 
@@ -430,6 +432,7 @@ export function sideProfile(
   sheet: TeamSheet,
   tactics: Tactics,
   condition: Record<string, PlayerCondition> = {},
+  climate?: MatchClimate,
 ): SideProfile {
   const xv = sheetPlayers(teamId, sheet);
   const scaled = (index: number, keys: AttributeKey[]) => {
@@ -454,16 +457,16 @@ export function sideProfile(
   let defence =
     average(backs.map((i) => scaled(i, ["hooking", "manMarking", "strength", "highFielding", "aerialReach"]))) ||
     12;
-  const aerial =
+  let aerial =
     average(midfield.map((i) => scaled(i, ["highFielding", "aerialReach", "strength"]))) || 12;
-  const running =
+  let running =
     average(
       [...mids, ...forwards].map((i) =>
         scaled(i, ["speed", "acceleration", "firstTouch", "passing", "vision", "offTheBall"]),
       ),
     ) || 12;
   let hooking = average(backs.map((i) => scaled(i, ["hooking", "strength", "workrate"]))) || 12;
-  const halfBackHands =
+  let halfBackHands =
     average(halfBacks.map((i) => scaled(i, ["firstTouch", "passing", "vision", "underPressure"]))) || 12;
   const keeper = xv[0];
   const puckout = keeper
@@ -506,6 +509,19 @@ export function sideProfile(
   hooking += physical * 2.4 + press * 0.9;
   defence += physical * 0.9 + press * 0.35;
 
+  if (climate?.sky === "wet") {
+    running *= 0.86;
+    hooking += 0.85;
+    defence += 0.45;
+    aerial += 0.3;
+    halfBackHands *= 0.88;
+    attack -= 0.25;
+  } else if (climate?.sky === "cold") {
+    running *= 0.93;
+    halfBackHands *= 0.96;
+    attack -= 0.15;
+  }
+
   return {
     attack,
     defence,
@@ -541,6 +557,7 @@ export function clubTactics(teamId: string): Tactics {
     puckout: 16 + ((value >> 5) % 72),
     aggression: 14 + ((value >> 9) % 74),
     pressure: 12 + ((value >> 11) % 76),
+    shooting: 22 + ((value >> 13) % 58),
     shape: (value >> 7) % 3 === 0 ? "sweeper" : "traditional",
   };
 }

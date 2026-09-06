@@ -115,6 +115,8 @@ export type Tactics = {
   aggression: number;
   /** 0 = sit off, 100 = hunt every possession — more tackles, more match fatigue */
   pressure: number;
+  /** 0 = shoot on sight, 100 = only take a shot when the look is certain */
+  shooting: number;
   shape: "sweeper" | "traditional";
   longFreeTaker?: string;
   shortFreeTaker?: string;
@@ -177,6 +179,29 @@ export type NewsItem = {
   matchId?: string;
 };
 
+export type ShotKind = "point" | "goal" | "wide" | "save" | "free" | "sixtyFive" | "sideline";
+
+export type ShotAttempt = {
+  minute: number;
+  teamId: string;
+  playerName: string;
+  kind: ShotKind;
+  scored: boolean;
+  /** Metres from the left sideline (0–90). */
+  x: number;
+  /** Metres from the home goal line (0–145). */
+  y: number;
+  distance: number;
+};
+
+export type WeatherSky = "sunny" | "wet" | "cold" | "windy";
+
+export type MatchClimate = {
+  sky: WeatherSky;
+  windStrength: number;
+  windAngle: number;
+};
+
 export type MatchEventKind =
   | "point"
   | "goal"
@@ -189,6 +214,7 @@ export type MatchEventKind =
   | "booking"
   | "red"
   | "puckout"
+  | "turnover"
   | "coach"
   | "half"
   | "full";
@@ -276,6 +302,8 @@ export type MatchReport = {
   awayStats: TeamMatchStats;
   players: PlayerMatchStats[];
   coachReport: string[];
+  climate?: MatchClimate;
+  shots?: ShotAttempt[];
 };
 
 export type SimulatedMatch = {
@@ -293,6 +321,8 @@ export type SimulatedMatch = {
   awayStats: TeamMatchStats;
   players: PlayerMatchStats[];
   coachReport: string[];
+  climate: MatchClimate;
+  shots: ShotAttempt[];
 };
 
 export type TeamSheet = {

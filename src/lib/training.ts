@@ -247,6 +247,7 @@ export function matchFatigueDelta(
     puckout: 58,
     aggression: 46,
     pressure: 48,
+    shooting: 50,
     shape: "traditional" as const,
   };
   const pressure = clampDial(plan.pressure ?? 48) / 100;

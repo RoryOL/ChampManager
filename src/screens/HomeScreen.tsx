@@ -6,6 +6,7 @@ import { resolveMatchSides, teamById, teamGroup } from "../lib/resolve";
 import { formatDate, stageLabel } from "../lib/scoring";
 import { averageFitness, averageMatchOverall, averageSharpness, PRESEASON_WEEKS, TRAINING_OPTIONS } from "../lib/training";
 import { ratedSquad } from "../lib/players";
+import { rollClimate, climateSummary } from "../lib/weather";
 
 type Props = {
   championship: Championship;
@@ -121,6 +122,7 @@ export function HomeScreen({
                 {stageLabel(nextMatch.stage, nextMatch.round)} · {formatDate(nextMatch.date)}
                 {nextMatch.venue ? ` · ${nextMatch.venue}` : ""}
               </p>
+              <p className="weather-banner">{climateSummary(rollClimate(save.seed, nextMatch.id))}</p>
               <div className="row-actions">
                 <button type="button" className="btn" onClick={onGoToMatch}>
                   Go to match

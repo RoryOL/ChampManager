@@ -47,12 +47,15 @@ export function migrateTactics(raw: unknown): Tactics {
       typeof (raw as Tactics).aggression === "number" ? (raw as Tactics).aggression : DEFAULT_TACTICS.aggression;
     const pressure =
       typeof (raw as Tactics).pressure === "number" ? (raw as Tactics).pressure : DEFAULT_TACTICS.pressure;
+    const shooting =
+      typeof (raw as Tactics).shooting === "number" ? (raw as Tactics).shooting : DEFAULT_TACTICS.shooting;
     return {
       ...raw,
       build: clampDial(raw.build),
       puckout: clampDial(raw.puckout),
       aggression: clampDial(aggression),
       pressure: clampDial(pressure),
+      shooting: clampDial(shooting),
       longFreeTaker: raw.longFreeTaker,
       shortFreeTaker: raw.shortFreeTaker,
       sidelineTaker: raw.sidelineTaker,
@@ -82,6 +85,11 @@ export function migrateTactics(raw: unknown): Tactics {
     puckout: clampDial(puckout),
     aggression: clampDial(typeof legacy.aggression === "number" ? legacy.aggression : DEFAULT_TACTICS.aggression),
     pressure: clampDial(pressure),
+    shooting: clampDial(
+      typeof (legacy as { shooting?: number }).shooting === "number"
+        ? (legacy as { shooting?: number }).shooting ?? DEFAULT_TACTICS.shooting
+        : DEFAULT_TACTICS.shooting,
+    ),
     shape: legacy.shape === "sweeper" || legacy.shape === "traditional" ? legacy.shape : "traditional",
     longFreeTaker: legacy.longFreeTaker,
     shortFreeTaker: legacy.shortFreeTaker,

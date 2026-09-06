@@ -7,6 +7,8 @@ import { TacticControls } from "../components/TacticControls";
 import { compactName, sideLabel, teamAccent } from "../lib/display";
 import { commentaryFeed, isScoreKind, momentumAt, scoreFromEvents } from "../lib/matchEngine";
 import { KeyEventsBar } from "../components/KeyEventsBar";
+import { ShotMap } from "../components/ShotMap";
+import { WeatherBanner } from "../components/WeatherBanner";
 import { liveStats } from "../lib/matchStats";
 import { ratedSquad, sheetPlayers, swapPlayersInSheet } from "../lib/players";
 import { conditionFor, matchRatings } from "../lib/training";
@@ -168,6 +170,12 @@ export function MatchScreen({
         home={home}
         away={away}
       />
+      {live.user.climate ? (
+        <WeatherBanner
+          climate={live.user.climate}
+          period={live.phase === "second" ? "second" : live.phase === "first" || live.phase === "half-time" ? "first" : undefined}
+        />
+      ) : null}
       <p className="live-strip">
         Poss {chart.homeStats.possessions}-{chart.awayStats.possessions} · Shots {chart.homeStats.scores}/{chart.homeStats.shots}-{chart.awayStats.scores}/{chart.awayStats.shots} · Puck-outs {chart.homeStats.puckoutsWon}-{chart.awayStats.puckoutsWon} · Tackles {chart.homeStats.tacklesWon}-{chart.awayStats.tacklesWon}
       </p>
@@ -222,6 +230,16 @@ export function MatchScreen({
                 </p>
               ))}
             </section>
+          ) : null}
+          {live.phase === "finished" && live.user.shots.length > 0 ? (
+            <ShotMap
+              shots={live.user.shots}
+              home={home}
+              away={away}
+              homeId={homeId ?? ""}
+              awayId={awayId ?? ""}
+              climate={live.user.climate}
+            />
           ) : null}
           {statsPanel}
         </div>
