@@ -12,7 +12,7 @@ export function ClubSelectScreen({ onTakeCharge }: Props) {
   return (
     <div className="screen screen--select">
       <header className="select-hero">
-        <p>ChampManager</p>
+        <p>Capture the Canon</p>
         <h1>Take charge</h1>
         <span>TUS Clare Senior Hurling Championship 2026</span>
       </header>

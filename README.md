@@ -23,7 +23,7 @@ Download the APK from GitHub (this is a direct file, not an in-chat link):
 
 **https://github.com/RoryOL/ChampManager/raw/main/releases/ChampManager.apk**
 
-On a phone, open that URL in Chrome. If Android blocks the install, allow **Install unknown apps** for Chrome, then install. Open **ChampManager** from the launcher.
+On a phone, open that URL in Chrome. If Android blocks the install, allow **Install unknown apps** for Chrome, then install. Open **Capture the Canon** from the launcher.
 
 This is a debug-signed APK (fine for sideloading; not a Play Store build). Every push to `main` rebuilds it, commits `releases/ChampManager.apk`, and uploads a copy under **Actions → Android APK → Artifacts**.
 

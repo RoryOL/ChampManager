@@ -1,6 +1,6 @@
 {
-  "name": "ChampManager",
-  "short_name": "ChampManager",
+  "name": "Capture the Canon",
+  "short_name": "Capture the Canon",
   "description": "Clare SHC championship manager",
   "start_url": "/",
   "display": "standalone",
@@ -8,9 +8,14 @@
   "theme_color": "#102033",
   "icons": [
     {
-      "src": "/sliotar.svg",
-      "sizes": "any",
-      "type": "image/svg+xml"
+      "src": "/app-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/app-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
     }
   ]
 }

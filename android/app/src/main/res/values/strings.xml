@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">ChampManager</string>
-    <string name="title_activity_main">ChampManager</string>
+    <string name="app_name">Capture the Canon</string>
+    <string name="title_activity_main">Capture the Canon</string>
     <string name="package_name">ie.clare.champmanager</string>
     <string name="custom_url_scheme">ie.clare.champmanager</string>
 </resources>
