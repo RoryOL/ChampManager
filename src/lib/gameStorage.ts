@@ -14,6 +14,7 @@ import type {
   Score,
   Tactics,
   TeamSheet,
+  TrainingPlans,
 } from "../types";
 
 const STORAGE_KEY = "champ-manager:game-v1";
@@ -115,6 +116,8 @@ export function migrateSave(raw: unknown): GameSave | null {
     trainingDue?: boolean;
     reports?: Record<string, MatchReport>;
     ambition?: AmbitionTarget;
+    plans?: TrainingPlans;
+    lastSheet?: TeamSheet;
   };
   if (!parsed.clubId || !parsed.sheet || !Array.isArray(parsed.matches)) return null;
   if (
@@ -122,7 +125,8 @@ export function migrateSave(raw: unknown): GameSave | null {
     parsed.version !== 2 &&
     parsed.version !== 3 &&
     parsed.version !== 4 &&
-    parsed.version !== 5
+    parsed.version !== 5 &&
+    parsed.version !== 6
   ) {
     return null;
   }
@@ -140,7 +144,7 @@ export function migrateSave(raw: unknown): GameSave | null {
       ? parsed.ambition
       : ambitionFor(parsed.clubId).target;
   return {
-    version: 5,
+    version: 6,
     clubId: parsed.clubId,
     seed: typeof parsed.seed === "number" ? parsed.seed : 1,
     tactics: migrateTactics(parsed.tactics),
@@ -158,13 +162,15 @@ export function migrateSave(raw: unknown): GameSave | null {
     trainingDue: typeof parsed.trainingDue === "boolean" ? parsed.trainingDue : !returning,
     reports: parsed.reports ?? {},
     ambition,
+    plans: parsed.plans ?? {},
+    lastSheet: parsed.lastSheet,
   };
 }
 
 export function newSave(clubId: string): GameSave {
   const championship = structuredClone(seedChampionship);
   return {
-    version: 5,
+    version: 6,
     clubId,
     seed: Math.floor(Math.random() * 1_000_000_000),
     tactics: DEFAULT_TACTICS,
@@ -181,6 +187,7 @@ export function newSave(clubId: string): GameSave {
     trainingDue: true,
     reports: {},
     ambition: ambitionFor(clubId).target,
+    plans: {},
   };
 }
 
@@ -239,4 +246,8 @@ export function withSheet(save: GameSave, sheet: TeamSheet): GameSave {
 
 export function withCondition(save: GameSave, condition: Record<string, PlayerCondition>): GameSave {
   return { ...save, condition };
+}
+
+export function withPlans(save: GameSave, plans: TrainingPlans): GameSave {
+  return { ...save, plans };
 }

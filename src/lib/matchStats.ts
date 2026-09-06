@@ -11,7 +11,7 @@ import type {
 } from "../types";
 import { XV_SLOTS, type AttributeKey } from "./attributes";
 import { buildCoachReport } from "./coach";
-import { ratedSquad } from "./players";
+import { ratedSquad, sideTeamwork } from "./players";
 import { conditionFor, fitnessOf, matchFatigueDelta, matchRatings } from "./training";
 
 const STAT_FIELDS = [
@@ -363,6 +363,8 @@ export function combineHalves(
     players: tallied.players,
     events,
     climate: first.climate,
+    homeTeamwork: sideTeamwork(second.homeId, second.homeSheet),
+    awayTeamwork: sideTeamwork(second.awayId, second.awaySheet),
   });
   return {
     ...second,
@@ -413,9 +415,11 @@ export const CHART_RATING_KEYS: AttributeKey[] = [
   "passing",
   "offTheBall",
   "manMarking",
+  "shooting",
   "workrate",
   "underPressure",
   "composure",
+  "teamwork",
   "frees",
   "sidelines",
   "puckoutReach",
@@ -435,9 +439,11 @@ export const CHART_RATING_SHORT: Record<AttributeKey, string> = {
   passing: "Pas",
   offTheBall: "Off",
   manMarking: "Mrk",
+  shooting: "Sht",
   workrate: "WR",
   underPressure: "Prs",
   composure: "Cmp",
+  teamwork: "Tm",
   frees: "Fr",
   sidelines: "SL",
   puckoutReach: "PO",

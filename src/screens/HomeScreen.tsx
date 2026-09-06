@@ -1,12 +1,24 @@
 import { useState } from "react";
-import type { Campaign, Championship, GameSave, Match, NewsItem, Seat, TrainingFocus } from "../types";
+import type { Campaign, Championship, GameSave, Match, NewsItem, Seat, WeekSession } from "../types";
 import { CampaignWeekCard } from "../components/CampaignWeekCard";
 import { ClubBadge } from "../components/ClubBadge";
+import { TrainingMixEditor } from "../components/TrainingMixEditor";
 import { compactName, sideLabel } from "../lib/display";
 import { NEWS_KIND_LABEL } from "../lib/news";
 import { resolveMatchSides, teamById, teamGroup } from "../lib/resolve";
 import { formatDate, stageLabel } from "../lib/scoring";
-import { averageFitness, averageMatchOverall, averageSharpness, PRESEASON_WEEKS, TRAINING_OPTIONS } from "../lib/training";
+import { buildPreMatchBriefing } from "../lib/briefing";
+import {
+  SESSION_OPTIONS,
+  applyPlansToSquad,
+  averageFitness,
+  averageMatchOverall,
+  averageSharpness,
+  defaultMixFor,
+  mixSummary,
+  planFor,
+  PRESEASON_WEEKS,
+} from "../lib/training";
 import { ratedSquad } from "../lib/players";
 import { rollClimate, climateSummary } from "../lib/weather";
 
@@ -22,7 +34,8 @@ type Props = {
   onGoToMatch: () => void;
   onSkip: () => void;
   onResign: () => void;
-  onTrain: (focus: TrainingFocus) => void;
+  onTrain: (session: WeekSession) => void;
+  onSetPlans: (plans: GameSave["plans"]) => void;
   onReady?: () => void;
   onUnready?: () => void;
   onForce?: () => void;
@@ -88,6 +101,7 @@ export function HomeScreen({
   onSkip,
   onResign,
   onTrain,
+  onSetPlans,
   onReady,
   onUnready,
   onForce,
@@ -99,8 +113,13 @@ export function HomeScreen({
   const club = teamById(championship, save.clubId);
   const group = teamGroup(championship, save.clubId);
   const sides = nextMatch ? resolveMatchSides(championship, nextMatch) : null;
-  const [focus, setFocus] = useState<TrainingFocus>("skills");
+  const [session, setSession] = useState<WeekSession>("mixed");
   const [openId, setOpenId] = useState<string | null>(null);
+  const [openPlan, setOpenPlan] = useState<string | null>(null);
+  const [template, setTemplate] = useState(() => ({
+    mix: defaultMixFor("MF"),
+    recovery: false,
+  }));
   const squad = ratedSquad(save.clubId);
   const names = squad.map((player) => player.name);
   const fitness = averageFitness(save.condition, names);
@@ -166,21 +185,69 @@ export function HomeScreen({
         {save.trainingDue ? (
           <>
             <div className="choice-stack">
-              {TRAINING_OPTIONS.map((option) => (
+              {SESSION_OPTIONS.map((option) => (
                 <button
                   key={option.value}
                   type="button"
-                  className={focus === option.value ? "is-active" : ""}
-                  onClick={() => setFocus(option.value)}
+                  className={session === option.value ? "is-active" : ""}
+                  onClick={() => setSession(option.value)}
                 >
                   <strong>{option.title}</strong>
                   <span>{option.copy}</span>
                 </button>
               ))}
             </div>
+            {session === "mixed" ? (
+              <div className="training-schedules">
+                <p className="kicker">Squad template</p>
+                <TrainingMixEditor plan={template} onChange={setTemplate} />
+                <div className="row-actions">
+                  <button
+                    type="button"
+                    className="btn btn--ghost"
+                    onClick={() => onSetPlans(applyPlansToSquad(squad, template))}
+                  >
+                    Apply to whole panel
+                  </button>
+                </div>
+                <p className="kicker">Individual schedules</p>
+                <ul className="plan-list">
+                  {squad.map((player) => {
+                    const plan = planFor(player.name, save.plans, player.position);
+                    const open = openPlan === player.name;
+                    return (
+                      <li key={player.name}>
+                        <button
+                          type="button"
+                          className={`plan-row${open ? " is-open" : ""}`}
+                          onClick={() => setOpenPlan(open ? null : player.name)}
+                        >
+                          <strong>{player.name}</strong>
+                          <span>{plan.recovery ? "Recovery" : mixSummary(plan.mix)}</span>
+                        </button>
+                        {open ? (
+                          <TrainingMixEditor
+                            plan={plan}
+                            onChange={(next) => onSetPlans({ ...save.plans, [player.name]: next })}
+                          />
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ) : null}
             <div className="row-actions">
-              <button type="button" className="btn" onClick={() => onTrain(focus)}>
-                {preseason ? `Train week ${save.preseasonWeek}` : "Run midweek session"}
+              <button type="button" className="btn" onClick={() => onTrain(session)}>
+                {preseason
+                  ? session === "challenge"
+                    ? `Challenge week ${save.preseasonWeek}`
+                    : `Train week ${save.preseasonWeek}`
+                  : session === "challenge"
+                    ? "Play challenge match"
+                    : session === "recovery"
+                      ? "Run recovery week"
+                      : "Run midweek session"}
               </button>
             </div>
           </>
@@ -213,6 +280,23 @@ export function HomeScreen({
             {stageLabel(nextMatch.stage, nextMatch.round)} · {formatDate(nextMatch.date)}
             {nextMatch.venue ? ` · ${nextMatch.venue}` : ""} · {climateSummary(rollClimate(save.seed, nextMatch.id))}
           </p>
+        ) : null}
+        {!preseason && nextMatch ? (
+          <div className="coach-brief">
+            <p className="kicker">Coach notes</p>
+            {buildPreMatchBriefing({
+              clubId: save.clubId,
+              match: nextMatch,
+              championship,
+              tactics: save.tactics,
+              sheet: save.sheet,
+              condition: save.condition,
+            }).notes.map((note) => (
+              <p key={note} className="hint hint--tight">
+                {note}
+              </p>
+            ))}
+          </div>
         ) : null}
         {preseason && !save.trainingDue ? (
           <p className="hint hint--tight">Round 1 waits after six weeks. Finish the session above when it is due.</p>

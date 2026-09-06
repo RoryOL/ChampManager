@@ -5,7 +5,7 @@ import type {
   RatedPlayer,
   SimulatedMatch,
   TeamSheet,
-  TrainingFocus,
+  WeekSession,
 } from "../types";
 import { pickOne, createRng, seedFrom } from "./rng";
 
@@ -39,7 +39,7 @@ export function injuryChance(
   player: RatedPlayer,
   condition: PlayerCondition,
   context: "match" | "training",
-  focus?: TrainingFocus,
+  focus?: WeekSession | "fitness" | "skills" | "setpieces",
 ): number {
   let chance =
     context === "match"
@@ -48,11 +48,13 @@ export function injuryChance(
         ? 0.08
         : focus === "fitness"
           ? 0.05
-          : focus === "skills"
-            ? 0.028
+          : focus === "recovery"
+            ? 0.01
             : focus === "setpieces"
               ? 0.018
-              : 0.01;
+              : focus === "skills"
+                ? 0.028
+                : 0.032;
   const fitness = fitnessOf(condition);
   chance *= 0.45 + ((100 - fitness) / 100) * 1.9;
   if (player.age <= 21) chance *= 0.62;
@@ -268,7 +270,7 @@ export function insertInjuryEvents(sim: SimulatedMatch, injuries: RolledInjury[]
 export function rollTrainingInjuries(options: {
   squad: RatedPlayer[];
   condition: Record<string, PlayerCondition>;
-  focus: TrainingFocus;
+  focus: WeekSession | "fitness" | "skills" | "setpieces";
   seed: number;
   weekKey: string;
   remainingWeeks: number;
