@@ -158,7 +158,7 @@ export function matchReportItem(options: {
   const ourScore = options.sim.homeId === options.clubId ? options.homeScore : options.awayScore;
   const theirScore = options.sim.homeId === options.clubId ? options.awayScore : options.homeScore;
   const margin = scoreTotal(ourScore) - scoreTotal(theirScore);
-  const result = margin > 0 ? "win" : margin < 0 ? "defeat" : "draw";
+  const resultWord = margin > 0 ? "won" : margin < 0 ? "went down" : "drew";
   const coach = options.sim.coachReport[0] ? ` ${options.sim.coachReport[0]}` : "";
   return newsItem({
     id: makeNewsId(options.seed, `match:${options.sim.matchId}`),
@@ -167,7 +167,7 @@ export function matchReportItem(options: {
     matchId: options.sim.matchId,
     tone: margin > 0 ? "positive" : margin < 0 ? "negative" : "neutral",
     title: `${options.homeName} ${formatScore(options.homeScore)} ${options.awayName} ${formatScore(options.awayScore)}`,
-    body: `${options.clubName} ${result} in ${options.stageLabel.toLowerCase()}, ${formatScoreWithTotal(options.homeScore)} to ${formatScoreWithTotal(options.awayScore)}. ${starsBlurb(options.sim.players, options.clubId)}${coach}`,
+    body: `${options.clubName} ${resultWord} in ${options.stageLabel.toLowerCase()}, ${formatScoreWithTotal(options.homeScore)} to ${formatScoreWithTotal(options.awayScore)}. ${starsBlurb(options.sim.players, options.clubId)}${coach}`,
   });
 }
 
@@ -265,7 +265,13 @@ export function localPressItem(options: {
   played: number;
 }): NewsItem {
   const random = createRng(seedFrom(`${options.seed}:press:${options.matchId}`));
-  const paper = pickOne(random, ["Clare Champion", "The Clare Echo", "Clare FM phone-in", "Parish notes"]);
+  const outlet = pickOne(random, [
+    { source: "Clare Champion", mention: "The Clare Champion" },
+    { source: "Clare Echo", mention: "The Clare Echo" },
+    { source: "Clare FM", mention: "A Clare FM phone-in" },
+    { source: "Parish notes", mention: "The parish notes" },
+  ]);
+  const paper = outlet.mention;
   const target = AMBITION_LABEL[options.ambition];
   const margin = scoreTotal(options.ourScore) - scoreTotal(options.theirScore);
   const gap = clubRank(options.opponent.id) - clubRank(options.club.id);
@@ -283,7 +289,7 @@ export function localPressItem(options: {
     body = pickOne(random, [
       `${paper} does not hold back. After ${compactName(options.opponent)} put them away, one columnist wrote that talk of ${target} is "delusional" until the fifteen can win dirty ball. A caller asked if the manager is already out of his depth.`,
       `In ${paper}: "${compactName(options.club)} were second to every break. If the chairman wanted ${target}, he may want to look at the sideline first." The piece names no player, but the dressing room will know.`,
-      `A ${paper} opinion piece claims the manager has the panel "confused" and that ${compactName(options.opponent)} "wanted it more." It will not go down well with the lads.`,
+      `${paper} ran an opinion piece claiming the manager has the panel "confused" and that ${compactName(options.opponent)} "wanted it more." It will not go down well with the lads.`,
     ]);
   } else if (underwhelmingWin) {
     title = pickOne(random, [
@@ -293,7 +299,7 @@ export function localPressItem(options: {
     ]);
     body = pickOne(random, [
       `${paper} was unimpressed even in victory. "Beating ${compactName(options.opponent)} like that is not ${target} form," the column ran. "If this is the plan, Clare will not be talking about them in September."`,
-      `A ${paper} writer called it a "soft four points" and asked whether the manager is overthinking it. The dressing room hates that kind of coverage.`,
+      `${paper} called it a "soft four points" and asked whether the manager is overthinking it. The dressing room hates that kind of coverage.`,
       `${paper} went after the display, not the result. "They won. They were still poor. Ambition is cheap."`,
     ]);
   } else if (options.result === "win") {
@@ -304,7 +310,7 @@ export function localPressItem(options: {
     ]);
     body = pickOne(random, [
       `${paper} admits ${compactName(options.club)} looked the part against ${compactName(options.opponent)}. Then the sting: "One swallow. The Canon is not won in July."`,
-      `Local coverage was warmer, but a ${paper} column still warned the parish not to book the open-top bus. ${target.charAt(0).toUpperCase()}${target.slice(1)} remains a long road.`,
+      `Local coverage was warmer, but ${paper} still warned the parish not to book the open-top bus. ${target.charAt(0).toUpperCase()}${target.slice(1)} remains a long road.`,
       `${paper} praised the fifteen, then asked if they can do it when the weather turns and the frees dry up.`,
     ]);
   } else {
@@ -320,7 +326,7 @@ export function localPressItem(options: {
   return newsItem({
     id: makeNewsId(options.seed, `press:${options.matchId}`),
     kind: "press",
-    source: paper,
+    source: outlet.source,
     date: options.date,
     matchId: options.matchId,
     tone,
