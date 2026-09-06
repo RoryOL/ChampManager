@@ -3,8 +3,9 @@ import type { Championship, GameSave, Tactics, TeamSheet } from "../types";
 import type { LiveMatch } from "../hooks/useGame";
 import { MatchStatsPanel } from "../components/MatchStatsPanel";
 import { TacticControls } from "../components/TacticControls";
-import { compactName, sideLabel } from "../lib/display";
-import { momentumAt, scoreFromEvents } from "../lib/matchEngine";
+import { compactName, sideLabel, teamAccent } from "../lib/display";
+import { isScoreKind, momentumAt, scoreFromEvents } from "../lib/matchEngine";
+import { commentaryFeed, KeyEventsBar } from "../components/KeyEventsBar";
 import { liveStats } from "../lib/matchStats";
 import { ratedSquad, sheetPlayers, swapPlayersInSheet } from "../lib/players";
 import { conditionFor, matchRatings } from "../lib/training";
@@ -89,6 +90,18 @@ export function MatchScreen({
     />
   ) : null;
 
+  const homeAccent = teamAccent(home);
+  const awayAccent = teamAccent(away);
+  const teamFor = (teamId: string) => (teamId === homeId ? home : teamId === awayId ? away : undefined);
+  const eventClass = (kind: string) => {
+    if (kind === "goal") return "is-goal";
+    if (kind === "point" || kind === "free" || kind === "sixtyFive" || kind === "sideline") return "is-score";
+    if (kind === "red") return "is-card is-red";
+    if (kind === "booking") return "is-card is-yellow";
+    if (kind === "coach" || kind === "half") return "is-coach";
+    return "is-play";
+  };
+
   const tapHt = (name: string) => {
     if (!htPicked) {
       setHtPicked(name);
@@ -122,11 +135,11 @@ export function MatchScreen({
       </header>
       <section className="scoreboard">
         <div>
-          <em>{home ? compactName(home) : sideLabel(championship, live.match.home)}</em>
+          <em style={{ color: homeAccent.ink }}>{home ? compactName(home) : sideLabel(championship, live.match.home)}</em>
           <b>{formatScore(score.home)}</b>
         </div>
         <div>
-          <em>{away ? compactName(away) : sideLabel(championship, live.match.away)}</em>
+          <em style={{ color: awayAccent.ink }}>{away ? compactName(away) : sideLabel(championship, live.match.away)}</em>
           <b>{formatScore(score.away)}</b>
         </div>
       </section>
@@ -137,6 +150,13 @@ export function MatchScreen({
         </div>
         <span>{away ? compactName(away) : "Away"}</span>
       </div>
+      <KeyEventsBar
+        events={visible}
+        homeId={homeId}
+        awayId={awayId}
+        home={home}
+        away={away}
+      />
       <p className="live-strip">
         Poss {chart.homeStats.possessions}-{chart.awayStats.possessions} · Shots {chart.homeStats.scores}/{chart.homeStats.shots}-{chart.awayStats.scores}/{chart.awayStats.shots} · Puck-outs {chart.homeStats.puckoutsWon}-{chart.awayStats.puckoutsWon} · Tackles {chart.homeStats.tacklesWon}-{chart.awayStats.tacklesWon}
       </p>
@@ -196,15 +216,26 @@ export function MatchScreen({
         </div>
       ) : (
         <ol className="commentary">
-          {visible
-            .slice(-10)
-            .reverse()
-            .map((event, index) => (
-              <li key={`${event.minute}-${event.kind}-${index}`} className={event.kind === "coach" ? "is-coach" : ""}>
-                <span>{event.minute}&apos;</span>
-                {event.text}
-              </li>
-            ))}
+          {commentaryFeed(visible).map((event, index) => {
+              const accent = teamAccent(teamFor(event.teamId));
+              return (
+                <li
+                  key={`${event.minute}-${event.kind}-${index}`}
+                  className={`commentary__item ${eventClass(event.kind)}`}
+                  style={{
+                    ["--team" as string]: accent.primary,
+                    ["--team-ink" as string]: accent.ink,
+                    ["--team-wash" as string]: accent.wash,
+                    borderLeftColor: accent.primary,
+                    color: accent.ink,
+                    background: isScoreKind(event.kind) ? accent.wash : undefined,
+                  }}
+                >
+                  <span>{event.minute}&apos;</span>
+                  {event.text}
+                </li>
+              );
+            })}
         </ol>
       )}
       <div className="match-actions">

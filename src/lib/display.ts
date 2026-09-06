@@ -15,6 +15,32 @@ export function compactName(team: Team): string {
   return team.name;
 }
 
+export function isDarkHex(hex: string): boolean {
+  const raw = hex.replace("#", "");
+  if (raw.length < 6) return true;
+  const r = Number.parseInt(raw.slice(0, 2), 16);
+  const g = Number.parseInt(raw.slice(2, 4), 16);
+  const b = Number.parseInt(raw.slice(4, 6), 16);
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 < 0.58;
+}
+
+export function teamAccent(team?: Team): {
+  primary: string;
+  secondary: string;
+  ink: string;
+  wash: string;
+} {
+  const primary = team?.colours.primary ?? "#5c7a99";
+  const secondary = team?.colours.secondary ?? "#e8c547";
+  const dark = isDarkHex(primary);
+  return {
+    primary,
+    secondary,
+    ink: dark ? secondary : primary,
+    wash: dark ? `${primary}d8` : `${primary}2e`,
+  };
+}
+
 export function sideLabel(championship: Championship, ref: TeamRef): string {
   const resolved = resolveTeamId(championship, ref);
   if (resolved) return teamName(championship, resolved);

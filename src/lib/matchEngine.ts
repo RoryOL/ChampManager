@@ -58,7 +58,7 @@ export function sidelineChance(sidelines: number, strikingDistance: number): num
 export function tackleChance(hooking: number, aggression: number, pressure = 48): number {
   const physical = clampDial(aggression) / 100;
   const press = clampDial(pressure) / 100;
-  return Math.min(0.34, Math.max(0.06, 0.07 + hooking * 0.0045 + physical * 0.08 + press * 0.07));
+  return Math.min(0.28, Math.max(0.08, 0.1 + hooking * 0.004 + physical * 0.07 + press * 0.06));
 }
 
 export function mistimedFoulChance(aggression: number): number {
@@ -67,6 +67,18 @@ export function mistimedFoulChance(aggression: number): number {
 
 export function yellowOnFoulChance(aggression: number): number {
   return Math.min(0.4, Math.max(0.02, 0.04 + (clampDial(aggression) / 100) * 0.3));
+}
+
+export function redOnFoulChance(aggression: number): number {
+  return Math.min(0.16, Math.max(0.02, 0.03 + (clampDial(aggression) / 100) * 0.1));
+}
+
+export function isScoreKind(kind: MatchEventKind): boolean {
+  return kind === "goal" || POINT_KINDS.has(kind);
+}
+
+export function isCardKind(kind: MatchEventKind): boolean {
+  return kind === "booking" || kind === "red";
 }
 
 export function nextMomentum(
@@ -92,6 +104,9 @@ export function nextMomentum(
       break;
     case "booking":
       delta = -7;
+      break;
+    case "red":
+      delta = -14;
       break;
     case "wide":
       delta = -3;
@@ -178,7 +193,7 @@ export function simulateMatch(options: {
   };
 
   const attackChance = (attack: number, defence: number, toward: number) =>
-    Math.min(0.6, Math.max(0.18, 0.26 + (attack - defence) * 0.026 + toward * 0.06));
+    Math.min(0.86, Math.max(0.58, 0.7 + (attack - defence) * 0.02 + toward * 0.05));
 
   const attemptSetPiece = (
     teamId: string,
@@ -379,13 +394,17 @@ export function simulateMatch(options: {
 
     if (random() < mistimedFoulChance(oppTactics.aggression ?? 46)) {
       const defender = pickName(oppNames.slice(0, 7), random);
-      if (random() < yellowOnFoulChance(oppTactics.aggression ?? 46)) {
+      const agg = oppTactics.aggression ?? 46;
+      if (random() < yellowOnFoulChance(agg)) {
+        const red = random() < redOnFoulChance(agg);
         push({
           minute,
           teamId: defendingId,
           playerName: defender,
-          kind: "booking",
-          text: `Yellow card — ${defender} overcooks the challenge.`,
+          kind: red ? "red" : "booking",
+          text: red
+            ? `RED CARD — ${defender} is sent off.`
+            : `Yellow card — ${defender} overcooks the challenge.`,
           credits: [{ name: defender, teamId: defendingId, tacklesAttempted: 1 }],
         });
       } else {
@@ -419,17 +438,17 @@ export function simulateMatch(options: {
     const moved = passChain(names.slice(6, 15), teamId, statRng, hops, carrier);
     const intoShooter = deliverTo(teamId, moved.carrier, playerName);
     const sweeperCut = oppTactics.shape === "sweeper" ? 0.62 : 1;
-    const directGoal = 0.09 + direct * 0.09;
-    const aerialGoal = direct * (profile.aerial - 12) * 0.006;
+    const directGoal = 0.12 + direct * 0.12;
+    const aerialGoal = direct * (profile.aerial - 12) * 0.007;
     const goalChance = Math.min(
-      0.28,
-      Math.max(0.05, (directGoal + aerialGoal + (profile.attack - 12) * 0.008) * sweeperCut),
+      0.32,
+      Math.max(0.1, (directGoal + aerialGoal + (profile.attack - 12) * 0.01) * sweeperCut),
     );
     const flush = (extra: StatCredit[]) =>
       mergeCredits([...pendingCredits.splice(0, pendingCredits.length), ...moved.credits, ...intoShooter, ...extra]);
 
     if (random() < goalChance) {
-      if (random() < 0.3 + opp.defence * 0.008) {
+      if (random() < 0.16 + opp.defence * 0.006) {
         const keeper = opp.keeper?.name ?? "the goalkeeper";
         push({
           minute,
@@ -459,7 +478,7 @@ export function simulateMatch(options: {
       return;
     }
 
-    if (random() < 0.3) {
+    if (random() < 0.22) {
       push({
         minute,
         teamId,
@@ -489,6 +508,50 @@ export function simulateMatch(options: {
     });
   };
 
+  const playGroundContest = (minute: number) => {
+    const homeOnBall = random() < 0.5 + (momentum - 50) / 220;
+    const defendingId = homeOnBall ? options.awayId : options.homeId;
+    const defTactics = homeOnBall ? awayTactics : homeTactics;
+    const defProfile = homeOnBall ? away : home;
+    const defNames = homeOnBall ? awayNames : homeNames;
+    const attNames = homeOnBall ? homeNames : awayNames;
+    const defender = pickName(defNames.slice(0, 9), random);
+    const carrier = pickName(attNames.slice(4, 15), random);
+    const win =
+      random() <
+      Math.min(
+        0.78,
+        0.48 +
+          tackleChance(defProfile.hooking, defTactics.aggression ?? 46, defTactics.pressure ?? 48) * 1.15,
+      );
+    if (win) {
+      push({
+        minute,
+        teamId: defendingId,
+        playerName: defender,
+        kind: "hook",
+        text: `${defender} wins the tackle on ${carrier}.`,
+        credits: mergeCredits([
+          {
+            name: defender,
+            teamId: defendingId,
+            tacklesAttempted: 1,
+            tacklesWon: 1,
+          },
+        ]),
+      });
+      return;
+    }
+    push({
+      minute,
+      teamId: defendingId,
+      playerName: defender,
+      kind: "hook",
+      text: `${defender} hooks ${carrier} but the ball stays in play.`,
+      credits: [{ name: defender, teamId: defendingId, tacklesAttempted: 1 }],
+    });
+  };
+
   const startMinute = period === "second" ? 32 : 1;
   const endMinute = period === "first" ? 31 : 62;
 
@@ -505,8 +568,12 @@ export function simulateMatch(options: {
       if (period === "first") break;
       continue;
     }
+    playGroundContest(minute);
+    if (random() < 0.55) playGroundContest(minute);
     const tilt = (momentum - 50) / 50;
-    if (random() < attackChance(home.attack, away.defence, tilt) * 0.86) {
+    const homeLooks =
+      (random() < attackChance(home.attack, away.defence, tilt) ? 1 : 0) + (random() < 0.08 ? 1 : 0);
+    for (let look = 0; look < homeLooks; look += 1) {
       tryScore(
         options.homeId,
         homeNames,
@@ -519,7 +586,9 @@ export function simulateMatch(options: {
         homeLongPuck,
       );
     }
-    if (random() < attackChance(away.attack, home.defence, -tilt) * 0.81) {
+    const awayLooks =
+      (random() < attackChance(away.attack, home.defence, -tilt) ? 1 : 0) + (random() < 0.08 ? 1 : 0);
+    for (let look = 0; look < awayLooks; look += 1) {
       tryScore(
         options.awayId,
         awayNames,

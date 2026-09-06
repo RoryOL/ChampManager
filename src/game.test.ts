@@ -3,6 +3,7 @@ import { seedChampionship } from "./data/championship";
 import { buildCoachReport } from "./lib/coach";
 import { migrateSave } from "./lib/gameStorage";
 import { seasonStatsFor } from "./lib/matchStats";
+import { commentaryFeed } from "./components/KeyEventsBar";
 import { applyMatchMood } from "./lib/mood";
 import {
   freeConversionChance,
@@ -265,8 +266,12 @@ describe("match engine", () => {
       lightHooks += cold.events.filter((event) => event.kind === "hook" && homePlayers.has(event.playerName)).length;
       aggressiveFrees += hot.events.filter((event) => event.kind === "free" && event.teamId === "inagh-kilnamona").length;
       lightFrees += cold.events.filter((event) => event.kind === "free" && event.teamId === "inagh-kilnamona").length;
-      aggressiveYellows += hot.events.filter((event) => event.kind === "booking" && event.teamId === "ballyea").length;
-      lightYellows += cold.events.filter((event) => event.kind === "booking" && event.teamId === "ballyea").length;
+      aggressiveYellows += hot.events.filter(
+        (event) => (event.kind === "booking" || event.kind === "red") && event.teamId === "ballyea",
+      ).length;
+      lightYellows += cold.events.filter(
+        (event) => (event.kind === "booking" || event.kind === "red") && event.teamId === "ballyea",
+      ).length;
     }
     expect(aggressiveHooks).toBeGreaterThan(lightHooks);
     expect(aggressiveFrees + aggressiveYellows).toBeGreaterThan(lightFrees + lightYellows);
@@ -333,6 +338,40 @@ describe("match engine", () => {
     expect(homeSet.length).toBeGreaterThan(0);
     const names = new Set(homeSet.map((event) => event.playerName));
     expect([...names].every((name) => name === longName || name === shortName || name === sidelineName)).toBe(true);
+  });
+
+  it("plays at championship tempo: tackles, possessions and scoring", () => {
+    const samples = [3, 11, 19, 27, 42, 55, 63, 77, 88, 99].map((seed) =>
+      simulateMatch({
+        matchId: "g1-r1-a",
+        homeId: "ballyea",
+        awayId: "inagh-kilnamona",
+        seed,
+      }),
+    );
+    const avg = (pick: (row: (typeof samples)[number]) => number) =>
+      samples.reduce((sum, row) => sum + pick(row), 0) / samples.length;
+    expect(avg((row) => row.homeStats.tacklesAttempted + row.awayStats.tacklesAttempted)).toBeGreaterThan(70);
+    expect(avg((row) => row.homeStats.possessions + row.awayStats.possessions)).toBeGreaterThan(80);
+    expect(avg((row) => row.homeStats.possessions + row.awayStats.possessions)).toBeLessThan(170);
+    expect(avg((row) => row.homeScore.points)).toBeGreaterThan(12);
+    expect(avg((row) => row.awayScore.points)).toBeGreaterThan(12);
+    expect(avg((row) => row.homeScore.points)).toBeLessThan(32);
+    expect(avg((row) => row.awayScore.points)).toBeLessThan(32);
+    expect(avg((row) => row.homeScore.goals + row.awayScore.goals)).toBeGreaterThan(1.4);
+    expect(samples.every((row) => row.events.filter((event) => event.kind === "hook").length >= 55)).toBe(true);
+  });
+
+  it("keeps scores and cards in the live commentary mix", () => {
+    const result = simulateMatch({
+      matchId: "g1-r1-a",
+      homeId: "ballyea",
+      awayId: "inagh-kilnamona",
+      seed: 42,
+    });
+    const feed = commentaryFeed(result.events.filter((event) => event.kind !== "full"));
+    expect(feed.some((event) => event.kind === "goal" || event.kind === "point" || event.kind === "free")).toBe(true);
+    expect(feed.filter((event) => event.kind === "hook").length).toBeLessThanOrEqual(6);
   });
 });
 
@@ -434,7 +473,7 @@ describe("match intel", () => {
       if (player.shots > 0) expect(player.possessions).toBeGreaterThanOrEqual(player.shots);
       if (player.passesAttempted > 0) expect(player.possessions).toBeGreaterThan(0);
       expect(player.puckoutsWon).toBeLessThanOrEqual(player.possessions);
-      expect(player.tacklesWon).toBeLessThanOrEqual(player.possessions);
+      expect(player.tacklesWon).toBeLessThanOrEqual(player.tacklesAttempted);
       expect(player.fitness).toBe(100 - player.fatigue);
     }
   });

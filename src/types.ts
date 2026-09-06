@@ -183,6 +183,7 @@ export type MatchEventKind =
   | "sideline"
   | "hook"
   | "booking"
+  | "red"
   | "puckout"
   | "coach"
   | "half"

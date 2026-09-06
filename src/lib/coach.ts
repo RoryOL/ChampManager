@@ -38,7 +38,9 @@ export function liveCoachTip(
   const won = ours.filter((event) => event.kind === "puckout" && /fields the puck-out/i.test(event.text)).length;
   const wides = ours.filter((event) => event.kind === "wide").length;
   const scores = ours.filter((event) => event.kind === "point" || event.kind === "goal" || event.kind === "free").length;
-  const yellows = events.filter((event) => event.kind === "booking" && event.teamId === clubId).length;
+  const yellows = events.filter(
+    (event) => (event.kind === "booking" || event.kind === "red") && event.teamId === clubId,
+  ).length;
   const already = new Set(events.filter((event) => event.kind === "coach").map((event) => event.text));
 
   const tips: string[] = [];
@@ -106,7 +108,9 @@ export function buildCoachReport(input: CoachInput): string[] {
 
   if (ourTactics.aggression >= 72) {
     const yellows = input.events.filter(
-      (event) => event.kind === "booking" && event.teamId === (focused ? input.clubId : input.homeId),
+      (event) =>
+        (event.kind === "booking" || event.kind === "red") &&
+        event.teamId === (focused ? input.clubId : input.homeId),
     ).length;
     if (yellows >= 2) {
       notes.push(`Aggression was ${aggressionLabel(ourTactics.aggression).toLowerCase()} and it showed — ${yellows} yellow cards. Tone it down or the referee will empty the bench.`);
