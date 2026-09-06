@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { seedChampionship } from "./data/championship";
+import { ageResponse, GRADE_LABEL, profileFor } from "./data/playerProfiles";
 import { buildCoachReport } from "./lib/coach";
 import { migrateSave } from "./lib/gameStorage";
 import { seasonStatsFor } from "./lib/matchStats";
@@ -15,7 +16,7 @@ import {
   tackleChance,
   yellowOnFoulChance,
 } from "./lib/matchEngine";
-import { clubTactics, DEFAULT_TACTICS, defaultSheet, ratePlayer, ratedSquad, sideStrength } from "./lib/players";
+import { clubTactics, DEFAULT_TACTICS, defaultSheet, playerAge, ratePlayer, ratedSquad, sideStrength } from "./lib/players";
 import { nextBatch } from "./lib/schedule";
 import { matchPlayed } from "./lib/scoring";
 import { ATTRIBUTE_KEYS } from "./lib/attributes";
@@ -73,6 +74,66 @@ describe("player ratings", () => {
     });
     expect(outlier).toBeTruthy();
     expect(panel.some((player) => player.ratings.overall <= 9)).toBe(true);
+  });
+
+  it("grades current Clare seniors above former county and underage players", () => {
+    const kelly = ratedSquad("ballyea").find((player) => player.name === "Tony Kelly");
+    const duggan = ratedSquad("clooney-quin").find((player) => player.name === "Peter Duggan");
+    const morey = ratedSquad("sixmilebridge").find((player) => player.name === "Seadna Morey");
+    const costelloe = ratedSquad("ballyea").find((player) => player.name === "Daniel Costelloe");
+    const coote = ratedSquad("ballyea").find((player) => player.name === "Barry Coote");
+    expect(kelly?.grade).toBe("A");
+    expect(kelly?.age).toBe(32);
+    expect(kelly?.ratings.overall).toBeGreaterThanOrEqual(19);
+    expect(duggan?.grade).toBe("A");
+    expect(duggan?.ratings.overall).toBeGreaterThanOrEqual(17);
+    expect(morey?.grade).toBe("B");
+    expect(morey?.ratings.overall).toBeGreaterThanOrEqual(12);
+    expect(morey?.ratings.overall).toBeLessThanOrEqual(16);
+    expect(costelloe?.grade).toBe("C");
+    expect(costelloe?.ratings.overall).toBeGreaterThanOrEqual(10);
+    expect(costelloe?.ratings.overall).toBeLessThanOrEqual(15);
+    expect(coote?.grade).toBe("D");
+    expect(coote?.ratings.overall).toBeLessThanOrEqual(12);
+    expect(GRADE_LABEL.A).toMatch(/Clare senior/);
+  });
+
+  it("keeps grade bands across the championship panels", () => {
+    const panel = seedChampionship.teams.flatMap((team) => ratedSquad(team.id));
+    const band: Record<string, [number, number]> = { A: [15, 20], B: [12, 16], C: [10, 15], D: [5, 12] };
+    for (const player of panel) {
+      const [min, max] = band[player.grade] ?? [1, 20];
+      expect(player.ratings.overall).toBeGreaterThanOrEqual(min);
+      expect(player.ratings.overall).toBeLessThanOrEqual(max);
+      expect(player.age).toBeGreaterThanOrEqual(18);
+      expect(player.age).toBeLessThanOrEqual(40);
+    }
+    expect(panel.some((player) => player.grade === "A")).toBe(true);
+    expect(panel.some((player) => player.grade === "D" && player.ratings.overall <= 9)).toBe(true);
+  });
+
+  it("treats younger players as quicker to recover", () => {
+    expect(ageResponse(20).recover).toBeGreaterThan(ageResponse(33).recover);
+    expect(ageResponse(20).fatigue).toBeLessThan(ageResponse(37).fatigue);
+    expect(ageResponse(20).train).toBeGreaterThan(ageResponse(37).train);
+    expect(playerAge("sixmilebridge", "Mark Sheedy")).toBeLessThan(playerAge("clonlara", "John Conlon"));
+    expect(profileFor("clooney-quin", "Peter Duggan").grade).toBe("A");
+  });
+});
+
+describe("club colours", () => {
+  it("gives Clooney-Quin red and green and the rest their traditional colours", () => {
+    const byId = Object.fromEntries(seedChampionship.teams.map((team) => [team.id, team]));
+    expect(byId["clooney-quin"]?.colours.label.toLowerCase()).toContain("red");
+    expect(byId["clooney-quin"]?.colours.label.toLowerCase()).toContain("green");
+    expect(byId["clooney-quin"]?.colours.primary).toBe("#c41e3a");
+    expect(byId["clooney-quin"]?.colours.secondary).toBe("#2f9d4a");
+    expect(byId.ballyea?.colours.label).toMatch(/black/i);
+    expect(byId["eire-og"]?.colours.label).toMatch(/red/i);
+    expect(byId.clonlara?.colours.label).toMatch(/gold/i);
+    expect(byId.cratloe?.colours.label).toMatch(/blue/i);
+    expect(byId.sixmilebridge?.colours.label).toMatch(/saffron/i);
+    expect(byId["st-josephs"]?.colours.label).toMatch(/maroon/i);
   });
 });
 
@@ -156,7 +217,7 @@ describe("match engine", () => {
     const sweeper: Tactics = { ...DEFAULT_TACTICS, shape: "sweeper", mentality: "contain" };
     let traditionalGoals = 0;
     let sweeperGoals = 0;
-    for (let seed = 1; seed <= 24; seed += 1) {
+    for (let seed = 1; seed <= 48; seed += 1) {
       traditionalGoals += simulateMatch({
         matchId: "g1-r1-a",
         homeId: "ballyea",
@@ -416,6 +477,24 @@ describe("training", () => {
     expect(recovered.fatigue).toBeLessThan(heavy.fatigue);
     expect(matchStat(player.ratings.speed, recovered, "speed")).toBe(player.ratings.speed + 4);
     expect(matchRatings(player, recovered).overall).toBeGreaterThanOrEqual(player.ratings.overall);
+  });
+
+  it("lets a young player shake off a session faster than a veteran", () => {
+    const sheedy = ratedSquad("sixmilebridge").find((player) => player.name === "Mark Sheedy");
+    const conlon = ratedSquad("clonlara").find((player) => player.name === "John Conlon");
+    expect(sheedy && conlon).toBeTruthy();
+    const start = {
+      [sheedy!.name]: defaultCondition(),
+      [conlon!.name]: defaultCondition(),
+    };
+    const after = applyTraining([sheedy!, conlon!], start, "fitness").condition;
+    expect(after[sheedy!.name]?.fatigue ?? 0).toBeLessThan(after[conlon!.name]?.fatigue ?? 0);
+    const tired = {
+      [sheedy!.name]: { fatigue: 60, sharpness: 40 },
+      [conlon!.name]: { fatigue: 60, sharpness: 40 },
+    };
+    const recovered = applyTraining([sheedy!, conlon!], tired, "recovery").condition;
+    expect(recovered[sheedy!.name]?.fatigue ?? 0).toBeLessThan(recovered[conlon!.name]?.fatigue ?? 0);
   });
 });
 

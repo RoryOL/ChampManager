@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { GameSave, PlayerCondition, PlayerMatchStats, RatedPlayer, Team } from "../types";
+import { GRADE_LABEL } from "../data/playerProfiles";
 import { ClubBadge } from "../components/ClubBadge";
 import { ATTRIBUTE_GROUPS, ATTRIBUTE_KEYS, ATTRIBUTE_LABELS, LINE_LABELS, POSITION_LINES, type AttributeKey } from "../lib/attributes";
 import { compactName } from "../lib/display";
@@ -65,7 +66,7 @@ function PlayerDetail({
         <div>
           <h3>{player.name}</h3>
           <p>
-            {LINE_LABELS[player.position]} · {match.overall}
+            {LINE_LABELS[player.position]} · {player.age} · {GRADE_LABEL[player.grade]} · {match.overall}
             {overallDelta !== 0 ? ` (${formatDelta(overallDelta)} from training)` : ""}
             {showCondition && condition ? ` · fitness ${fitnessOf(condition)}` : ""}
           </p>
@@ -108,8 +109,8 @@ function PlayerDetail({
             <p className="warn">Overtrained — match fitness is too low, so profile stats are down until you recover.</p>
           ) : (
             <p className="hint hint--tight">
-              Training can lift these numbers a little (up to +4). The bars are the current profile; green is the change
-              from their natural rating.
+              Training can lift these numbers a little (up to +4). Younger players take the work better and get match
+              fitness back quicker; veterans feel the legs longer. Green is the change from their natural rating.
             </p>
           )}
         </div>
@@ -188,12 +189,14 @@ export function SquadScreen({ save, teams, viewTeamId, onViewTeam, picked, onTap
     return { value: match.overall, delta: match.overall - player.ratings.overall };
   };
 
+  const viewed = teams.find((team) => team.id === viewTeamId);
+
   return (
     <div className="screen">
       <p className="hint">
         {ownTeam
-          ? "Pitch numbers are current profile stats. Train, then tap a name — those bars move a little. Tap a second name to swap."
-          : "Scouting view — inspect any championship panel. Swap is only for your own club."}
+          ? "Pitch numbers are current profile stats. Train, then tap a name — those bars move a little. Younger players react better to training. Tap a second name to swap."
+          : "Scouting view — inspect any championship panel. Grades come from Clare senior and underage history. Swap is only for your own club."}
       </p>
       <div className="club-strip">
         {teams.map((team) => (
@@ -203,11 +206,27 @@ export function SquadScreen({ save, teams, viewTeamId, onViewTeam, picked, onTap
             className={viewTeamId === team.id ? "is-active" : ""}
             onClick={() => onViewTeam(team.id)}
           >
-            <ClubBadge team={team} size="sm" />
+            <ClubBadge team={team} size="sm" variant="crest" />
             {compactName(team)}
           </button>
         ))}
       </div>
+      {viewed ? (
+        <section className="club-banner club-banner--overview">
+          <span
+            className="colour-sash"
+            style={{
+              background: `linear-gradient(180deg, ${viewed.colours.primary} 50%, ${viewed.colours.secondary} 50%)`,
+            }}
+          />
+          <ClubBadge team={viewed} size="lg" variant="crest" />
+          <div>
+            <p>{ownTeam ? "Your club" : "Scouting"}</p>
+            <h1>{compactName(viewed)}</h1>
+            <span className="colour-label">{viewed.colours.label}</span>
+          </div>
+        </section>
+      ) : null}
       <div className="mini-pitch">
         {FORMATION_ROWS.map((row) => (
           <div key={row.label} className="mini-row">
@@ -249,7 +268,8 @@ export function SquadScreen({ save, teams, viewTeamId, onViewTeam, picked, onTap
                 <span>
                   <strong>{player.name}</strong>
                   <em>
-                    {player.position} · {sheet.starters.includes(player.name) ? "XV" : "Bench"}
+                    {player.position} · {player.age} · {GRADE_LABEL[player.grade]}
+                    {sheet.starters.includes(player.name) ? " · XV" : " · Bench"}
                     {roleTags(player, roles, sheet.starters.includes(player.name)).map((tag) => ` · ${tag}`)}
                     {ownTeam && isOvertrained(conditionFor(player.name, save.condition)) ? " · Tired" : ""}
                     {ownTeam && boostTotal(conditionFor(player.name, save.condition)) > 0 ? " · In form" : ""}

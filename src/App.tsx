@@ -4,6 +4,7 @@ import { useGame } from "./hooks/useGame";
 import { BottomNav } from "./components/BottomNav";
 import { teamById } from "./lib/resolve";
 import { compactName } from "./lib/display";
+import { ClubBadge } from "./components/ClubBadge";
 import { ClubSelectScreen } from "./screens/ClubSelectScreen";
 import { HomeScreen } from "./screens/HomeScreen";
 import { SquadScreen } from "./screens/SquadScreen";
@@ -55,6 +56,7 @@ export default function App() {
       {game.save && !game.live && (
         <>
           <header className="app-bar">
+            <ClubBadge team={club} size="sm" variant="crest" />
             <div>
               <p>Clare SHC 2026</p>
               <h1>{club ? compactName(club) : "ChampManager"}</h1>

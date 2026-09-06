@@ -24,9 +24,11 @@ export type Team = {
   name: string;
   irishName: string;
   nickname?: string;
-  colours: { primary: string; secondary: string };
+  colours: { primary: string; secondary: string; label: string };
   note?: string;
 };
+
+export type PlayerGrade = "A" | "B" | "C" | "D";
 
 export type Group = {
   id: GroupId;
@@ -146,6 +148,8 @@ export type PlayerRatings = {
 export type RatedPlayer = SquadPlayer & {
   position: PositionLine;
   ratings: PlayerRatings;
+  age: number;
+  grade: PlayerGrade;
 };
 
 export type AttributeBoosts = Partial<

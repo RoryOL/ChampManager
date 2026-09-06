@@ -1,5 +1,6 @@
 import type {
   PlayerCondition,
+  PlayerGrade,
   PlayerRatings,
   PositionFamiliarity,
   PositionLine,
@@ -7,6 +8,7 @@ import type {
   Tactics,
   TeamSheet,
 } from "../types";
+import { profileFor } from "../data/playerProfiles";
 import {
   ADJACENT_LINES,
   POSITION_LINES,
@@ -16,41 +18,6 @@ import {
 } from "./attributes";
 import { latestLineup, squadFor } from "./squads";
 import { conditionFor, matchStat } from "./training";
-
-const STAR_FLOOR: Record<string, number> = {
-  "Tony Kelly": 19,
-  "Shane O'Donnell": 18,
-  "Peter Duggan": 17,
-  "John Conlon": 17,
-  "Mark Rodgers": 17,
-  "Aidan McCarthy": 16,
-  "Danny Russell": 16,
-  "David Fitzgerald": 16,
-  "Shane McGrath": 16,
-  "Rian Considine": 16,
-  "Diarmuid Ryan": 16,
-  "Jamie Shanahan": 16,
-  "Conor McGrath": 15,
-  "Podge Collins": 15,
-  "Aaron Cunningham": 15,
-  "Conor Cleary": 15,
-  "Micheál O'Loughlin": 15,
-  "Ian Galvin": 15,
-  "David Reidy": 15,
-  "Seadna Morey": 15,
-  "Aron Shanagher": 14,
-  "Adam Hogan": 14,
-  "Eibhear Quilligan": 14,
-  "Marco Cleary": 14,
-  "Luca Cleary": 14,
-  "Cathal Malone": 14,
-  "Paul Rodgers": 14,
-  "Tom O'Rourke": 14,
-  "Sean O'Loughlin": 14,
-  "Daire Keane": 13,
-  "Pearse Lillis": 13,
-  "Niall Deasy": 13,
-};
 
 const STAR_BIAS: Record<string, Partial<Record<AttributeKey, number>>> = {
   "Tony Kelly": {
@@ -230,10 +197,12 @@ function familiarityFor(seed: number, natural: PositionLine, floor: number): Pos
 export function ratePlayer(teamId: string, name: string, index: number): PlayerRatings {
   const seed = hash(`${teamId}:${name.toLowerCase()}`);
   const position = positionForIndex(index);
-  const floor = STAR_FLOOR[name] ?? 0;
   const panel = index >= 15;
-  const base = floor > 0 ? Math.max(floor - 3, stat(seed, 11, 15)) : panel ? stat(seed, 6, 11) : stat(seed, 11, 14);
-  const spread = floor >= 16 ? 4 : panel ? 7 : 3;
+  const profile = profileFor(teamId, name, panel);
+  const target = stat(seed, profile.overallMin, profile.overallMax);
+  const floor = profile.grade === "A" ? profile.overallMin : 0;
+  const base = target;
+  const spread = profile.grade === "D" ? 6 : profile.grade === "A" ? 3 : 4;
   const keys: AttributeKey[] = [
     "speed",
     "aerialReach",
@@ -260,11 +229,21 @@ export function ratePlayer(teamId: string, name: string, index: number): PlayerR
     ratings[key] = rollStat(seed, 3 + i * 2, base, position, key, floor, spread);
   });
   const spikeKey = keys[stat(seed >> 21, 0, keys.length - 1)] ?? "speed";
-  const spike = floor > 0 ? stat(seed >> 23, 1, 3) : panel ? stat(seed >> 23, 5, 10) : stat(seed >> 23, 3, 7);
+  const spike =
+    profile.grade === "A" ? stat(seed >> 23, 1, 3) : profile.grade === "D" ? stat(seed >> 23, 4, 9) : stat(seed >> 23, 2, 5);
   ratings[spikeKey] = clampStat(ratings[spikeKey] + spike);
   const dumpKey = keys[stat(seed >> 25, 0, keys.length - 1)] ?? "puckoutReach";
-  if (dumpKey !== spikeKey && panel) {
+  if (dumpKey !== spikeKey && profile.grade === "D") {
     ratings[dumpKey] = clampStat(ratings[dumpKey] - stat(seed >> 27, 2, 6));
+  }
+  const familiarity = familiarityFor(seed, position, floor);
+  let overall = computeOverall(ratings, familiarity, position);
+  if (overall < profile.overallMin || overall > profile.overallMax) {
+    const delta = target - overall;
+    for (const key of keys) {
+      ratings[key] = clampStat(ratings[key] + delta);
+    }
+    overall = computeOverall(ratings, familiarity, position);
   }
   const bias = STAR_BIAS[name];
   if (bias) {
@@ -272,13 +251,20 @@ export function ratePlayer(teamId: string, name: string, index: number): PlayerR
       ratings[key] = clampStat(Math.max(ratings[key], value));
     }
   }
-  const familiarity = familiarityFor(seed, position, floor);
-  const overall = computeOverall(ratings, familiarity, position);
+  overall = Math.max(profile.overallMin, Math.min(profile.overallMax, computeOverall(ratings, familiarity, position)));
   return {
     ...ratings,
     familiarity,
     overall,
   };
+}
+
+export function playerGrade(teamId: string, name: string, index = 0): PlayerGrade {
+  return profileFor(teamId, name, index >= 15).grade;
+}
+
+export function playerAge(teamId: string, name: string, index = 0): number {
+  return profileFor(teamId, name, index >= 15).age;
 }
 
 export function computeOverall(
@@ -315,10 +301,13 @@ export function ratedSquad(teamId: string): RatedPlayer[] {
   const squad = squadFor(teamId);
   return squad.map((player) => {
     const index = Math.max(0, order.indexOf(player.name));
+    const profile = profileFor(teamId, player.name, index >= 15);
     return {
       ...player,
       position: positionForIndex(index),
       ratings: ratePlayer(teamId, player.name, index),
+      age: profile.age,
+      grade: profile.grade,
     };
   });
 }

@@ -1,4 +1,5 @@
 import type { AttributeBoosts, PlayerCondition, PositionLine, RatedPlayer, Tactics, TrainingFocus } from "../types";
+import { ageResponse } from "../data/playerProfiles";
 import { ATTRIBUTE_KEYS, ATTRIBUTE_LABELS, clampDial, type AttributeKey } from "./attributes";
 import { moodAdjust } from "./mood";
 import { clampStat, computeOverall, ratedSquad } from "./players";
@@ -32,7 +33,7 @@ export const TRAINING_OPTIONS: {
   {
     value: "fitness",
     title: "Fitness",
-    copy: "Slight lift to speed, acceleration and stamina on the player profile (up to +4). Match fitness drops fast.",
+    copy: "Slight lift to speed, acceleration and stamina on the player profile (up to +4). Younger legs take it better; older panels feel it more.",
   },
   {
     value: "skills",
@@ -52,7 +53,7 @@ export const TRAINING_OPTIONS: {
   {
     value: "recovery",
     title: "Recovery",
-    copy: "Cuts fatigue so trained profile stats show through. Match fitness recovers.",
+    copy: "Cuts fatigue so trained profile stats show through. Younger players bounce back quicker.",
   },
 ];
 
@@ -176,30 +177,31 @@ export function applyTraining(
   for (const player of squad) {
     const current = cloneCondition(next[player.name] ?? defaultCondition());
     const alreadyHeavy = fitnessOf(current) <= 50;
+    const response = ageResponse(player.age);
     let fatigue = current.fatigue;
     let sharpness = current.sharpness;
     let boosts = current.boosts;
 
     switch (focus) {
       case "fitness":
-        fatigue += alreadyHeavy ? 22 : 15;
-        sharpness += alreadyHeavy ? -3 : 7;
+        fatigue += (alreadyHeavy ? 22 : 15) * response.fatigue;
+        sharpness += (alreadyHeavy ? -3 : 7) * response.train;
         break;
       case "skills":
-        fatigue += alreadyHeavy ? 16 : 10;
-        sharpness += alreadyHeavy ? 1 : 6;
+        fatigue += (alreadyHeavy ? 16 : 10) * response.fatigue;
+        sharpness += (alreadyHeavy ? 1 : 6) * response.train;
         break;
       case "setpieces":
-        fatigue += alreadyHeavy ? 12 : 8;
-        sharpness += alreadyHeavy ? 1 : 5;
+        fatigue += (alreadyHeavy ? 12 : 8) * response.fatigue;
+        sharpness += (alreadyHeavy ? 1 : 5) * response.train;
         break;
       case "challenge":
-        fatigue += alreadyHeavy ? 26 : 18;
-        sharpness += alreadyHeavy ? -2 : 9;
+        fatigue += (alreadyHeavy ? 26 : 18) * response.fatigue;
+        sharpness += (alreadyHeavy ? -2 : 9) * response.train;
         break;
       case "recovery":
-        fatigue -= 24;
-        sharpness += 1;
+        fatigue -= 24 * response.recover;
+        sharpness += 1 * response.train;
         break;
       default:
         break;
@@ -235,6 +237,7 @@ export function matchFatigueDelta(
   tactics: Tactics | undefined,
   position: PositionLine,
   started: boolean,
+  age = 27,
 ): number {
   if (minutes <= 0) return 0;
   const share = Math.min(1, minutes / 62);
@@ -254,6 +257,7 @@ export function matchFatigueDelta(
   if (plan.shape === "sweeper" && (position === "HF" || position === "FF")) {
     gain += 9 * share;
   }
+  gain *= ageResponse(age).fatigue;
   return Math.round(gain);
 }
 
@@ -269,9 +273,11 @@ export function applyMatchFatigue(
   const bump = (name: string, started: boolean) => {
     const current = cloneCondition(next[name] ?? defaultCondition());
     const position = byName.get(name)?.position ?? "MF";
-    const add = matchFatigueDelta(62, tactics, position, started);
+    const age = byName.get(name)?.age ?? 27;
+    const add = matchFatigueDelta(62, tactics, position, started, age);
+    const recover = 4 * ageResponse(age).recover;
     next[name] = {
-      fatigue: clampCondition(current.fatigue + add - 4),
+      fatigue: clampCondition(current.fatigue + add - recover),
       sharpness: clampCondition(current.sharpness + (started ? 3 : 1)),
       boosts: current.boosts,
       mood: current.mood,
