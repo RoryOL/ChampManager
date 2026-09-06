@@ -7,6 +7,7 @@ import {
   puckoutLabel,
   SHAPE_OPTIONS,
 } from "../lib/attributes";
+import { shootingLabel } from "../lib/shooting";
 
 type Props = {
   tactics: Tactics;
@@ -138,6 +139,29 @@ export function TacticControls({ tactics, onChange, compact = false, xv = [] }: 
             onChange={(event) => onChange({ ...tactics, pressure: Number(event.target.value) })}
           />
           <span>Press</span>
+        </label>
+      </section>
+      <section className="card">
+        <h3>Shot certainty</h3>
+        <p className="tactic-copy">
+          Shoot on sight on the left, wait for a certain look on the right. Currently{" "}
+          <strong>{shootingLabel(tactics.shooting ?? 50)}</strong>
+          {(tactics.shooting ?? 50) < 30
+            ? " — more shots from distance, more wides."
+            : (tactics.shooting ?? 50) > 72
+              ? " — fewer shots, but they should be higher percentage."
+              : " — a medium shooter should convert around six in ten from a balanced look."}
+        </p>
+        <label className="dial">
+          <span>Speculative</span>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={tactics.shooting ?? 50}
+            onChange={(event) => onChange({ ...tactics, shooting: Number(event.target.value) })}
+          />
+          <span>Certain</span>
         </label>
       </section>
       <section className="card">

@@ -1,5 +1,7 @@
-import type { MatchEvent, PlayerMatchStats, Tactics, TeamMatchStats } from "../types";
+import type { MatchClimate, MatchEvent, PlayerMatchStats, Tactics, TeamMatchStats } from "../types";
 import { aggressionLabel, buildLabel, pressureLabel, puckoutLabel } from "./attributes";
+import { shootingLabel } from "./shooting";
+import { climateSummary } from "./weather";
 
 type CoachInput = {
   clubId?: string;
@@ -15,6 +17,7 @@ type CoachInput = {
   awayScore: { goals: number; points: number };
   players: PlayerMatchStats[];
   events: MatchEvent[];
+  climate?: MatchClimate;
 };
 
 function total(score: { goals: number; points: number }): number {
@@ -129,8 +132,16 @@ export function buildCoachReport(input: CoachInput): string[] {
     notes.push(`We sat off them. ${they} had too much time on the ball. Turn the pressure up.`);
   }
 
-  if (us.shots >= 6 && rate(us.scores, us.shots) < 0.38) {
-    notes.push(`Shooting was wasteful — ${us.scores} scores from ${us.shots} shots. Work it closer or put the dead-ball specialist on more of them.`);
+  if (input.climate) {
+    notes.push(`Conditions: ${climateSummary(input.climate)}.`);
+  }
+
+  if (us.shots >= 6 && rate(us.scores, us.shots) < 0.48) {
+    notes.push(
+      `Shooting was wasteful — ${us.scores} scores from ${us.shots} shots (${shootingLabel(ourTactics.shooting ?? 50).toLowerCase()}). Work it closer before pulling the trigger.`,
+    );
+  } else if (us.shots >= 8 && rate(us.scores, us.shots) >= 0.7 && (ourTactics.shooting ?? 50) <= 35) {
+    notes.push(`The shoot-on-sight brief paid off: ${us.scores} from ${us.shots}. Keep asking questions from distance while it is dropping.`);
   } else if (us.shots + 3 < them.shots) {
     notes.push(`${they} had the look (${them.shots} shots to ${us.shots}). We need more ball in the scoring zone.`);
   }

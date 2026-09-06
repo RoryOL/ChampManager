@@ -6,6 +6,9 @@ import { compactName, sideLabel } from "../lib/display";
 import { clubTactics, ratedSquad } from "../lib/players";
 import { resolveMatchSides, teamById } from "../lib/resolve";
 import { formatDate, formatScore, matchPlayed, stageLabel } from "../lib/scoring";
+import { shootingLabel } from "../lib/shooting";
+import { climateSummary } from "../lib/weather";
+import { ShotMap } from "../components/ShotMap";
 
 type Props = {
   championship: Championship;
@@ -22,12 +25,13 @@ function TacticSummary({
   puckout,
   aggression,
   pressure,
+  shooting,
   shape,
 }: ReturnType<typeof clubTactics>) {
   return (
     <p>
       {mentality} · {buildLabel(build)} · {puckoutLabel(puckout)} · {aggressionLabel(aggression)} ·{" "}
-      {pressureLabel(pressure)} · {shape === "sweeper" ? "sweeper" : "6-2-6"}
+      {pressureLabel(pressure)} · {shootingLabel(shooting ?? 50)} · {shape === "sweeper" ? "sweeper" : "6-2-6"}
     </p>
   );
 }
@@ -77,6 +81,22 @@ export function MatchDetailScreen({ championship, save, match, report, onBack, o
       </section>
       {report ? (
         <>
+          {report.climate ? (
+            <section className="card">
+              <h3>Conditions</h3>
+              <p className="tactic-copy">{climateSummary(report.climate)}</p>
+            </section>
+          ) : null}
+          {report.shots && report.shots.length > 0 ? (
+            <ShotMap
+              shots={report.shots}
+              home={home}
+              away={away}
+              homeId={homeId ?? ""}
+              awayId={awayId ?? ""}
+              climate={report.climate}
+            />
+          ) : null}
           <section className="card">
             <h3>Match stats</h3>
             <MatchStatsPanel

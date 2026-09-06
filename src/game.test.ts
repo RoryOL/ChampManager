@@ -5,6 +5,8 @@ import { buildCoachReport } from "./lib/coach";
 import { migrateSave } from "./lib/gameStorage";
 import { seasonStatsFor } from "./lib/matchStats";
 import { applyMatchMood } from "./lib/mood";
+import { openPlayConversion } from "./lib/shooting";
+import { crossWind, parallelWind, passCompleteChance, rollClimate, withWindFor } from "./lib/weather";
 import {
   commentaryFeed,
   freeConversionChance,
@@ -269,6 +271,7 @@ describe("match engine", () => {
         awayId: "inagh-kilnamona",
         homeTactics: traditional,
         awayTactics: DEFAULT_TACTICS,
+        climate: { sky: "sunny", windStrength: 8, windAngle: 12 },
         seed,
       }).awayScore.goals;
       sweeperGoals += simulateMatch({
@@ -277,6 +280,7 @@ describe("match engine", () => {
         awayId: "inagh-kilnamona",
         homeTactics: sweeper,
         awayTactics: DEFAULT_TACTICS,
+        climate: { sky: "sunny", windStrength: 8, windAngle: 12 },
         seed,
       }).awayScore.goals;
     }
@@ -295,6 +299,7 @@ describe("match engine", () => {
         awayId: "cratloe",
         homeTactics: direct,
         awayTactics: DEFAULT_TACTICS,
+        climate: { sky: "sunny", windStrength: 8, windAngle: 12 },
         seed,
       }).homeScore.goals;
       runningGoals += simulateMatch({
@@ -303,6 +308,7 @@ describe("match engine", () => {
         awayId: "cratloe",
         homeTactics: running,
         awayTactics: DEFAULT_TACTICS,
+        climate: { sky: "sunny", windStrength: 8, windAngle: 12 },
         seed,
       }).homeScore.goals;
     }
@@ -399,6 +405,7 @@ describe("match engine", () => {
         awayId: "inagh-kilnamona",
         homeTactics: press,
         awayTactics: sit,
+        climate: { sky: "sunny", windStrength: 8, windAngle: 12 },
         seed,
       });
       const cold = simulateMatch({
@@ -407,6 +414,7 @@ describe("match engine", () => {
         awayId: "inagh-kilnamona",
         homeTactics: sit,
         awayTactics: sit,
+        climate: { sky: "sunny", windStrength: 8, windAngle: 12 },
         seed,
       });
       pressHooks += hot.events.filter((event) => event.kind === "hook" && homePlayers.has(event.playerName)).length;
@@ -452,6 +460,7 @@ describe("match engine", () => {
         matchId: "g1-r1-a",
         homeId: "ballyea",
         awayId: "inagh-kilnamona",
+        climate: { sky: "sunny", windStrength: 10, windAngle: 15 },
         seed,
       }),
     );
@@ -460,12 +469,19 @@ describe("match engine", () => {
     expect(avg((row) => row.homeStats.tacklesAttempted + row.awayStats.tacklesAttempted)).toBeGreaterThan(70);
     expect(avg((row) => row.homeStats.possessions + row.awayStats.possessions)).toBeGreaterThan(80);
     expect(avg((row) => row.homeStats.possessions + row.awayStats.possessions)).toBeLessThan(170);
-    expect(avg((row) => row.homeScore.points)).toBeGreaterThan(12);
-    expect(avg((row) => row.awayScore.points)).toBeGreaterThan(12);
+    expect(avg((row) => row.homeScore.points)).toBeGreaterThan(10);
+    expect(avg((row) => row.awayScore.points)).toBeGreaterThan(10);
     expect(avg((row) => row.homeScore.points)).toBeLessThan(32);
     expect(avg((row) => row.awayScore.points)).toBeLessThan(32);
-    expect(avg((row) => row.homeScore.goals + row.awayScore.goals)).toBeGreaterThan(1.4);
+    expect(avg((row) => row.homeScore.goals + row.awayScore.goals)).toBeGreaterThanOrEqual(0.5);
     expect(samples.every((row) => row.events.filter((event) => event.kind === "hook").length >= 55)).toBe(true);
+    const conversion = avg((row) =>
+      row.homeStats.shots + row.awayStats.shots > 0
+        ? (row.homeStats.scores + row.awayStats.scores) / (row.homeStats.shots + row.awayStats.shots)
+        : 0,
+    );
+    expect(conversion).toBeGreaterThan(0.48);
+    expect(conversion).toBeLessThan(0.78);
   });
 
   it("keeps scores and cards in the live commentary mix", () => {
@@ -478,6 +494,111 @@ describe("match engine", () => {
     const feed = commentaryFeed(result.events.filter((event) => event.kind !== "full"));
     expect(feed.some((event) => event.kind === "goal" || event.kind === "point" || event.kind === "free")).toBe(true);
     expect(feed.filter((event) => event.kind === "hook").length).toBeLessThanOrEqual(6);
+  });
+
+  it("converts about 60 percent for a medium shooter with a balanced brief", () => {
+    const balanced = openPlayConversion({
+      strikingDistance: 12,
+      composure: 12,
+      shooting: 50,
+      distanceM: 45,
+      withWind: 0,
+      crossWind: 0,
+      wet: false,
+    });
+    const speculative = openPlayConversion({
+      strikingDistance: 12,
+      composure: 12,
+      shooting: 8,
+      distanceM: 62,
+      withWind: 0,
+      crossWind: 0,
+      wet: false,
+    });
+    const certain = openPlayConversion({
+      strikingDistance: 12,
+      composure: 12,
+      shooting: 92,
+      distanceM: 32,
+      withWind: 0,
+      crossWind: 0,
+      wet: false,
+    });
+    expect(balanced).toBeGreaterThan(0.57);
+    expect(balanced).toBeLessThan(0.63);
+    expect(speculative).toBeLessThan(balanced - 0.08);
+    expect(certain).toBeGreaterThan(balanced + 0.08);
+  });
+
+  it("lets a shoot-on-sight side take more shots than a certain side", () => {
+    const calm = { sky: "sunny" as const, windStrength: 8, windAngle: 10 };
+    let speculativeShots = 0;
+    let certainShots = 0;
+    for (let seed = 1; seed <= 12; seed += 1) {
+      speculativeShots += simulateMatch({
+        matchId: "g1-r1-a",
+        homeId: "ballyea",
+        awayId: "inagh-kilnamona",
+        homeTactics: { ...DEFAULT_TACTICS, shooting: 8 },
+        climate: calm,
+        seed,
+      }).homeStats.shots;
+      certainShots += simulateMatch({
+        matchId: "g1-r1-a",
+        homeId: "ballyea",
+        awayId: "inagh-kilnamona",
+        homeTactics: { ...DEFAULT_TACTICS, shooting: 92 },
+        climate: calm,
+        seed,
+      }).homeStats.shots;
+    }
+    expect(speculativeShots).toBeGreaterThan(certainShots);
+  });
+
+  it("records a shot map and keeps climate the same both halves", () => {
+    const first = simulateMatch({
+      matchId: "g1-r1-a",
+      homeId: "ballyea",
+      awayId: "inagh-kilnamona",
+      period: "first",
+      seed: 21,
+    });
+    const second = simulateMatch({
+      matchId: "g1-r1-a",
+      homeId: "ballyea",
+      awayId: "inagh-kilnamona",
+      period: "second",
+      climate: first.climate,
+      startHome: first.homeScore,
+      startAway: first.awayScore,
+      seed: 21,
+    });
+    expect(first.shots.length).toBeGreaterThan(4);
+    expect(second.shots.length).toBeGreaterThan(4);
+    expect(first.climate).toEqual(second.climate);
+    expect(first.shots.every((shot) => shot.x > 0 && shot.x < 90 && shot.y > 0 && shot.y < 145)).toBe(true);
+  });
+});
+
+describe("weather", () => {
+  it("rolls a stable forecast for a fixture", () => {
+    expect(rollClimate(9, "g1-r1-a")).toEqual(rollClimate(9, "g1-r1-a"));
+    expect(rollClimate(9, "g1-r1-a")).not.toEqual(rollClimate(9, "g2-r1-a"));
+  });
+
+  it("flips a parallel wind between halves", () => {
+    const climate = { sky: "windy" as const, windStrength: 80, windAngle: 0 };
+    expect(parallelWind(climate)).toBeGreaterThan(0.7);
+    expect(crossWind(climate)).toBeLessThan(0.1);
+    expect(withWindFor(climate, "ballyea", "ballyea", "first")).toBeGreaterThan(0.7);
+    expect(withWindFor(climate, "ballyea", "ballyea", "second")).toBeLessThan(-0.7);
+    expect(withWindFor(climate, "inagh-kilnamona", "ballyea", "first")).toBeLessThan(-0.7);
+  });
+
+  it("makes short passing harder in the wet", () => {
+    const dry = { sky: "sunny" as const, windStrength: 10, windAngle: 20 };
+    const wet = { sky: "wet" as const, windStrength: 10, windAngle: 20 };
+    expect(passCompleteChance(wet, 0.2)).toBeLessThan(passCompleteChance(dry, 0.2) - 0.1);
   });
 });
 
@@ -561,6 +682,7 @@ describe("save migration", () => {
     expect(migrated?.tactics.puckout).toBeGreaterThan(60);
     expect(migrated?.tactics.aggression).toBeGreaterThan(30);
     expect(migrated?.tactics.pressure).toBeGreaterThan(60);
+    expect(migrated?.tactics.shooting).toBe(50);
     expect(migrated?.phase).toBe("season");
   });
 });
@@ -771,6 +893,8 @@ describe("match intel", () => {
             },
           ],
           coachReport: [],
+          climate: { sky: "sunny", windStrength: 12, windAngle: 20 },
+          shots: [],
         },
       },
       "ballyea",

@@ -1114,3 +1114,65 @@ html.native-app .device {
   color: var(--ink);
 }
 
+.weather-banner {
+  margin: 0 0 8px;
+  color: var(--saffron);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.shot-map {
+  margin: 10px 0 12px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.shot-map h3 {
+  margin: 0 0 4px;
+  font-size: 14px;
+}
+
+.shot-map__pitch {
+  width: 100%;
+  height: auto;
+  display: block;
+  margin-top: 8px;
+  background: #1b4d2e;
+  border-radius: 8px;
+}
+
+.shot-map__grass {
+  fill: #246b38;
+}
+
+.shot-map__line,
+.shot-map__box {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.55);
+  stroke-width: 0.6;
+}
+
+.shot-map__goal {
+  fill: #f4f4f0;
+  stroke: #111;
+  stroke-width: 0.4;
+}
+
+.shot-map__wind {
+  stroke: #e3b01f;
+  stroke-width: 1.2;
+  fill: #e3b01f;
+}
+
+.shot-map__hit,
+.shot-map__miss {
+  stroke-width: 0.9;
+}
+
+.shot-map__legend {
+  margin: 8px 0 0;
+  font-size: 12px;
+}
+

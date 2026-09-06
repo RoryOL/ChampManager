@@ -116,13 +116,14 @@ export function passChain(
   random: () => number,
   hops: number,
   carrier: string,
+  completeChance = 0.72,
 ): { credits: StatCredit[]; carrier: string; retained: boolean } {
   const credits: StatCredit[] = [];
   let onBall = carrier;
   const pool = names.length > 0 ? names : [carrier];
   for (let i = 0; i < hops; i += 1) {
     const target = pool[Math.floor(random() * pool.length)] ?? onBall;
-    const completed = random() < 0.62 + random() * 0.2;
+    const completed = random() < completeChance;
     credits.push({
       name: onBall,
       teamId,
@@ -288,6 +289,8 @@ export function reportFromSim(sim: SimulatedMatch): MatchReport {
     awayStats: sim.awayStats,
     players: sim.players,
     coachReport: sim.coachReport,
+    climate: sim.climate,
+    shots: sim.shots,
   };
 }
 
@@ -361,6 +364,7 @@ export function combineHalves(
     awayScore: second.awayScore,
     players: tallied.players,
     events,
+    climate: first.climate,
   });
   return {
     ...second,
@@ -371,6 +375,8 @@ export function combineHalves(
     awayStats: tallied.awayStats,
     players: tallied.players,
     coachReport,
+    climate: first.climate,
+    shots: [...first.shots, ...second.shots],
   };
 }
 

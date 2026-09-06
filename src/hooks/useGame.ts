@@ -307,6 +307,7 @@ export function useGame() {
         startMomentum: momentumAt(first.events),
         seed: save.seed,
         gameSeed: save.seed,
+        climate: first.climate,
       });
       const combined = combineHalves(first, second, {
         clubId: save.clubId,
