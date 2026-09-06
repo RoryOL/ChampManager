@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { seedChampionship } from "../data/championship";
 import { compactName } from "../lib/display";
 import { momentumAt, simulateMatch } from "../lib/matchEngine";
@@ -30,6 +30,8 @@ import {
   rememberLocalSeat,
   setPlayerName,
 } from "../lib/multiplayer/identity";
+import { mergeCampaigns } from "../lib/multiplayer/merge";
+import { connectRoom, fetchRoom, type RoomStatus } from "../lib/multiplayer/remote";
 import {
   clearCampaign,
   exportCampaign,
@@ -150,6 +152,9 @@ export function useGame() {
   const [live, setLive] = useState<LiveMatch | null>(null);
   const [picked, setPicked] = useState<string | null>(null);
   const [viewTeamId, setViewTeamId] = useState<string | null>(null);
+  const [roomStatus, setRoomStatus] = useState<RoomStatus>("offline");
+  const campaignRef = useRef<Campaign | null>(null);
+  const roomRef = useRef<{ publish: (campaign: Campaign) => void; disconnect: () => void } | null>(null);
 
   const activeSeat = campaign?.seats.find((seat) => seat.playerId === activePlayerId)
     ?? campaign?.seats.find((seat) => isLocalSeat(seat.playerId, player.id));
@@ -174,7 +179,39 @@ export function useGame() {
   const commitCampaign = useCallback((next: Campaign) => {
     persistCampaign(next);
     setCampaign(next);
+    roomRef.current?.publish(next);
   }, []);
+
+  useEffect(() => {
+    campaignRef.current = campaign;
+  }, [campaign]);
+
+  useEffect(() => {
+    if (!campaign?.code) {
+      setRoomStatus("offline");
+      return;
+    }
+    const handle = connectRoom(campaign.code, {
+      onStatus: setRoomStatus,
+      onCampaign: (remote) => {
+        setCampaign((current) => {
+          if (!current || current.code !== remote.code) return current;
+          const merged = mergeCampaigns(current, remote);
+          if (JSON.stringify(merged) === JSON.stringify(current)) return current;
+          persistCampaign(merged);
+          if (JSON.stringify(merged) !== JSON.stringify(remote)) handle.publish(merged);
+          return merged;
+        });
+      },
+    });
+    roomRef.current = handle;
+    const latest = campaignRef.current ?? campaign;
+    if (latest) handle.publish(latest);
+    return () => {
+      handle.disconnect();
+      if (roomRef.current === handle) roomRef.current = null;
+    };
+  }, [campaign?.code]);
 
   useEffect(() => {
     if (!campaign) return;
@@ -182,7 +219,10 @@ export function useGame() {
       setCampaign((current) => {
         if (!current) return current;
         const next = tickCampaign(current, Date.now());
-        if (next.revision !== current.revision) persistCampaign(next);
+        if (next.revision !== current.revision) {
+          persistCampaign(next);
+          roomRef.current?.publish(next);
+        }
         return next;
       });
     }, 12_000);
@@ -239,10 +279,19 @@ export function useGame() {
   );
 
   const joinCampaign = useCallback(
-    (payload: { name: string; clubId: string; code: string; snapshot?: string }) => {
+    async (payload: { name: string; clubId: string; code: string; snapshot?: string }) => {
       const snapshot = payload.snapshot ? parseCampaignInvite(payload.snapshot) : null;
-      const room = snapshot ?? loadRoom(payload.code) ?? (campaign?.code === payload.code ? campaign : null);
-      if (!room) return { ok: false as const, error: "No championship for that invite. Try the snapshot from the host." };
+      const room =
+        snapshot ??
+        loadRoom(payload.code) ??
+        (campaign?.code === payload.code ? campaign : null) ??
+        (await fetchRoom(payload.code));
+      if (!room) {
+        return {
+          ok: false as const,
+          error: "No championship for that invite. Check the code — both phones need a connection — or paste a snapshot.",
+        };
+      }
       const self = setPlayerName(payload.name);
       setPlayer(self);
       const seatId = room.seats.some((seat) => seat.playerId === self.id) ? randomId() : self.id;
@@ -258,13 +307,14 @@ export function useGame() {
     [campaign, commitCampaign],
   );
 
-  const previewJoinTaken = useCallback(
-    (code: string, snapshot?: string) => {
-      const room = (snapshot ? parseCampaignInvite(snapshot) : null) ?? loadRoom(code) ?? campaign;
-      return room?.seats.map((seat) => seat.clubId) ?? [];
-    },
-    [campaign],
-  );
+  const previewJoinTaken = useCallback(async (code: string, snapshot?: string) => {
+    const room =
+      (snapshot ? parseCampaignInvite(snapshot) : null) ??
+      loadRoom(code) ??
+      (campaign?.code === code ? campaign : null) ??
+      (await fetchRoom(code));
+    return room?.seats.map((seat) => seat.clubId) ?? [];
+  }, [campaign]);
 
   const addHotseat = useCallback(
     (name: string, clubId: string) => {
@@ -948,6 +998,7 @@ export function useGame() {
     nextUserMatch,
     playedCount,
     waitingHalf,
+    roomStatus,
     takeCharge,
     hostCampaign,
     joinCampaign,

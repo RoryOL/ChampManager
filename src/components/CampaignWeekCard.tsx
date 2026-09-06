@@ -10,6 +10,7 @@ type Props = {
   playerId: string;
   localSeats: Seat[];
   now?: number;
+  roomStatus?: "offline" | "connecting" | "live";
   onReady: () => void;
   onUnready: () => void;
   onForce: () => void;
@@ -22,6 +23,7 @@ export function CampaignWeekCard({
   playerId,
   localSeats,
   now = Date.now(),
+  roomStatus = "offline",
   onReady,
   onUnready,
   onForce,
@@ -41,7 +43,14 @@ export function CampaignWeekCard({
     <section className="card">
       <p className="kicker">Together · {campaign.code}</p>
       <h3>Championship week</h3>
-      <p className="hint">{formatDeadline(campaign.week.deadlineAt, now)}</p>
+      <p className="hint">
+        {roomStatus === "live"
+          ? "Live with other phones. "
+          : roomStatus === "connecting"
+            ? "Reaching the other phones… "
+            : ""}
+        {formatDeadline(campaign.week.deadlineAt, now)}
+      </p>
       {waitingWeek.length > 0 ? (
         <p>
           Waiting on {waitingWeek.map((seat) => `${seat.name} (${teamLabel(seat.clubId)})`).join(", ")}.
