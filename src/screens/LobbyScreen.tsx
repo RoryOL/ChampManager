@@ -10,6 +10,7 @@ type Props = {
   campaign: Campaign;
   playerId: string;
   localSeats: Seat[];
+  roomStatus?: "offline" | "connecting" | "live";
   onStart: () => { ok: true } | { ok: false; error: string };
   onLeave: () => void;
   onWaitHours: (hours: WaitHours) => void;
@@ -27,6 +28,7 @@ export function LobbyScreen({
   onAddManager,
   onCopyCode,
   onCopySnapshot,
+  roomStatus = "offline",
 }: Props) {
   const host = campaign.hostPlayerId === playerId;
   const [name, setName] = useState("");
@@ -49,6 +51,11 @@ export function LobbyScreen({
         <p className="kicker">Room</p>
         <h2 className="invite-code">{campaign.code}</h2>
         <p className="hint">
+          {roomStatus === "live"
+            ? "Live room is up. Friends can join from another phone with this code."
+            : roomStatus === "connecting"
+              ? "Opening the live room so other phones can find this code…"
+              : "Local lobby. Other phones need a connection, or paste a snapshot."}{" "}
           Wait window: {waitLabel(campaign.waitHours)}. Missing managers are filled in when it closes. Human v human
           ties wait for both second-half plans before full-time.
         </p>

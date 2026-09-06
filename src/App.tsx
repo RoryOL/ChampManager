@@ -64,6 +64,7 @@ export default function App() {
           onAddManager={game.addHotseat}
           onCopyCode={() => void game.copyCode()}
           onCopySnapshot={() => void game.copySnapshot()}
+          roomStatus={game.roomStatus}
         />
       )}
 
@@ -101,6 +102,7 @@ export default function App() {
               campaign={game.campaign}
               playerId={game.activeSeat?.playerId ?? game.player.id}
               localSeats={game.localSeats}
+              roomStatus={game.roomStatus}
               onGoToMatch={game.goToMatch}
               onSkip={game.skipMatch}
               onResign={game.resign}

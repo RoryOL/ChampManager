@@ -24,8 +24,8 @@ export type JoinPayload = {
 type Props = {
   onTakeCharge: (clubId: string) => void;
   onHost: (payload: HostPayload) => void;
-  onJoin: (payload: JoinPayload) => { ok: true } | { ok: false; error: string };
-  onPreviewTaken?: (code: string, snapshot?: string) => string[];
+  onJoin: (payload: JoinPayload) => Promise<{ ok: true } | { ok: false; error: string }> | { ok: true } | { ok: false; error: string };
+  onPreviewTaken?: (code: string, snapshot?: string) => Promise<string[]> | string[];
 };
 
 type Mode = "solo" | "host" | "join";
@@ -75,13 +75,27 @@ export function ClubSelectScreen({ onTakeCharge, onHost, onJoin, onPreviewTaken 
   const [waitHours, setWaitHours] = useState<WaitHours>(24);
   const [error, setError] = useState<string | null>(null);
   const [taken, setTaken] = useState<string[]>([]);
+  const [looking, setLooking] = useState(false);
 
   useEffect(() => {
     if (mode !== "join") {
       setTaken([]);
+      setLooking(false);
       return;
     }
-    setTaken(onPreviewTaken?.(normaliseCode(code), snapshot) ?? []);
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      setLooking(true);
+      void Promise.resolve(onPreviewTaken?.(normaliseCode(code), snapshot) ?? []).then((clubs) => {
+        if (cancelled) return;
+        setTaken(clubs);
+        setLooking(false);
+      });
+    }, 400);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
   }, [code, mode, onPreviewTaken, snapshot]);
 
   const hostReady = name.trim().length > 0;
@@ -151,8 +165,10 @@ export function ClubSelectScreen({ onTakeCharge, onHost, onJoin, onPreviewTaken 
           {error ? <p className="hint hint--warn">{error}</p> : null}
           <p className="hint">
             {mode === "host"
-              ? "Then pick your club. Friends can join on this phone or with the invite code. Championship weeks wait until every manager has acted, or until your window closes."
-              : "Enter the host's code (same phone) or paste a snapshot from another device, then pick a free club."}
+              ? "Then pick your club. Friends can join on this phone or on theirs with the invite code. Championship weeks wait until every manager has acted, or until your window closes."
+              : looking
+                ? "Looking up that room…"
+                : "Enter the host's invite code. It works on another phone if both have a connection. You can still paste a snapshot if the live room is quiet."}
           </p>
         </section>
       )}
@@ -176,12 +192,13 @@ export function ClubSelectScreen({ onTakeCharge, onHost, onJoin, onPreviewTaken 
         <ClubList
           taken={taken}
           action="Join"
-          onPick={(clubId) => {
+          onPick={async (clubId) => {
             if (!joinReady) {
               setError("Name and an invite code or snapshot are required.");
               return;
             }
-            const result = onJoin({ name, clubId, code: normaliseCode(code), snapshot });
+            setError(null);
+            const result = await onJoin({ name, clubId, code: normaliseCode(code), snapshot });
             if (!result.ok) setError(result.error);
           }}
         />

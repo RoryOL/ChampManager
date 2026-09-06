@@ -18,6 +18,7 @@ type Props = {
   campaign?: Campaign | null;
   playerId?: string;
   localSeats?: Seat[];
+  roomStatus?: "offline" | "connecting" | "live";
   onGoToMatch: () => void;
   onSkip: () => void;
   onResign: () => void;
@@ -82,6 +83,7 @@ export function HomeScreen({
   campaign,
   playerId,
   localSeats = [],
+  roomStatus,
   onGoToMatch,
   onSkip,
   onResign,
@@ -223,6 +225,7 @@ export function HomeScreen({
           clubId={save.clubId}
           playerId={playerId}
           localSeats={localSeats}
+          roomStatus={roomStatus}
           onReady={onReady}
           onUnready={onUnready}
           onForce={onForce}
