@@ -30,6 +30,9 @@ type Props = {
   onClose: () => void;
   onContinueSecond: (tactics: Tactics, sheet: TeamSheet) => void;
   onSkipRest: (tactics: Tactics, sheet: TeamSheet) => void;
+  waitingOn?: { name: string; clubId: string }[];
+  onPassDevice?: (playerId: string) => void;
+  passSeats?: { playerId: string; name: string }[];
 };
 
 export function MatchScreen({
@@ -41,6 +44,9 @@ export function MatchScreen({
   onClose,
   onContinueSecond,
   onSkipRest,
+  waitingOn = [],
+  onPassDevice,
+  passSeats = [],
 }: Props) {
   const { homeId, awayId } = resolveMatchSides(championship, live.match);
   const home = homeId ? teamById(championship, homeId) : undefined;
@@ -179,7 +185,7 @@ export function MatchScreen({
       <p className="live-strip">
         Poss {chart.homeStats.possessions}-{chart.awayStats.possessions} · Shots {chart.homeStats.scores}/{chart.homeStats.shots}-{chart.awayStats.scores}/{chart.awayStats.shots} · Puck-outs {chart.homeStats.puckoutsWon}-{chart.awayStats.puckoutsWon} · Tackles {chart.homeStats.tacklesWon}-{chart.awayStats.tacklesWon}
       </p>
-      {live.phase !== "half-time" ? (
+      {live.phase !== "half-time" && live.phase !== "half-wait" ? (
         <div className="speed-row pane-row">
           <button type="button" className={pane === "call" ? "is-active" : ""} onClick={() => setPane("call")}>
             Commentary
@@ -189,7 +195,26 @@ export function MatchScreen({
           </button>
         </div>
       ) : null}
-      {live.phase === "half-time" ? (
+      {live.phase === "half-wait" ? (
+        <div className="ht-panel">
+          <h3>Waiting on second-half tactics</h3>
+          <p className="hint">
+            Your half-time changes are in. The second half starts when{" "}
+            {waitingOn.map((seat) => seat.name).join(" and ") || "the other manager"} confirms theirs.
+          </p>
+          {passSeats.length > 0 && onPassDevice ? (
+            <div className="row-actions">
+              {passSeats.map((seat) => (
+                <button key={seat.playerId} type="button" className="btn" onClick={() => onPassDevice(seat.playerId)}>
+                  Pass to {seat.name}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="tactic-copy">Keep the app open or come back after the wait window.</p>
+          )}
+        </div>
+      ) : live.phase === "half-time" ? (
         <div className="ht-panel">
           <h3>Half-time</h3>
           <p className="hint">Ratings and live stats for both panels. Change dials or takers, tap two names to sub, then send them out.</p>
@@ -271,6 +296,10 @@ export function MatchScreen({
         {live.phase === "finished" ? (
           <button type="button" className="btn" onClick={onClose}>
             Continue
+          </button>
+        ) : live.phase === "half-wait" ? (
+          <button type="button" className="btn btn--ghost" onClick={onClose}>
+            Back to the week
           </button>
         ) : live.phase === "half-time" ? (
           <>

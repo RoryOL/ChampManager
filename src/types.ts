@@ -345,4 +345,59 @@ export type GameSave = {
   reports: Record<string, MatchReport>;
 };
 
-export type LivePhase = "first" | "half-time" | "second" | "finished";
+export type LivePhase = "first" | "half-time" | "half-wait" | "second" | "finished";
+
+export type WaitHours = 0 | 1 | 6 | 12 | 24 | 72 | 168;
+
+export type Seat = {
+  playerId: string;
+  name: string;
+  clubId: string;
+};
+
+export type ClubRuntime = {
+  tactics: Tactics;
+  sheet: TeamSheet;
+  condition: Record<string, PlayerCondition>;
+  inbox: NewsItem[];
+  trainingDue: boolean;
+};
+
+export type HalfPlan = {
+  tactics: Tactics;
+  sheet: TeamSheet;
+  submittedAt: number;
+};
+
+export type MatchLive = {
+  matchId: string;
+  first: SimulatedMatch;
+  homeSecond?: HalfPlan;
+  awaySecond?: HalfPlan;
+  combined?: SimulatedMatch;
+};
+
+export type WeekState = {
+  locked: boolean;
+  deadlineAt: number | null;
+  ready: Record<string, { at: number }>;
+  lives: Record<string, MatchLive>;
+};
+
+export type Campaign = {
+  version: 1;
+  id: string;
+  code: string;
+  revision: number;
+  seed: number;
+  hostPlayerId: string;
+  waitHours: WaitHours;
+  createdAt: number;
+  seats: Seat[];
+  phase: "lobby" | "preseason" | "season";
+  preseasonWeek: number;
+  matches: { id: string; homeScore: Score | null; awayScore: Score | null }[];
+  reports: Record<string, MatchReport>;
+  clubs: Record<string, ClubRuntime>;
+  week: WeekState;
+};

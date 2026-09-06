@@ -230,6 +230,11 @@ html.native-app .device {
   font-size: 12px;
 }
 
+.club-pick button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .club-badge {
   display: inline-block;
   border-radius: 50%;
@@ -1174,5 +1179,62 @@ html.native-app .device {
 .shot-map__legend {
   margin: 8px 0 0;
   font-size: 12px;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0;
+}
+
+.field span {
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.field input,
+.field select,
+.field textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  background: #0e1624;
+  color: var(--ink);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font: inherit;
+}
+
+.field textarea {
+  resize: vertical;
+  min-height: 72px;
+}
+
+.invite-code {
+  font-size: 32px;
+  letter-spacing: 0.18em;
+  margin: 0 0 8px;
+}
+
+.lobby-seat {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.lobby-seat em {
+  display: block;
+  color: var(--muted);
+  font-style: normal;
+  font-size: 13px;
+}
+
+.hint--warn {
+  color: #f0b429;
+}
+
+.hint--tight {
+  margin-top: 8px;
 }
 

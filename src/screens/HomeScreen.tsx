@@ -1,5 +1,6 @@
 import { useState } from "react";
-import type { Championship, GameSave, Match, TrainingFocus } from "../types";
+import type { Campaign, Championship, GameSave, Match, Seat, TrainingFocus } from "../types";
+import { CampaignWeekCard } from "../components/CampaignWeekCard";
 import { ClubBadge } from "../components/ClubBadge";
 import { compactName, sideLabel } from "../lib/display";
 import { resolveMatchSides, teamById, teamGroup } from "../lib/resolve";
@@ -13,10 +14,17 @@ type Props = {
   save: GameSave;
   nextMatch: Match | null;
   batchLabel: string | null;
+  campaign?: Campaign | null;
+  playerId?: string;
+  localSeats?: Seat[];
   onGoToMatch: () => void;
   onSkip: () => void;
   onResign: () => void;
   onTrain: (focus: TrainingFocus) => void;
+  onReady?: () => void;
+  onUnready?: () => void;
+  onForce?: () => void;
+  onPass?: (playerId: string) => void;
 };
 
 export function HomeScreen({
@@ -24,10 +32,17 @@ export function HomeScreen({
   save,
   nextMatch,
   batchLabel,
+  campaign,
+  playerId,
+  localSeats = [],
   onGoToMatch,
   onSkip,
   onResign,
   onTrain,
+  onReady,
+  onUnready,
+  onForce,
+  onPass,
 }: Props) {
   const club = teamById(championship, save.clubId);
   const group = teamGroup(championship, save.clubId);
@@ -59,7 +74,7 @@ export function HomeScreen({
           {club ? <span className="colour-label">{club.colours.label}</span> : null}
         </div>
         <button type="button" className="text-btn" onClick={onResign}>
-          Resign
+          {campaign ? "Leave" : "Resign"}
         </button>
       </section>
 
@@ -105,8 +120,23 @@ export function HomeScreen({
               </button>
             </div>
           </>
+        ) : campaign && preseason ? (
+          <p className="tactic-copy">Your session is in. Waiting on the other managers before the week turns.</p>
         ) : null}
       </section>
+
+      {campaign && playerId && onReady && onUnready && onForce && onPass ? (
+        <CampaignWeekCard
+          campaign={campaign}
+          clubId={save.clubId}
+          playerId={playerId}
+          localSeats={localSeats}
+          onReady={onReady}
+          onUnready={onUnready}
+          onForce={onForce}
+          onPass={onPass}
+        />
+      ) : null}
 
       {!preseason ? (
         <section className="card next-card">
@@ -124,12 +154,20 @@ export function HomeScreen({
               </p>
               <p className="weather-banner">{climateSummary(rollClimate(save.seed, nextMatch.id))}</p>
               <div className="row-actions">
-                <button type="button" className="btn" onClick={onGoToMatch}>
-                  Go to match
-                </button>
-                <button type="button" className="btn btn--ghost" onClick={onSkip}>
-                  Instant result
-                </button>
+                {campaign && !campaign.week.locked ? (
+                  <p className="hint hint--tight">Confirm championship day once the fifteen and tactics are set. The match waits until every manager is in.</p>
+                ) : (
+                  <>
+                    <button type="button" className="btn" onClick={onGoToMatch}>
+                      {campaign ? "Watch first half" : "Go to match"}
+                    </button>
+                    {campaign ? null : (
+                      <button type="button" className="btn btn--ghost" onClick={onSkip}>
+                        Instant result
+                      </button>
+                    )}
+                  </>
+                )}
               </div>
             </>
           ) : (
@@ -140,7 +178,7 @@ export function HomeScreen({
                   ? "You are not in this round. Simulate the remaining ties to keep the championship moving."
                   : "Every championship match has been played."}
               </p>
-              {batchLabel && (
+              {batchLabel && !campaign && (
                 <button type="button" className="btn" onClick={onSkip}>
                   Simulate {batchLabel}
                 </button>

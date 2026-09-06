@@ -1,9 +1,43 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { seedChampionship } from "../data/championship";
 import { compactName } from "../lib/display";
 import { momentumAt, simulateMatch } from "../lib/matchEngine";
 import { combineHalves, reportFromSim } from "../lib/matchStats";
 import { applyMatchMood } from "../lib/mood";
+import {
+  addSeat,
+  championshipOf,
+  createCampaign,
+  forceAdvance,
+  liveForClub,
+  readyClub,
+  saveFromCampaign,
+  setWaitHours,
+  startCampaign,
+  submitSecondHalf,
+  tickCampaign,
+  trainClub,
+  unreadyClub,
+  waitingOnSecondHalf,
+  withClubSheet,
+  withClubTactics,
+} from "../lib/multiplayer/campaign";
+import { randomId } from "../lib/multiplayer/codes";
+import {
+  clearLocalSeats,
+  ensurePlayer,
+  isLocalSeat,
+  rememberLocalSeat,
+  setPlayerName,
+} from "../lib/multiplayer/identity";
+import {
+  clearCampaign,
+  exportCampaign,
+  loadCampaign,
+  loadRoom,
+  parseCampaignInvite,
+  persistCampaign,
+} from "../lib/multiplayer/store";
 import { clubTactics, defaultSheet, ratedSquad, swapPlayersInSheet } from "../lib/players";
 import { resolveMatchSides, teamById } from "../lib/resolve";
 import { nextBatch } from "../lib/schedule";
@@ -26,15 +60,18 @@ import {
   writeScores,
 } from "../lib/gameStorage";
 import type {
+  Campaign,
   Championship,
   GameSave,
   LivePhase,
   Match,
   NewsItem,
+  Seat,
   SimulatedMatch,
   Tactics,
   TeamSheet,
   TrainingFocus,
+  WaitHours,
 } from "../types";
 
 export type LiveMatch = {
@@ -51,21 +88,74 @@ function newsId(): string {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+function localSeatsFor(campaign: Campaign, selfId: string): Seat[] {
+  return campaign.seats.filter((seat) => isLocalSeat(seat.playerId, selfId));
+}
+
 export function useGame() {
-  const [save, setSave] = useState<GameSave | null>(() => loadSave());
+  const [soloSave, setSoloSave] = useState<GameSave | null>(() => loadSave());
+  const [campaign, setCampaign] = useState<Campaign | null>(() => loadCampaign());
+  const [player, setPlayer] = useState(() => ensurePlayer());
+  const [activePlayerId, setActivePlayerId] = useState(() => {
+    const self = ensurePlayer();
+    const current = loadCampaign();
+    const seated = current ? localSeatsFor(current, self.id)[0] : undefined;
+    return seated?.playerId ?? self.id;
+  });
   const [live, setLive] = useState<LiveMatch | null>(null);
   const [picked, setPicked] = useState<string | null>(null);
   const [viewTeamId, setViewTeamId] = useState<string | null>(null);
 
+  const activeSeat = campaign?.seats.find((seat) => seat.playerId === activePlayerId)
+    ?? campaign?.seats.find((seat) => isLocalSeat(seat.playerId, player.id));
+  const localSeats = campaign ? localSeatsFor(campaign, player.id) : [];
+
+  const save = campaign
+    ? campaign.phase === "lobby" || !activeSeat
+      ? null
+      : saveFromCampaign(campaign, activeSeat.clubId)
+    : soloSave;
+
   const championship: Championship = useMemo(
-    () => (save ? championshipFromSave(save) : seedChampionship),
-    [save],
+    () => (campaign ? championshipOf(campaign) : save ? championshipFromSave(save) : seedChampionship),
+    [campaign, save],
   );
 
-  const commit = useCallback((next: GameSave) => {
+  const commitSolo = useCallback((next: GameSave) => {
     persistSave(next);
-    setSave(next);
+    setSoloSave(next);
   }, []);
+
+  const commitCampaign = useCallback((next: Campaign) => {
+    persistCampaign(next);
+    setCampaign(next);
+  }, []);
+
+  useEffect(() => {
+    if (!campaign) return;
+    const timer = window.setInterval(() => {
+      setCampaign((current) => {
+        if (!current) return current;
+        const next = tickCampaign(current, Date.now());
+        if (next.revision !== current.revision) persistCampaign(next);
+        return next;
+      });
+    }, 12_000);
+    return () => window.clearInterval(timer);
+  }, [campaign?.id]);
+
+  useEffect(() => {
+    if (!campaign || !live || live.phase !== "half-wait") return;
+    const row = campaign.week.lives[live.user.matchId];
+    if (!row?.combined) return;
+    const halfIndex = row.combined.events.findIndex((event) => event.kind === "half") + 1;
+    setLive({
+      ...live,
+      user: row.combined,
+      phase: "second",
+      cursor: Math.max(halfIndex, 1),
+    });
+  }, [campaign, live]);
 
   const takeCharge = useCallback((clubId: string) => {
     const club = teamById(seedChampionship, clubId);
@@ -76,35 +166,126 @@ export function useGame() {
       title: `Welcome to ${club?.name ?? "the club"}`,
       body: `Preseason is underway. Six weeks of training before Round 1. Work the panel, watch match fitness, then set your championship fifteen.`,
     };
-    commit(withInbox(started, [welcome]));
+    commitSolo(withInbox(started, [welcome]));
     setLive(null);
     setPicked(null);
     setViewTeamId(clubId);
-  }, [commit]);
+  }, [commitSolo]);
 
-  const resign = useCallback(() => {
-    clearSave();
-    setSave(null);
+  const hostCampaign = useCallback(
+    (payload: { name: string; clubId: string; waitHours: WaitHours }) => {
+      const self = setPlayerName(payload.name);
+      setPlayer(self);
+      rememberLocalSeat(self.id);
+      const created = createCampaign({
+        hostPlayerId: self.id,
+        hostName: self.name,
+        clubId: payload.clubId,
+        waitHours: payload.waitHours,
+      });
+      commitCampaign(created);
+      setActivePlayerId(self.id);
+      setViewTeamId(payload.clubId);
+      setLive(null);
+    },
+    [commitCampaign],
+  );
+
+  const joinCampaign = useCallback(
+    (payload: { name: string; clubId: string; code: string; snapshot?: string }) => {
+      const snapshot = payload.snapshot ? parseCampaignInvite(payload.snapshot) : null;
+      const room = snapshot ?? loadRoom(payload.code) ?? (campaign?.code === payload.code ? campaign : null);
+      if (!room) return { ok: false as const, error: "No championship for that invite. Try the snapshot from the host." };
+      const self = setPlayerName(payload.name);
+      setPlayer(self);
+      const seatId = room.seats.some((seat) => seat.playerId === self.id) ? randomId() : self.id;
+      rememberLocalSeat(seatId);
+      const joined = addSeat(room, { playerId: seatId, name: self.name, clubId: payload.clubId });
+      if (!joined.ok) return joined;
+      commitCampaign(joined.campaign);
+      setActivePlayerId(seatId);
+      setViewTeamId(payload.clubId);
+      setLive(null);
+      return { ok: true as const };
+    },
+    [campaign, commitCampaign],
+  );
+
+  const previewJoinTaken = useCallback(
+    (code: string, snapshot?: string) => {
+      const room = (snapshot ? parseCampaignInvite(snapshot) : null) ?? loadRoom(code) ?? campaign;
+      return room?.seats.map((seat) => seat.clubId) ?? [];
+    },
+    [campaign],
+  );
+
+  const addHotseat = useCallback(
+    (name: string, clubId: string) => {
+      if (!campaign) return { ok: false as const, error: "No lobby." };
+      const seatId = randomId();
+      const joined = addSeat(campaign, { playerId: seatId, name, clubId });
+      if (!joined.ok) return joined;
+      rememberLocalSeat(seatId);
+      commitCampaign(joined.campaign);
+      return { ok: true as const };
+    },
+    [campaign, commitCampaign],
+  );
+
+  const startLobby = useCallback(() => {
+    if (!campaign) return { ok: false as const, error: "No lobby." };
+    const started = startCampaign(campaign, activePlayerId);
+    if (!started.ok) return started;
+    commitCampaign(started.campaign);
+    setViewTeamId(activeSeat?.clubId ?? started.campaign.seats[0]?.clubId ?? null);
+    return { ok: true as const };
+  }, [activePlayerId, activeSeat?.clubId, campaign, commitCampaign]);
+
+  const leaveCampaign = useCallback(() => {
+    clearCampaign();
+    clearLocalSeats();
+    setCampaign(null);
     setLive(null);
     setPicked(null);
     setViewTeamId(null);
   }, []);
 
+  const resign = useCallback(() => {
+    if (campaign) {
+      leaveCampaign();
+      return;
+    }
+    clearSave();
+    setSoloSave(null);
+    setLive(null);
+    setPicked(null);
+    setViewTeamId(null);
+  }, [campaign, leaveCampaign]);
+
   const setTactics = useCallback(
     (tactics: Tactics) => {
+      if (campaign && activeSeat) {
+        commitCampaign(withClubTactics(campaign, activeSeat.clubId, tactics));
+        return;
+      }
       if (!save) return;
-      commit(withTactics(save, tactics));
+      commitSolo(withTactics(save, tactics));
     },
-    [commit, save],
+    [activeSeat, campaign, commitCampaign, commitSolo, save],
   );
 
   const swapPlayers = useCallback(
     (first: string, second: string) => {
       if (!save) return;
-      commit(withSheet(save, swapPlayersInSheet(save.sheet, first, second)));
+      const sheet = swapPlayersInSheet(save.sheet, first, second);
+      if (campaign && activeSeat) {
+        commitCampaign(withClubSheet(campaign, activeSeat.clubId, sheet));
+      } else {
+        commitSolo(withSheet(save, sheet));
+      }
       setPicked(null);
     },
-    [commit, save],
+    [activeSeat, campaign, commitCampaign, commitSolo, save],
   );
 
   const tapPlayer = useCallback(
@@ -127,9 +308,17 @@ export function useGame() {
     [picked, save?.clubId, swapPlayers, viewTeamId],
   );
 
+  const passDevice = useCallback((playerId: string) => {
+    setActivePlayerId(playerId);
+    setLive(null);
+    setPicked(null);
+    const seat = campaign?.seats.find((item) => item.playerId === playerId);
+    if (seat) setViewTeamId(seat.clubId);
+  }, [campaign]);
+
   const beginBatch = useCallback(
     (mode: "first" | "full"): LiveMatch | null => {
-      if (!save) return null;
+      if (!save || campaign) return null;
       const batch = nextBatch(championship, save.clubId);
       if (!batch) return null;
 
@@ -185,17 +374,44 @@ export function useGame() {
         openingSheet: save.sheet,
       };
     },
-    [championship, save],
+    [campaign, championship, save],
   );
 
   const goToMatch = useCallback(() => {
     if (!save || save.phase === "preseason") return;
+    if (campaign && activeSeat) {
+      const row = liveForClub(campaign, activeSeat.clubId);
+      if (!row) return;
+      const match = championship.matches.find((item) => item.id === row.matchId);
+      const batch = nextBatch(championship, activeSeat.clubId);
+      if (!match) return;
+      const alreadySecond = Boolean(
+        (row.first.homeId === activeSeat.clubId ? row.homeSecond : row.awaySecond) && row.combined,
+      );
+      const startSecond = alreadySecond && row.combined;
+      const sim = startSecond ? row.combined! : row.first;
+      const halfIndex = sim.events.findIndex((event) => event.kind === "half") + 1;
+      setLive({
+        user: sim,
+        others: [],
+        label: batch?.label ?? "Championship day",
+        match,
+        cursor: startSecond ? Math.max(halfIndex, 1) : 0,
+        phase: startSecond ? "second" : "first",
+        openingSheet: save.sheet,
+      });
+      return;
+    }
     const next = beginBatch("first");
     if (next) setLive({ ...next, phase: "first", cursor: 0 });
-  }, [beginBatch, save]);
+  }, [activeSeat, beginBatch, campaign, championship, save]);
 
   const finishLive = useCallback(
     (current: LiveMatch, extras?: { sheet?: TeamSheet; base?: GameSave }) => {
+      if (campaign) {
+        setLive({ ...current, cursor: current.user.events.length, phase: "finished" });
+        return;
+      }
       const base = extras?.base ?? save;
       if (!base) return;
       const sheet = extras?.sheet ?? base.sheet;
@@ -272,16 +488,38 @@ export function useGame() {
         });
       }
       next = withInbox(next, items);
-      commit(next);
+      commitSolo(next);
       setLive({ ...current, cursor: current.user.events.length, phase: "finished" });
     },
-    [championship, commit, save],
+    [campaign, championship, commitSolo, save],
   );
 
   const continueSecondHalf = useCallback(
     (tactics: Tactics, sheet: TeamSheet, skipPlayback = false) => {
       if (!save || !live) return;
-      commit(withSheet(withTactics(save, tactics), sheet));
+      if (campaign && activeSeat) {
+        const next = submitSecondHalf(campaign, activeSeat.clubId, live.user.matchId, tactics, sheet);
+        commitCampaign(next);
+        const row = next.week.lives[live.user.matchId];
+        const waiting = row ? waitingOnSecondHalf(next, row.matchId) : [];
+        if (row?.combined && waiting.length === 0) {
+          const halfIndex = row.combined.events.findIndex((event) => event.kind === "half") + 1;
+          if (skipPlayback) {
+            finishLive({ ...live, user: row.combined, phase: "finished", cursor: row.combined.events.length }, { sheet });
+            return;
+          }
+          setLive({
+            ...live,
+            user: row.combined,
+            phase: "second",
+            cursor: Math.max(halfIndex, 1),
+          });
+          return;
+        }
+        setLive({ ...live, phase: "half-wait" });
+        return;
+      }
+      commitSolo(withSheet(withTactics(save, tactics), sheet));
       const { homeId, awayId } = resolveMatchSides(championship, live.match);
       if (!homeId || !awayId) return;
       const first = live.user;
@@ -323,7 +561,7 @@ export function useGame() {
         phase: "second",
       });
     },
-    [championship, commit, finishLive, live, save],
+    [activeSeat, campaign, championship, commitCampaign, commitSolo, finishLive, live, save],
   );
 
   const skipRest = useCallback(
@@ -344,18 +582,25 @@ export function useGame() {
       finishLive(live);
       return;
     }
+    if (live?.phase === "half-wait") return;
     if (live?.phase === "half-time") {
       skipRest(save.tactics, save.sheet);
+      return;
+    }
+    if (campaign) {
+      goToMatch();
       return;
     }
     const current = beginBatch("full");
     if (!current) return;
     finishLive({ ...current, phase: "finished", cursor: current.user.events.length });
-  }, [beginBatch, finishLive, live, save, skipRest]);
+  }, [beginBatch, campaign, finishLive, goToMatch, live, save, skipRest]);
 
   const advanceLive = useCallback(() => {
     setLive((current) => {
-      if (!current || current.phase === "finished" || current.phase === "half-time") return current;
+      if (!current || current.phase === "finished" || current.phase === "half-time" || current.phase === "half-wait") {
+        return current;
+      }
       const nextCursor = Math.min(current.cursor + 1, current.user.events.length);
       const revealed = current.user.events[nextCursor - 1];
       if (current.phase === "first" && revealed?.kind === "half") {
@@ -374,6 +619,10 @@ export function useGame() {
   const trainWeek = useCallback(
     (focus: TrainingFocus) => {
       if (!save || !save.trainingDue) return;
+      if (campaign && activeSeat) {
+        commitCampaign(trainClub(campaign, activeSeat.clubId, focus));
+        return;
+      }
       const squad = ratedSquad(save.clubId);
       const result = applyTraining(squad, save.condition, focus);
       const date =
@@ -423,17 +672,62 @@ export function useGame() {
           },
         ]);
       }
-      commit(next);
+      commitSolo(next);
     },
-    [championship.matches, commit, save],
+    [activeSeat, campaign, championship.matches, commitCampaign, commitSolo, save],
   );
 
+  const confirmWeek = useCallback(() => {
+    if (!campaign || !activeSeat) return;
+    commitCampaign(readyClub(campaign, activeSeat.clubId));
+  }, [activeSeat, campaign, commitCampaign]);
+
+  const undoReady = useCallback(() => {
+    if (!campaign || !activeSeat) return;
+    commitCampaign(unreadyClub(campaign, activeSeat.clubId));
+  }, [activeSeat, campaign, commitCampaign]);
+
+  const forceWeek = useCallback(() => {
+    if (!campaign) return;
+    commitCampaign(forceAdvance(campaign, activePlayerId));
+  }, [activePlayerId, campaign, commitCampaign]);
+
+  const changeWaitHours = useCallback(
+    (hours: WaitHours) => {
+      if (!campaign) return;
+      commitCampaign(setWaitHours(campaign, hours, activePlayerId));
+    },
+    [activePlayerId, campaign, commitCampaign],
+  );
+
+  const copyCode = useCallback(async () => {
+    if (!campaign) return;
+    await navigator.clipboard.writeText(campaign.code);
+  }, [campaign]);
+
+  const copySnapshot = useCallback(async () => {
+    if (!campaign) return;
+    await navigator.clipboard.writeText(exportCampaign(campaign));
+  }, [campaign]);
+
   const batch = save && save.phase === "season" ? nextBatch(championship, save.clubId) : null;
-  const nextUserMatch = batch?.userMatch ?? null;
+  const liveRow = campaign && activeSeat ? liveForClub(campaign, activeSeat.clubId) : undefined;
+  const liveMatch = liveRow
+    ? championship.matches.find((match) => match.id === liveRow.matchId)
+    : undefined;
+  const nextUserMatch =
+    liveRow && liveMatch && !matchPlayed(liveMatch) ? liveMatch : batch?.userMatch ?? null;
   const playedCount = championship.matches.filter(matchPlayed).length;
+  const waitingHalf = liveRow && liveMatch && !matchPlayed(liveMatch)
+    ? waitingOnSecondHalf(campaign!, liveRow.matchId)
+    : [];
 
   return {
     save,
+    campaign,
+    player,
+    activeSeat,
+    localSeats,
     championship,
     live,
     picked,
@@ -442,7 +736,14 @@ export function useGame() {
     batch,
     nextUserMatch,
     playedCount,
+    waitingHalf,
     takeCharge,
+    hostCampaign,
+    joinCampaign,
+    previewJoinTaken,
+    addHotseat,
+    startLobby,
+    leaveCampaign,
     resign,
     setTactics,
     tapPlayer,
@@ -454,5 +755,12 @@ export function useGame() {
     continueSecondHalf,
     skipRest,
     trainWeek,
+    confirmWeek,
+    undoReady,
+    forceWeek,
+    passDevice,
+    changeWaitHours,
+    copyCode,
+    copySnapshot,
   };
 }
