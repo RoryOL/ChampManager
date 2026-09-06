@@ -54,25 +54,6 @@ function cardBits(events: MatchEvent[]): { text: string; kind: MatchEventKind }[
     }));
 }
 
-const FEATURED: ReadonlySet<MatchEventKind> = new Set([
-  "goal",
-  "point",
-  "free",
-  "sixtyFive",
-  "sideline",
-  "booking",
-  "red",
-  "half",
-  "coach",
-]);
-
-export function commentaryFeed(events: MatchEvent[]): MatchEvent[] {
-  const featured = events.filter((event) => FEATURED.has(event.kind));
-  const play = events.filter((event) => !FEATURED.has(event.kind));
-  const keep = new Set([...featured.slice(-10), ...play.slice(-6)]);
-  return [...events].reverse().filter((event) => keep.has(event));
-}
-
 export function KeyEventsBar({ events, homeId, awayId, home, away }: Props) {
   const homeAccent = teamAccent(home);
   const awayAccent = teamAccent(away);

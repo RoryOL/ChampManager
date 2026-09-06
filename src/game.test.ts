@@ -3,9 +3,9 @@ import { seedChampionship } from "./data/championship";
 import { buildCoachReport } from "./lib/coach";
 import { migrateSave } from "./lib/gameStorage";
 import { seasonStatsFor } from "./lib/matchStats";
-import { commentaryFeed } from "./components/KeyEventsBar";
 import { applyMatchMood } from "./lib/mood";
 import {
+  commentaryFeed,
   freeConversionChance,
   mistimedFoulChance,
   momentumAt,

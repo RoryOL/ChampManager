@@ -81,6 +81,25 @@ export function isCardKind(kind: MatchEventKind): boolean {
   return kind === "booking" || kind === "red";
 }
 
+const FEATURED_FEED: ReadonlySet<MatchEventKind> = new Set([
+  "goal",
+  "point",
+  "free",
+  "sixtyFive",
+  "sideline",
+  "booking",
+  "red",
+  "half",
+  "coach",
+]);
+
+export function commentaryFeed(events: MatchEvent[]): MatchEvent[] {
+  const featured = events.filter((event) => FEATURED_FEED.has(event.kind));
+  const play = events.filter((event) => !FEATURED_FEED.has(event.kind));
+  const keep = new Set([...featured.slice(-10), ...play.slice(-6)]);
+  return [...events].reverse().filter((event) => keep.has(event));
+}
+
 export function nextMomentum(
   current: number,
   event: Pick<MatchEvent, "kind" | "teamId" | "text">,
