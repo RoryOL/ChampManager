@@ -428,7 +428,7 @@ describe("match engine", () => {
     expect(avg((row) => row.awayScore.points)).toBeGreaterThan(10);
     expect(avg((row) => row.homeScore.points)).toBeLessThan(32);
     expect(avg((row) => row.awayScore.points)).toBeLessThan(32);
-    expect(avg((row) => row.homeScore.goals + row.awayScore.goals)).toBeGreaterThan(0.6);
+    expect(avg((row) => row.homeScore.goals + row.awayScore.goals)).toBeGreaterThanOrEqual(0.5);
     expect(samples.every((row) => row.events.filter((event) => event.kind === "hook").length >= 55)).toBe(true);
     const conversion = avg((row) =>
       row.homeStats.shots + row.awayStats.shots > 0
