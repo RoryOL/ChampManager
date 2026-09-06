@@ -117,7 +117,7 @@ export const SHAPE_OPTIONS: { value: Tactics["shape"]; title: string; copy: stri
   {
     value: "sweeper",
     title: "Sweeper (7 backs)",
-    copy: "Drop a seventh defender. Cuts goals against you; your own attack has less room.",
+    copy: "Drop a seventh defender, leaving five forwards. Cuts goals against you; those forwards cover more ground and lose match fitness faster.",
   },
 ];
 
@@ -147,4 +147,12 @@ export function aggressionLabel(value: number): string {
   if (value < 60) return "Measured";
   if (value < 80) return "Physical";
   return "Aggressive";
+}
+
+export function pressureLabel(value: number): string {
+  if (value < 25) return "Sit off";
+  if (value < 45) return "Stand off";
+  if (value < 60) return "Standard press";
+  if (value < 80) return "Hunt the ball";
+  return "All-out press";
 }

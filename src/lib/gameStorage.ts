@@ -23,7 +23,11 @@ type LegacyTactics = {
   build?: Tactics["build"] | "direct" | "running";
   puckout?: Tactics["puckout"] | "contest" | "short";
   aggression?: number;
+  pressure?: number;
   shape?: Tactics["shape"];
+  longFreeTaker?: string;
+  shortFreeTaker?: string;
+  sidelineTaker?: string;
 };
 
 function isTactics(value: unknown): value is Tactics {
@@ -41,11 +45,17 @@ export function migrateTactics(raw: unknown): Tactics {
   if (isTactics(raw)) {
     const aggression =
       typeof (raw as Tactics).aggression === "number" ? (raw as Tactics).aggression : DEFAULT_TACTICS.aggression;
+    const pressure =
+      typeof (raw as Tactics).pressure === "number" ? (raw as Tactics).pressure : DEFAULT_TACTICS.pressure;
     return {
       ...raw,
       build: clampDial(raw.build),
       puckout: clampDial(raw.puckout),
       aggression: clampDial(aggression),
+      pressure: clampDial(pressure),
+      longFreeTaker: raw.longFreeTaker,
+      shortFreeTaker: raw.shortFreeTaker,
+      sidelineTaker: raw.sidelineTaker,
     };
   }
   const legacy = (raw ?? {}) as LegacyTactics;
@@ -61,6 +71,8 @@ export function migrateTactics(raw: unknown): Tactics {
       : legacy.puckout === "contest" || legacy.pressing === "high"
         ? 78
         : 24;
+  const pressure =
+    typeof legacy.pressure === "number" ? legacy.pressure : legacy.pressing === "high" ? 78 : legacy.pressing === "low" ? 22 : DEFAULT_TACTICS.pressure;
   return {
     mentality:
       legacy.mentality === "contain" || legacy.mentality === "attacking" || legacy.mentality === "balanced"
@@ -69,7 +81,11 @@ export function migrateTactics(raw: unknown): Tactics {
     build: clampDial(build),
     puckout: clampDial(puckout),
     aggression: clampDial(typeof legacy.aggression === "number" ? legacy.aggression : DEFAULT_TACTICS.aggression),
+    pressure: clampDial(pressure),
     shape: legacy.shape === "sweeper" || legacy.shape === "traditional" ? legacy.shape : "traditional",
+    longFreeTaker: legacy.longFreeTaker,
+    shortFreeTaker: legacy.shortFreeTaker,
+    sidelineTaker: legacy.sidelineTaker,
   };
 }
 

@@ -1,5 +1,5 @@
-import type { AttributeBoosts, PlayerCondition, RatedPlayer, TrainingFocus } from "../types";
-import { ATTRIBUTE_KEYS, ATTRIBUTE_LABELS, type AttributeKey } from "./attributes";
+import type { AttributeBoosts, PlayerCondition, PositionLine, RatedPlayer, Tactics, TrainingFocus } from "../types";
+import { ATTRIBUTE_KEYS, ATTRIBUTE_LABELS, clampDial, type AttributeKey } from "./attributes";
 import { moodAdjust } from "./mood";
 import { clampStat, computeOverall, ratedSquad } from "./players";
 
@@ -32,7 +32,7 @@ export const TRAINING_OPTIONS: {
   {
     value: "fitness",
     title: "Fitness",
-    copy: "Slight lift to speed, acceleration and stamina on the player profile (up to +4). Fatigue climbs fast.",
+    copy: "Slight lift to speed, acceleration and stamina on the player profile (up to +4). Match fitness drops fast.",
   },
   {
     value: "skills",
@@ -52,12 +52,12 @@ export const TRAINING_OPTIONS: {
   {
     value: "recovery",
     title: "Recovery",
-    copy: "Cuts fatigue so trained profile stats show through. Sharpness holds.",
+    copy: "Cuts fatigue so trained profile stats show through. Match fitness recovers.",
   },
 ];
 
 export function defaultCondition(): PlayerCondition {
-  return { fatigue: 16, sharpness: 38, mood: 58 };
+  return { fatigue: 0, sharpness: 38, mood: 58 };
 }
 
 export function midSeasonCondition(): PlayerCondition {
@@ -102,14 +102,19 @@ export function conditionFor(name: string, map: Record<string, PlayerCondition>)
   return map[name] ?? defaultCondition();
 }
 
+export function fitnessOf(condition: PlayerCondition): number {
+  return clampCondition(100 - condition.fatigue);
+}
+
 export function isOvertrained(condition: PlayerCondition): boolean {
-  return condition.fatigue >= 78;
+  return fitnessOf(condition) <= 22;
 }
 
 export function conditionAdjust(condition: PlayerCondition): number {
   let adjust = 0;
-  if (condition.fatigue >= 78) adjust -= 2;
-  else if (condition.fatigue >= 65) adjust -= 1;
+  const fitness = fitnessOf(condition);
+  if (fitness <= 28) adjust -= 2;
+  else if (fitness <= 50) adjust -= 1;
   if (condition.sharpness >= 80) adjust += 1;
   else if (condition.sharpness < 28) adjust -= 1;
   adjust += moodAdjust(condition);
@@ -170,7 +175,7 @@ export function applyTraining(
 
   for (const player of squad) {
     const current = cloneCondition(next[player.name] ?? defaultCondition());
-    const alreadyHeavy = current.fatigue >= 64;
+    const alreadyHeavy = fitnessOf(current) <= 50;
     let fatigue = current.fatigue;
     let sharpness = current.sharpness;
     let boosts = current.boosts;
@@ -217,32 +222,64 @@ export function applyTraining(
   const lifted = joinLabels(keys);
   const summary =
     overtrained.length > 0
-      ? `${label} is done, but ${overtrained.length} player${overtrained.length === 1 ? " is" : "s are"} overtrained. The work is banked, yet match ratings look heavy until you recover.`
+      ? `${label} is done, but ${overtrained.length} player${overtrained.length === 1 ? " is" : "s are"} overtrained. The work is banked, yet match ratings look heavy until fitness recovers.`
       : focus === "recovery"
-        ? "Recovery week lands. Legs are fresher, so banked match ratings show through again."
+        ? "Recovery week lands. Match fitness is back up, so banked ratings show through again."
         : `${label} session is in the book. ${lifted.charAt(0).toUpperCase()}${lifted.slice(1)} are up on the player profiles — open the squad to see the numbers move.`;
 
   return { condition: next, overtrained, summary };
+}
+
+export function matchFatigueDelta(
+  minutes: number,
+  tactics: Tactics | undefined,
+  position: PositionLine,
+  started: boolean,
+): number {
+  if (minutes <= 0) return 0;
+  const share = Math.min(1, minutes / 62);
+  const plan = tactics ?? {
+    mentality: "balanced" as const,
+    build: 42,
+    puckout: 58,
+    aggression: 46,
+    pressure: 48,
+    shape: "traditional" as const,
+  };
+  const pressure = clampDial(plan.pressure ?? 48) / 100;
+  const aggression = clampDial(plan.aggression ?? 46) / 100;
+  let gain = (started ? 16 : 7) * share;
+  gain += pressure * 14 * share;
+  gain += aggression * 10 * share;
+  if (plan.shape === "sweeper" && (position === "HF" || position === "FF")) {
+    gain += 9 * share;
+  }
+  return Math.round(gain);
 }
 
 export function applyMatchFatigue(
   condition: Record<string, PlayerCondition>,
   starters: string[],
   subs: string[],
+  tactics: Tactics | undefined = undefined,
+  squad: RatedPlayer[] = [],
 ): Record<string, PlayerCondition> {
   const next = { ...condition };
-  const bump = (name: string, fatigueAdd: number, sharpAdd: number) => {
+  const byName = new Map(squad.map((player) => [player.name, player]));
+  const bump = (name: string, started: boolean) => {
     const current = cloneCondition(next[name] ?? defaultCondition());
+    const position = byName.get(name)?.position ?? "MF";
+    const add = matchFatigueDelta(62, tactics, position, started);
     next[name] = {
-      fatigue: clampCondition(current.fatigue + fatigueAdd - 6),
-      sharpness: clampCondition(current.sharpness + sharpAdd),
+      fatigue: clampCondition(current.fatigue + add - 4),
+      sharpness: clampCondition(current.sharpness + (started ? 3 : 1)),
       boosts: current.boosts,
       mood: current.mood,
       moodNote: current.moodNote,
     };
   };
-  for (const name of starters) bump(name, 14, 3);
-  for (const name of subs) bump(name, 6, 1);
+  for (const name of starters) bump(name, true);
+  for (const name of subs) bump(name, false);
   return next;
 }
 
@@ -250,6 +287,10 @@ export function averageFatigue(condition: Record<string, PlayerCondition>, names
   if (names.length === 0) return 0;
   const total = names.reduce((sum, name) => sum + (condition[name]?.fatigue ?? 0), 0);
   return Math.round(total / names.length);
+}
+
+export function averageFitness(condition: Record<string, PlayerCondition>, names: string[]): number {
+  return clampCondition(100 - averageFatigue(condition, names));
 }
 
 export function averageSharpness(condition: Record<string, PlayerCondition>, names: string[]): number {

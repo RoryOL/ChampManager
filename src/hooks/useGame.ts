@@ -74,7 +74,7 @@ export function useGame() {
       id: newsId(),
       date: PRESEASON_DATES[0],
       title: `Welcome to ${club?.name ?? "the club"}`,
-      body: `Preseason is underway. Six weeks of training before Round 1. Work the panel, watch the fatigue, then set your championship fifteen.`,
+      body: `Preseason is underway. Six weeks of training before Round 1. Work the panel, watch match fitness, then set your championship fifteen.`,
     };
     commit(withInbox(started, [welcome]));
     setLive(null);
@@ -217,7 +217,13 @@ export function useGame() {
       next = { ...next, reports };
       next = {
         ...next,
-        condition: applyMatchFatigue(next.condition, sheet.starters, sheet.subs),
+        condition: applyMatchFatigue(
+          next.condition,
+          sheet.starters,
+          sheet.subs,
+          extras?.base?.tactics ?? base.tactics,
+          ratedSquad(base.clubId),
+        ),
         trainingDue: true,
       };
       const club = teamById(championship, base.clubId);

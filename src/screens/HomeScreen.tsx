@@ -4,7 +4,7 @@ import { ClubBadge } from "../components/ClubBadge";
 import { compactName, sideLabel } from "../lib/display";
 import { resolveMatchSides, teamById, teamGroup } from "../lib/resolve";
 import { formatDate, stageLabel } from "../lib/scoring";
-import { averageFatigue, averageMatchOverall, averageSharpness, PRESEASON_WEEKS, TRAINING_OPTIONS } from "../lib/training";
+import { averageFitness, averageMatchOverall, averageSharpness, PRESEASON_WEEKS, TRAINING_OPTIONS } from "../lib/training";
 import { ratedSquad } from "../lib/players";
 
 type Props = {
@@ -34,7 +34,7 @@ export function HomeScreen({
   const [focus, setFocus] = useState<TrainingFocus>("skills");
   const squad = ratedSquad(save.clubId);
   const names = squad.map((player) => player.name);
-  const fatigue = averageFatigue(save.condition, names);
+  const fitness = averageFitness(save.condition, names);
   const sharpness = averageSharpness(save.condition, names);
   const form = averageMatchOverall(squad, save.condition, save.sheet.starters);
   const preseason = save.phase === "preseason";
@@ -56,18 +56,18 @@ export function HomeScreen({
       <section className="card">
         <p className="kicker">{preseason ? `Preseason · week ${Math.min(save.preseasonWeek, PRESEASON_WEEKS)} of ${PRESEASON_WEEKS}` : "Condition"}</p>
         <h3>
-          Panel fatigue {fatigue} · sharpness {sharpness}
+          Panel fitness {fitness} · sharpness {sharpness}
         </h3>
         <div className="attr-bar fatigue-bar">
-          <i className={fatigue >= 78 ? "is-warn" : ""} style={{ width: `${fatigue}%` }} />
+          <i className={fitness <= 22 ? "is-warn" : ""} style={{ width: `${fitness}%` }} />
         </div>
         <p className="xv-form">
           Championship XV match rating {form.match}
           {formDelta !== 0 ? ` (${formDelta > 0 ? "+" : ""}${formDelta})` : ""} · ability {form.ability}
         </p>
         <p className="tactic-copy">
-          {fatigue >= 78
-            ? "The group is overtrained. Match ratings are down — a recovery week will pay you back in championship."
+          {fitness <= 22
+            ? "Match fitness is on the floor. Ratings are down — a recovery week will pay you back in championship."
             : preseason
               ? "Each session slightly changes stats on the player profile (up to +4). Open Squad after you train."
               : save.trainingDue

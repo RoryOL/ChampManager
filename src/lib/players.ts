@@ -112,6 +112,7 @@ export const DEFAULT_TACTICS: Tactics = {
   build: 42,
   puckout: 58,
   aggression: 46,
+  pressure: 48,
   shape: "traditional",
 };
 
@@ -204,10 +205,11 @@ function rollStat(
   line: PositionLine,
   key: AttributeKey,
   floor: number,
+  spread: number,
 ): number {
-  const wobble = stat(seed >> shift, -2, 2);
+  const wobble = stat(seed >> shift, -spread, spread);
   const raw = base + lineBias(line, key) + wobble;
-  const lifted = floor > 0 ? Math.max(raw, floor - 4) : raw;
+  const lifted = floor > 0 ? Math.max(raw, floor - 8) : raw;
   return clampStat(lifted);
 }
 
@@ -229,7 +231,9 @@ export function ratePlayer(teamId: string, name: string, index: number): PlayerR
   const seed = hash(`${teamId}:${name.toLowerCase()}`);
   const position = positionForIndex(index);
   const floor = STAR_FLOOR[name] ?? 0;
-  const base = Math.max(floor - 2, stat(seed, 10, 15));
+  const panel = index >= 15;
+  const base = floor > 0 ? Math.max(floor - 3, stat(seed, 11, 15)) : panel ? stat(seed, 6, 11) : stat(seed, 11, 14);
+  const spread = floor >= 16 ? 4 : panel ? 7 : 3;
   const keys: AttributeKey[] = [
     "speed",
     "aerialReach",
@@ -253,8 +257,15 @@ export function ratePlayer(teamId: string, name: string, index: number): PlayerR
   ];
   const ratings = {} as Record<AttributeKey, number>;
   keys.forEach((key, i) => {
-    ratings[key] = rollStat(seed, 3 + i * 2, base, position, key, floor);
+    ratings[key] = rollStat(seed, 3 + i * 2, base, position, key, floor, spread);
   });
+  const spikeKey = keys[stat(seed >> 21, 0, keys.length - 1)] ?? "speed";
+  const spike = floor > 0 ? stat(seed >> 23, 1, 3) : panel ? stat(seed >> 23, 5, 10) : stat(seed >> 23, 3, 7);
+  ratings[spikeKey] = clampStat(ratings[spikeKey] + spike);
+  const dumpKey = keys[stat(seed >> 25, 0, keys.length - 1)] ?? "puckoutReach";
+  if (dumpKey !== spikeKey && panel) {
+    ratings[dumpKey] = clampStat(ratings[dumpKey] - stat(seed >> 27, 2, 6));
+  }
   const bias = STAR_BIAS[name];
   if (bias) {
     for (const [key, value] of Object.entries(bias) as [AttributeKey, number][]) {
@@ -266,7 +277,7 @@ export function ratePlayer(teamId: string, name: string, index: number): PlayerR
   return {
     ...ratings,
     familiarity,
-    overall: Math.max(overall, floor || overall),
+    overall,
   };
 }
 
@@ -376,7 +387,8 @@ export type SideProfile = {
   halfBackHands: number;
   puckout: number;
   pressure: number;
-  freeTaker: RatedPlayer | undefined;
+  longFreeTaker: RatedPlayer | undefined;
+  shortFreeTaker: RatedPlayer | undefined;
   sidelineTaker: RatedPlayer | undefined;
   keeper: RatedPlayer | undefined;
 };
@@ -394,14 +406,32 @@ export function pickSpecialist(
   )[0];
 }
 
-export function designatedRoles(xv: RatedPlayer[]): {
-  freeTaker?: string;
+export function pickNamedOrSpecialist(
+  xv: RatedPlayer[],
+  name: string | undefined,
+  key: AttributeKey,
+  condition: Record<string, PlayerCondition> = {},
+): RatedPlayer | undefined {
+  if (name) {
+    const named = xv.find((player) => player.name === name);
+    if (named) return named;
+  }
+  return pickSpecialist(xv, key, condition);
+}
+
+export function designatedRoles(
+  xv: RatedPlayer[],
+  tactics?: Tactics,
+): {
+  longFreeTaker?: string;
+  shortFreeTaker?: string;
   sidelineTaker?: string;
   puckoutKeeper?: string;
 } {
   return {
-    freeTaker: pickSpecialist(xv, "frees")?.name,
-    sidelineTaker: pickSpecialist(xv, "sidelines")?.name,
+    longFreeTaker: pickNamedOrSpecialist(xv, tactics?.longFreeTaker, "frees")?.name,
+    shortFreeTaker: pickNamedOrSpecialist(xv, tactics?.shortFreeTaker, "frees")?.name,
+    sidelineTaker: pickNamedOrSpecialist(xv, tactics?.sidelineTaker, "sidelines")?.name,
     puckoutKeeper: xv[0]?.name,
   };
 }
@@ -451,12 +481,14 @@ export function sideProfile(
     ? matchStat(keeper.ratings.puckoutReach, conditionFor(keeper.name, condition), "puckoutReach") *
       usedInSlot(keeper, 0)
     : 12;
-  const freeTaker = pickSpecialist(xv, "frees", condition);
-  const sidelineTaker = pickSpecialist(xv, "sidelines", condition);
-  const deadBall = freeTaker
-    ? (matchStat(freeTaker.ratings.frees, conditionFor(freeTaker.name, condition), "frees") * 1.2 +
-        matchStat(freeTaker.ratings.composure, conditionFor(freeTaker.name, condition), "composure") +
-        matchStat(freeTaker.ratings.underPressure, conditionFor(freeTaker.name, condition), "underPressure")) /
+  const longFreeTaker = pickNamedOrSpecialist(xv, tactics.longFreeTaker, "frees", condition);
+  const shortFreeTaker = pickNamedOrSpecialist(xv, tactics.shortFreeTaker, "frees", condition);
+  const sidelineTaker = pickNamedOrSpecialist(xv, tactics.sidelineTaker, "sidelines", condition);
+  const deadBallTaker = longFreeTaker ?? shortFreeTaker;
+  const deadBall = deadBallTaker
+    ? (matchStat(deadBallTaker.ratings.frees, conditionFor(deadBallTaker.name, condition), "frees") * 1.2 +
+        matchStat(deadBallTaker.ratings.composure, conditionFor(deadBallTaker.name, condition), "composure") +
+        matchStat(deadBallTaker.ratings.underPressure, conditionFor(deadBallTaker.name, condition), "underPressure")) /
       3.2
     : 12;
   const pressure =
@@ -481,8 +513,9 @@ export function sideProfile(
     attack -= 0.7;
   }
   const physical = clampDial(tactics.aggression ?? 46) / 100;
-  hooking += physical * 2.4;
-  defence += physical * 0.9;
+  const press = clampDial(tactics.pressure ?? 48) / 100;
+  hooking += physical * 2.4 + press * 0.9;
+  defence += physical * 0.9 + press * 0.35;
 
   return {
     attack,
@@ -494,7 +527,8 @@ export function sideProfile(
     halfBackHands,
     puckout,
     pressure,
-    freeTaker,
+    longFreeTaker,
+    shortFreeTaker,
     sidelineTaker,
     keeper,
   };
@@ -517,6 +551,7 @@ export function clubTactics(teamId: string): Tactics {
     build: 18 + ((value >> 3) % 70),
     puckout: 16 + ((value >> 5) % 72),
     aggression: 14 + ((value >> 9) % 74),
+    pressure: 12 + ((value >> 11) % 76),
     shape: (value >> 7) % 3 === 0 ? "sweeper" : "traditional",
   };
 }

@@ -44,7 +44,7 @@ export function applyMatchMood(
   const closingSet = new Set(closing.starters);
 
   for (const player of squad) {
-    const current = { ...(next[player.name] ?? { fatigue: 16, sharpness: 38, mood: 58 }) };
+    const current = { ...(next[player.name] ?? { fatigue: 0, sharpness: 38, mood: 58 }) };
     let mood = moodValue(current);
     const notes: string[] = [];
     const row = stats.get(player.name);

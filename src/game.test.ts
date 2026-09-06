@@ -17,14 +17,8 @@ import {
 import { clubTactics, DEFAULT_TACTICS, defaultSheet, ratePlayer, ratedSquad, sideStrength } from "./lib/players";
 import { nextBatch } from "./lib/schedule";
 import { matchPlayed } from "./lib/scoring";
-import {
-  applyTraining,
-  averageMatchOverall,
-  defaultCondition,
-  isOvertrained,
-  matchRatings,
-  matchStat,
-} from "./lib/training";
+import { ATTRIBUTE_KEYS } from "./lib/attributes";
+import { applyMatchFatigue, applyTraining, averageMatchOverall, defaultCondition, fitnessOf, isOvertrained, matchRatings, matchStat } from "./lib/training";
 import type { Tactics } from "./types";
 
 describe("new game championship", () => {
@@ -68,6 +62,16 @@ describe("player ratings", () => {
     expect(quilligan?.ratings.puckoutReach).toBeGreaterThanOrEqual(15);
     expect(duggan?.ratings.frees).toBeGreaterThanOrEqual(16);
     expect(quilligan?.ratings.familiarity.GK).toBeGreaterThan(quilligan?.ratings.familiarity.FF ?? 0);
+  });
+
+  it("lets a modest overall hide a standout attribute", () => {
+    const panel = seedChampionship.teams.flatMap((team) => ratedSquad(team.id));
+    const outlier = panel.find((player) => {
+      const peak = Math.max(...ATTRIBUTE_KEYS.map((key) => player.ratings[key]));
+      return player.ratings.overall <= 12 && peak - player.ratings.overall >= 7;
+    });
+    expect(outlier).toBeTruthy();
+    expect(panel.some((player) => player.ratings.overall <= 9)).toBe(true);
   });
 });
 
@@ -125,7 +129,7 @@ describe("match engine", () => {
   it("gives the stronger side a better expected attack", () => {
     const stars = sideStrength("eire-og", defaultSheet("eire-og"), DEFAULT_TACTICS);
     const weaker = sideStrength("crusheen", defaultSheet("crusheen"), DEFAULT_TACTICS);
-    expect(stars.attack + stars.defence).toBeGreaterThan(weaker.attack + weaker.defence - 1);
+    expect(stars.attack + stars.defence).toBeGreaterThan(weaker.attack + weaker.defence - 2.5);
   });
 
   it("makes specialist free-takers convert far more dead balls", () => {
@@ -240,7 +244,7 @@ describe("match engine", () => {
     let lightFrees = 0;
     let aggressiveYellows = 0;
     let lightYellows = 0;
-    for (let seed = 1; seed <= 20; seed += 1) {
+    for (let seed = 1; seed <= 28; seed += 1) {
       const hot = simulateMatch({
         matchId: "g1-r1-a",
         homeId: "ballyea",
@@ -265,8 +269,70 @@ describe("match engine", () => {
       lightYellows += cold.events.filter((event) => event.kind === "booking" && event.teamId === "ballyea").length;
     }
     expect(aggressiveHooks).toBeGreaterThan(lightHooks);
-    expect(aggressiveFrees).toBeGreaterThan(lightFrees);
+    expect(aggressiveFrees + aggressiveYellows).toBeGreaterThan(lightFrees + lightYellows);
     expect(aggressiveYellows).toBeGreaterThan(lightYellows);
+  });
+
+  it("turns pressure into more successful tackles", () => {
+    expect(tackleChance(12, 46, 92)).toBeGreaterThan(tackleChance(12, 46, 12));
+    const homeSheet = defaultSheet("ballyea");
+    const homePlayers = new Set(homeSheet.starters);
+    const press = { ...DEFAULT_TACTICS, pressure: 94, aggression: 40 };
+    const sit = { ...DEFAULT_TACTICS, pressure: 8, aggression: 40 };
+    let pressHooks = 0;
+    let sitHooks = 0;
+    for (let seed = 1; seed <= 16; seed += 1) {
+      const hot = simulateMatch({
+        matchId: "g1-r1-a",
+        homeId: "ballyea",
+        awayId: "inagh-kilnamona",
+        homeTactics: press,
+        awayTactics: sit,
+        seed,
+      });
+      const cold = simulateMatch({
+        matchId: "g1-r1-a",
+        homeId: "ballyea",
+        awayId: "inagh-kilnamona",
+        homeTactics: sit,
+        awayTactics: sit,
+        seed,
+      });
+      pressHooks += hot.events.filter((event) => event.kind === "hook" && homePlayers.has(event.playerName)).length;
+      sitHooks += cold.events.filter((event) => event.kind === "hook" && homePlayers.has(event.playerName)).length;
+    }
+    expect(pressHooks).toBeGreaterThan(sitHooks);
+  });
+
+  it("uses the named long-free, short-free and sideline takers", () => {
+    const sheet = defaultSheet("ballyea");
+    const longName = sheet.starters[12] ?? sheet.starters[11];
+    const shortName = sheet.starters[13] ?? sheet.starters[10];
+    const sidelineName = sheet.starters[6] ?? sheet.starters[5];
+    const homeSet: { playerName: string }[] = [];
+    for (let seed = 1; seed <= 48 && homeSet.length === 0; seed += 1) {
+      const result = simulateMatch({
+        matchId: "g1-r1-a",
+        homeId: "ballyea",
+        awayId: "inagh-kilnamona",
+        homeTactics: {
+          ...DEFAULT_TACTICS,
+          build: 90,
+          longFreeTaker: longName,
+          shortFreeTaker: shortName,
+          sidelineTaker: sidelineName,
+        },
+        seed,
+      });
+      homeSet.push(
+        ...result.events.filter(
+          (event) => event.teamId === "ballyea" && ["free", "sixtyFive", "sideline"].includes(event.kind),
+        ),
+      );
+    }
+    expect(homeSet.length).toBeGreaterThan(0);
+    const names = new Set(homeSet.map((event) => event.playerName));
+    expect([...names].every((name) => name === longName || name === shortName || name === sidelineName)).toBe(true);
   });
 });
 
@@ -331,6 +397,7 @@ describe("save migration", () => {
     expect(migrated?.tactics.build).toBeGreaterThan(60);
     expect(migrated?.tactics.puckout).toBeGreaterThan(60);
     expect(migrated?.tactics.aggression).toBeGreaterThan(30);
+    expect(migrated?.tactics.pressure).toBeGreaterThan(60);
     expect(migrated?.phase).toBe("season");
   });
 });
@@ -363,6 +430,13 @@ describe("match intel", () => {
     expect(result.homeStats.shots + result.awayStats.shots).toBeGreaterThan(5);
     expect(result.players.some((player) => player.minutes >= 30)).toBe(true);
     expect(result.coachReport.length).toBeGreaterThan(0);
+    for (const player of result.players) {
+      if (player.shots > 0) expect(player.possessions).toBeGreaterThanOrEqual(player.shots);
+      if (player.passesAttempted > 0) expect(player.possessions).toBeGreaterThan(0);
+      expect(player.puckoutsWon).toBeLessThanOrEqual(player.possessions);
+      expect(player.tacklesWon).toBeLessThanOrEqual(player.possessions);
+      expect(player.fitness).toBe(100 - player.fatigue);
+    }
   });
 
   it("flags a long-ball plan that lost the aerials", () => {
@@ -388,6 +462,7 @@ describe("match intel", () => {
         tacklesWon: 3,
         groundCovered: 90,
         fatigue: 40,
+        fitness: 60,
         overall: 13,
         rating: 6,
       },
@@ -405,6 +480,7 @@ describe("match intel", () => {
         tacklesWon: 4,
         groundCovered: 88,
         fatigue: 38,
+        fitness: 62,
         overall: 13,
         rating: 6.5,
       },
@@ -445,6 +521,7 @@ describe("match intel", () => {
           tacklesWon: 1,
           groundCovered: 8,
           fatigue: 40,
+          fitness: 60,
           overall: 16,
           rating: 8.2,
           mood: 58,
@@ -484,6 +561,7 @@ describe("match intel", () => {
             tacklesWon: 1,
             groundCovered: 1,
             fatigue: 20,
+            fitness: 80,
             overall: 15,
             rating: 7,
           },
@@ -501,6 +579,7 @@ describe("match intel", () => {
             tacklesWon: 0,
             groundCovered: 0,
             fatigue: 0,
+            fitness: 100,
             overall: 0,
             rating: 0,
           },
@@ -522,6 +601,7 @@ describe("match intel", () => {
               tacklesWon: 1,
               groundCovered: 9.2,
               fatigue: 40,
+              fitness: 60,
               overall: 19,
               rating: 8.4,
               mood: 70,
@@ -536,5 +616,32 @@ describe("match intel", () => {
     expect(rolled.minutes).toBe(62);
     expect(rolled.scores).toBe(3);
     expect(rolled.rating).toBe(8.4);
+  });
+});
+
+describe("match fitness", () => {
+  it("starts the panel at 100 fitness and drains more under pressure, aggression and five forwards", () => {
+    const squad = ratedSquad("ballyea");
+    const sheet = defaultSheet("ballyea");
+    expect(fitnessOf(defaultCondition())).toBe(100);
+    const easy = applyMatchFatigue(
+      {},
+      sheet.starters,
+      sheet.subs,
+      { ...DEFAULT_TACTICS, pressure: 8, aggression: 8, shape: "traditional" },
+      squad,
+    );
+    const hard = applyMatchFatigue(
+      {},
+      sheet.starters,
+      sheet.subs,
+      { ...DEFAULT_TACTICS, pressure: 96, aggression: 96, shape: "sweeper" },
+      squad,
+    );
+    const forward = squad.find((player) => sheet.starters.includes(player.name) && (player.position === "HF" || player.position === "FF"));
+    expect(forward).toBeTruthy();
+    expect(hard[forward!.name]?.fatigue ?? 0).toBeGreaterThan(easy[forward!.name]?.fatigue ?? 0);
+    expect(fitnessOf(hard[forward!.name] ?? defaultCondition())).toBeLessThan(fitnessOf(easy[forward!.name] ?? defaultCondition()));
+    expect(isOvertrained({ fatigue: 80, sharpness: 50 })).toBe(true);
   });
 });

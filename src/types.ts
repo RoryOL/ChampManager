@@ -111,7 +111,12 @@ export type Tactics = {
   puckout: number;
   /** 0 = light tackling, 100 = aggressive — more hooks, more frees and bookings given away */
   aggression: number;
+  /** 0 = sit off, 100 = hunt every possession — more tackles, more match fatigue */
+  pressure: number;
   shape: "sweeper" | "traditional";
+  longFreeTaker?: string;
+  shortFreeTaker?: string;
+  sidelineTaker?: string;
 };
 
 export type PlayerRatings = {
@@ -187,6 +192,7 @@ export type StatCredit = {
   name: string;
   teamId: string;
   possessions?: number;
+  sequences?: number;
   passesAttempted?: number;
   passesCompleted?: number;
   shots?: number;
@@ -226,6 +232,7 @@ export type PlayerMatchStats = {
   tacklesWon: number;
   groundCovered: number;
   fatigue: number;
+  fitness: number;
   overall: number;
   rating: number;
   mood: number;
@@ -245,6 +252,7 @@ export type TeamMatchStats = {
   tacklesWon: number;
   groundCovered: number;
   fatigue: number;
+  fitness: number;
   overall: number;
   rating: number;
 };

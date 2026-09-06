@@ -1,9 +1,9 @@
 import type { Championship, GameSave, Match, MatchReport } from "../types";
 import { MatchStatsPanel } from "../components/MatchStatsPanel";
 import { ClubBadge } from "../components/ClubBadge";
-import { aggressionLabel, buildLabel, puckoutLabel } from "../lib/attributes";
+import { aggressionLabel, buildLabel, pressureLabel, puckoutLabel } from "../lib/attributes";
 import { compactName, sideLabel } from "../lib/display";
-import { clubTactics } from "../lib/players";
+import { clubTactics, ratedSquad } from "../lib/players";
 import { resolveMatchSides, teamById } from "../lib/resolve";
 import { formatDate, formatScore, matchPlayed, stageLabel } from "../lib/scoring";
 
@@ -21,12 +21,13 @@ function TacticSummary({
   build,
   puckout,
   aggression,
+  pressure,
   shape,
 }: ReturnType<typeof clubTactics>) {
   return (
     <p>
       {mentality} · {buildLabel(build)} · {puckoutLabel(puckout)} · {aggressionLabel(aggression)} ·{" "}
-      {shape === "sweeper" ? "sweeper" : "6-2-6"}
+      {pressureLabel(pressure)} · {shape === "sweeper" ? "sweeper" : "6-2-6"}
     </p>
   );
 }
@@ -81,9 +82,15 @@ export function MatchDetailScreen({ championship, save, match, report, onBack, o
             <MatchStatsPanel
               homeName={home ? compactName(home) : "Home"}
               awayName={away ? compactName(away) : "Away"}
+              homeId={homeId ?? ""}
+              awayId={awayId ?? ""}
               homeStats={report.homeStats}
               awayStats={report.awayStats}
               players={report.players}
+              homeSquad={homeId ? ratedSquad(homeId) : []}
+              awaySquad={awayId ? ratedSquad(awayId) : []}
+              homeCondition={homeId === save.clubId ? save.condition : undefined}
+              awayCondition={awayId === save.clubId ? save.condition : undefined}
             />
           </section>
           <section className="card">

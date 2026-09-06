@@ -10,7 +10,7 @@ import type {
 } from "../types";
 import { clampDial } from "./attributes";
 import { buildCoachReport, liveCoachTip } from "./coach";
-import { mergeCredits, passCredits, statsFromEvents } from "./matchStats";
+import { mergeCredits, passChain, deliverTo, statsFromEvents } from "./matchStats";
 import { clubTactics, defaultSheet, sideProfile, type SideProfile } from "./players";
 
 const POINT_KINDS: ReadonlySet<MatchEventKind> = new Set(["point", "free", "sixtyFive", "sideline"]);
@@ -55,9 +55,10 @@ export function sidelineChance(sidelines: number, strikingDistance: number): num
   return Math.min(0.72, Math.max(0.1, 0.06 + sidelines * 0.028 + strikingDistance * 0.008));
 }
 
-export function tackleChance(hooking: number, aggression: number): number {
+export function tackleChance(hooking: number, aggression: number, pressure = 48): number {
   const physical = clampDial(aggression) / 100;
-  return Math.min(0.36, Math.max(0.06, 0.08 + hooking * 0.005 + physical * 0.09));
+  const press = clampDial(pressure) / 100;
+  return Math.min(0.34, Math.max(0.06, 0.07 + hooking * 0.0045 + physical * 0.08 + press * 0.07));
 }
 
 export function mistimedFoulChance(aggression: number): number {
@@ -109,7 +110,7 @@ export function nextMomentum(
 }
 
 function pickForward(profile: SideProfile, names: string[], random: () => number): string {
-  const named = profile.freeTaker?.name;
+  const named = profile.shortFreeTaker?.name ?? profile.longFreeTaker?.name;
   if (named && random() < 0.22) return named;
   const pool = names.slice(Math.max(0, names.length - 8));
   return pool[Math.floor(random() * Math.max(pool.length, 1))] ?? named ?? "a substitute";
@@ -181,42 +182,60 @@ export function simulateMatch(options: {
 
   const attemptSetPiece = (
     teamId: string,
-    kind: "free" | "sixtyFive" | "sideline",
+    kind: "free" | "sixtyFive" | "sideline" | "longFree" | "shortFree",
     profile: SideProfile,
     minute: number,
+    newSequence = true,
   ) => {
-    const taker = kind === "sideline" ? profile.sidelineTaker : profile.freeTaker;
+    const resolved =
+      kind === "sideline" ? "sideline" : kind === "sixtyFive" || kind === "longFree" ? "longFree" : "shortFree";
+    const taker =
+      resolved === "sideline"
+        ? profile.sidelineTaker
+        : resolved === "longFree"
+          ? profile.longFreeTaker
+          : profile.shortFreeTaker;
     const playerName = taker?.name ?? pickName(teamId === options.homeId ? homeNames : awayNames, random);
+    const eventKind: MatchEventKind = resolved === "sideline" ? "sideline" : kind === "sixtyFive" ? "sixtyFive" : "free";
     const chance =
-      kind === "free"
-        ? freeConversionChance(
+      eventKind === "free" && resolved === "longFree"
+        ? sixtyFiveChance(
             taker?.ratings.frees ?? 11,
+            taker?.ratings.strikingDistance ?? 11,
             taker?.ratings.composure ?? 11,
-            taker?.ratings.underPressure ?? 11,
           )
-        : kind === "sixtyFive"
-          ? sixtyFiveChance(
+        : eventKind === "free"
+          ? freeConversionChance(
               taker?.ratings.frees ?? 11,
-              taker?.ratings.strikingDistance ?? 11,
               taker?.ratings.composure ?? 11,
+              taker?.ratings.underPressure ?? 11,
             )
-          : sidelineChance(taker?.ratings.sidelines ?? 11, taker?.ratings.strikingDistance ?? 11);
+          : eventKind === "sixtyFive"
+            ? sixtyFiveChance(
+                taker?.ratings.frees ?? 11,
+                taker?.ratings.strikingDistance ?? 11,
+                taker?.ratings.composure ?? 11,
+              )
+            : sidelineChance(taker?.ratings.sidelines ?? 11, taker?.ratings.strikingDistance ?? 11);
 
+    const gain: StatCredit = { name: playerName, teamId, possessions: 1, sequences: newSequence ? 1 : 0 };
     if (random() < chance) {
       credit(teamId, "point");
       const text =
-        kind === "free"
-          ? `${playerName} points from a free.`
-          : kind === "sixtyFive"
+        eventKind === "free"
+          ? resolved === "longFree"
+            ? `${playerName} points from a long free.`
+            : `${playerName} points from a short free.`
+          : eventKind === "sixtyFive"
             ? `65 — ${playerName} splits the posts.`
             : `Sideline cut from ${playerName}.`;
       push({
         minute,
         teamId,
         playerName,
-        kind,
+        kind: eventKind,
         text,
-        credits: [{ name: playerName, teamId, shots: 1, scores: 1, possessions: 1 }],
+        credits: [{ ...gain, shots: 1, scores: 1 }],
       });
       return;
     }
@@ -226,12 +245,12 @@ export function simulateMatch(options: {
       playerName,
       kind: "wide",
       text:
-        kind === "free"
-          ? `Free out wide from ${playerName}.`
-          : kind === "sixtyFive"
+        eventKind === "free"
+          ? `${resolved === "longFree" ? "Long free" : "Free"} out wide from ${playerName}.`
+          : eventKind === "sixtyFive"
             ? `${playerName}'s 65 drops short.`
             : `${playerName}'s sideline drifts wide.`,
-      credits: [{ name: playerName, teamId, shots: 1, possessions: 1 }],
+      credits: [{ ...gain, shots: 1 }],
     });
   };
 
@@ -247,13 +266,14 @@ export function simulateMatch(options: {
     longPuck: number,
   ) => {
     const pendingCredits: StatCredit[] = [];
+    let carrier = names[Math.max(0, names.length - 6)] ?? names[0] ?? "a substitute";
+    const defendingId = teamId === options.homeId ? options.awayId : options.homeId;
     if (random() < 0.16 + longPuck * 0.28) {
       const win =
         random() <
         Math.min(0.78, Math.max(0.28, 0.5 + (profile.puckout + profile.aerial - opp.aerial * 1.05 - 12) * 0.03));
       const fielder = pickName(names.slice(4, 9), random);
       const oppFielder = pickName(oppNames.slice(4, 9), random);
-      const defendingId = teamId === options.homeId ? options.awayId : options.homeId;
       if (!win) {
         push({
           minute,
@@ -262,22 +282,32 @@ export function simulateMatch(options: {
           kind: "puckout",
           text: `Puck-out broken — ${fielder} loses the aerial contest.`,
           credits: mergeCredits([
-            { name: fielder, teamId, highFieldingAttempted: 1, possessions: 1 },
+            { name: fielder, teamId, highFieldingAttempted: 1 },
             {
               name: oppFielder,
               teamId: defendingId,
               highFieldingAttempted: 1,
               highFieldingWon: 1,
               puckoutsWon: 1,
+              possessions: 1,
+              sequences: 1,
             },
           ]),
         });
         return;
       }
+      carrier = fielder;
       const winCredits: StatCredit[] = [
-        { name: fielder, teamId, highFieldingAttempted: 1, highFieldingWon: 1, puckoutsWon: 1, possessions: 1 },
+        {
+          name: fielder,
+          teamId,
+          highFieldingAttempted: 1,
+          highFieldingWon: 1,
+          puckoutsWon: 1,
+          possessions: 1,
+          sequences: 1,
+        },
         { name: oppFielder, teamId: defendingId, highFieldingAttempted: 1 },
-        ...passCredits(names.slice(4, 12), teamId, statRng, 2 + Math.floor(statRng() * 3)),
       ];
       if (random() < 0.45) {
         push({
@@ -289,32 +319,43 @@ export function simulateMatch(options: {
           credits: mergeCredits(winCredits),
         });
       } else {
-        // Silent win still counts on the next action; stash on a tiny coach-less event via last attack credits.
         pendingCredits.push(...winCredits);
       }
     } else if (random() < 0.12 + (1 - longPuck) * 0.28) {
       const safe = Math.min(0.82, Math.max(0.35, 0.42 + (profile.halfBackHands - 12) * 0.04));
       const halfBack = pickName(names.slice(4, 7), random);
       if (random() > safe) {
+        const thief = pickName(oppNames.slice(0, 9), statRng);
         push({
           minute,
           teamId,
           playerName: halfBack,
           kind: "puckout",
           text: `Short puck-out turned over on ${halfBack}.`,
-          credits: [{ name: halfBack, teamId, possessions: 1, passesAttempted: 1 }],
+          credits: mergeCredits([
+            { name: halfBack, teamId, passesAttempted: 1 },
+            {
+              name: thief,
+              teamId: defendingId,
+              tacklesAttempted: 1,
+              tacklesWon: 1,
+              possessions: 1,
+              sequences: 1,
+            },
+          ]),
         });
         return;
       }
-      pendingCredits.push(
-        { name: halfBack, teamId, possessions: 1, puckoutsWon: 1 },
-        ...passCredits(names.slice(4, 10), teamId, statRng, 2 + Math.floor(statRng() * 2)),
-      );
+      carrier = halfBack;
+      pendingCredits.push({ name: halfBack, teamId, possessions: 1, sequences: 1, puckoutsWon: 1 });
+    } else {
+      const starter = names.slice(6, 15)[Math.floor(statRng() * Math.max(names.slice(6, 15).length, 1))] ?? names[7] ?? carrier;
+      carrier = starter;
+      pendingCredits.push({ name: starter, teamId, possessions: 1, sequences: 1 });
     }
 
-    if (random() < tackleChance(opp.hooking, oppTactics.aggression ?? 46)) {
+    if (random() < tackleChance(opp.hooking, oppTactics.aggression ?? 46, oppTactics.pressure ?? 48)) {
       const defender = pickName(oppNames.slice(0, 7), random);
-      const defendingId = teamId === options.homeId ? options.awayId : options.homeId;
       push({
         minute,
         teamId,
@@ -323,8 +364,14 @@ export function simulateMatch(options: {
         text: `Hooked and blocked — ${defender} kills the attack.`,
         credits: mergeCredits([
           ...pendingCredits.splice(0, pendingCredits.length),
-          { name: defender, teamId: defendingId, tacklesAttempted: 1, tacklesWon: 1 },
-          ...passCredits(names.slice(6, 15), teamId, statRng, 1 + Math.floor(statRng() * 3)),
+          {
+            name: defender,
+            teamId: defendingId,
+            tacklesAttempted: 1,
+            tacklesWon: 1,
+            possessions: 1,
+            sequences: 1,
+          },
         ]),
       });
       return;
@@ -332,7 +379,6 @@ export function simulateMatch(options: {
 
     if (random() < mistimedFoulChance(oppTactics.aggression ?? 46)) {
       const defender = pickName(oppNames.slice(0, 7), random);
-      const defendingId = teamId === options.homeId ? options.awayId : options.homeId;
       if (random() < yellowOnFoulChance(oppTactics.aggression ?? 46)) {
         push({
           minute,
@@ -345,7 +391,8 @@ export function simulateMatch(options: {
       } else {
         pendingCredits.push({ name: defender, teamId: defendingId, tacklesAttempted: 1 });
       }
-      attemptSetPiece(teamId, "free", profile, minute);
+      const longFree = statRng() < 0.38;
+      attemptSetPiece(teamId, longFree ? "longFree" : "shortFree", profile, minute, false);
       const last = events.at(-1);
       if (last) last.credits = mergeCredits([...(last.credits ?? []), ...pendingCredits.splice(0, pendingCredits.length)]);
       return;
@@ -354,21 +401,23 @@ export function simulateMatch(options: {
     const deadBallShare = 0.2 + profile.deadBall * 0.012 + direct * 0.06;
     if (random() < deadBallShare) {
       const roll = random();
-      if (roll < 0.18) attemptSetPiece(teamId, "sixtyFive", profile, minute);
-      else if (roll < 0.28) attemptSetPiece(teamId, "sideline", profile, minute);
-      else attemptSetPiece(teamId, "free", profile, minute);
+      if (roll < 0.18) attemptSetPiece(teamId, "sixtyFive", profile, minute, false);
+      else if (roll < 0.28) attemptSetPiece(teamId, "sideline", profile, minute, false);
+      else attemptSetPiece(teamId, roll >= 0.65 ? "longFree" : "shortFree", profile, minute, false);
       const last = events.at(-1);
       if (last) {
         last.credits = mergeCredits([
           ...(last.credits ?? []),
           ...pendingCredits.splice(0, pendingCredits.length),
-          ...passCredits(names.slice(6, 15), teamId, statRng, 1 + Math.floor(statRng() * 2)),
         ]);
       }
       return;
     }
 
     const playerName = pickForward(profile, names, random);
+    const hops = 2 + Math.floor((1 - direct) * 3);
+    const moved = passChain(names.slice(6, 15), teamId, statRng, hops, carrier);
+    const intoShooter = deliverTo(teamId, moved.carrier, playerName);
     const sweeperCut = oppTactics.shape === "sweeper" ? 0.62 : 1;
     const directGoal = 0.09 + direct * 0.09;
     const aerialGoal = direct * (profile.aerial - 12) * 0.006;
@@ -376,13 +425,12 @@ export function simulateMatch(options: {
       0.28,
       Math.max(0.05, (directGoal + aerialGoal + (profile.attack - 12) * 0.008) * sweeperCut),
     );
-    const attackPasses = passCredits(names.slice(6, 15), teamId, statRng, 2 + Math.floor((1 - direct) * 3));
-    const flush = (extra: StatCredit[]) => mergeCredits([...pendingCredits.splice(0, pendingCredits.length), ...attackPasses, ...extra]);
+    const flush = (extra: StatCredit[]) =>
+      mergeCredits([...pendingCredits.splice(0, pendingCredits.length), ...moved.credits, ...intoShooter, ...extra]);
 
     if (random() < goalChance) {
       if (random() < 0.3 + opp.defence * 0.008) {
         const keeper = opp.keeper?.name ?? "the goalkeeper";
-        const defendingId = teamId === options.homeId ? options.awayId : options.homeId;
         push({
           minute,
           teamId,
@@ -390,7 +438,7 @@ export function simulateMatch(options: {
           kind: "save",
           text: `Saved — ${keeper} keeps out ${playerName}.`,
           credits: flush([
-            { name: playerName, teamId, shots: 1, possessions: 1 },
+            { name: playerName, teamId, shots: 1 },
             ...(opp.keeper ? [{ name: keeper, teamId: defendingId, tacklesAttempted: 1, tacklesWon: 1 }] : []),
           ]),
         });
@@ -406,7 +454,7 @@ export function simulateMatch(options: {
         playerName,
         kind: "goal",
         text: `GOAL! ${playerName} finds the net.`,
-        credits: flush([{ name: playerName, teamId, shots: 1, scores: 1, possessions: 1 }]),
+        credits: flush([{ name: playerName, teamId, shots: 1, scores: 1 }]),
       });
       return;
     }
@@ -418,7 +466,7 @@ export function simulateMatch(options: {
         playerName,
         kind: "wide",
         text: `Wide from ${playerName}.`,
-        credits: flush([{ name: playerName, teamId, shots: 1, possessions: 1 }]),
+        credits: flush([{ name: playerName, teamId, shots: 1 }]),
       });
       if (direct > 0.55 && random() < 0.12 + direct * 0.12) {
         attemptSetPiece(teamId, "sixtyFive", profile, minute);
@@ -437,7 +485,7 @@ export function simulateMatch(options: {
       playerName,
       kind: "point",
       text: fromPlay,
-      credits: flush([{ name: playerName, teamId, shots: 1, scores: 1, possessions: 1 }]),
+      credits: flush([{ name: playerName, teamId, shots: 1, scores: 1 }]),
     });
   };
 
@@ -516,6 +564,8 @@ export function simulateMatch(options: {
     awaySheet,
     homeCondition: options.homeCondition,
     awayCondition: options.awayCondition,
+    homeTactics,
+    awayTactics,
   });
   const coachReport = buildCoachReport({
     clubId: options.clubId,

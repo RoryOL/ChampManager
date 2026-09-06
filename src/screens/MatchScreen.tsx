@@ -6,7 +6,7 @@ import { TacticControls } from "../components/TacticControls";
 import { compactName, sideLabel } from "../lib/display";
 import { momentumAt, scoreFromEvents } from "../lib/matchEngine";
 import { liveStats } from "../lib/matchStats";
-import { ratedSquad, swapPlayersInSheet } from "../lib/players";
+import { ratedSquad, sheetPlayers, swapPlayersInSheet } from "../lib/players";
 import { conditionFor, matchRatings } from "../lib/training";
 import { resolveMatchSides, teamById } from "../lib/resolve";
 import { formatScore } from "../lib/scoring";
@@ -65,10 +65,29 @@ export function MatchScreen({
 
   const squad = useMemo(() => ratedSquad(save.clubId), [save.clubId]);
   const byName = useMemo(() => new Map(squad.map((player) => [player.name, player])), [squad]);
+  const homeSquad = useMemo(() => (homeId ? ratedSquad(homeId) : []), [homeId]);
+  const awaySquad = useMemo(() => (awayId ? ratedSquad(awayId) : []), [awayId]);
+  const htXv = useMemo(() => sheetPlayers(save.clubId, htSheet), [htSheet, save.clubId]);
   const chart = liveStats(live.user, Math.max(live.cursor, 1), {
     home: homeId === save.clubId ? save.condition : undefined,
     away: awayId === save.clubId ? save.condition : undefined,
   });
+  const statsPanel = homeId && awayId ? (
+    <MatchStatsPanel
+      homeName={home ? compactName(home) : "Home"}
+      awayName={away ? compactName(away) : "Away"}
+      homeId={homeId}
+      awayId={awayId}
+      homeStats={chart.homeStats}
+      awayStats={chart.awayStats}
+      players={chart.players}
+      homeSquad={homeSquad}
+      awaySquad={awaySquad}
+      homeCondition={homeId === save.clubId ? save.condition : undefined}
+      awayCondition={awayId === save.clubId ? save.condition : undefined}
+      compact={live.phase !== "finished"}
+    />
+  ) : null;
 
   const tapHt = (name: string) => {
     if (!htPicked) {
@@ -134,8 +153,9 @@ export function MatchScreen({
       {live.phase === "half-time" ? (
         <div className="ht-panel">
           <h3>Half-time</h3>
-          <p className="hint">Change the dials or tap two names to make a substitution, then send them out again.</p>
-          <TacticControls tactics={htTactics} onChange={setHtTactics} compact />
+          <p className="hint">Ratings and live stats for both panels. Change dials or takers, tap two names to sub, then send them out.</p>
+          {statsPanel}
+          <TacticControls tactics={htTactics} onChange={setHtTactics} compact xv={htXv} />
           <ul className="player-list ht-list">
             {[...htSheet.starters, ...htSheet.subs].map((name) => {
               const player = byName.get(name);
@@ -172,14 +192,7 @@ export function MatchScreen({
               ))}
             </section>
           ) : null}
-          <MatchStatsPanel
-            homeName={home ? compactName(home) : "Home"}
-            awayName={away ? compactName(away) : "Away"}
-            homeStats={chart.homeStats}
-            awayStats={chart.awayStats}
-            players={chart.players}
-            compact={live.phase !== "finished"}
-          />
+          {statsPanel}
         </div>
       ) : (
         <ol className="commentary">

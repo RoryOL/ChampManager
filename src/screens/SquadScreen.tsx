@@ -7,7 +7,7 @@ import { formatPair, seasonStatsFor } from "../lib/matchStats";
 import { moodLabel, moodValue } from "../lib/mood";
 import { defaultSheet, designatedRoles, ratedSquad, sheetPlayers } from "../lib/players";
 import { FORMATION_ROWS } from "../lib/squads";
-import { boostTotal, conditionFor, isOvertrained, matchRatings, matchStat } from "../lib/training";
+import { boostTotal, conditionFor, fitnessOf, isOvertrained, matchRatings, matchStat } from "../lib/training";
 
 type Props = {
   save: GameSave;
@@ -20,8 +20,9 @@ type Props = {
 
 function roleTags(player: RatedPlayer, roles: ReturnType<typeof designatedRoles>, inXv: boolean): string[] {
   const tags: string[] = [];
-  if (inXv && roles.freeTaker === player.name) tags.push("Frees");
-  if (inXv && roles.sidelineTaker === player.name && roles.freeTaker !== player.name) tags.push("Sidelines");
+  if (inXv && roles.longFreeTaker === player.name) tags.push("Long frees");
+  if (inXv && roles.shortFreeTaker === player.name && roles.longFreeTaker !== player.name) tags.push("Short frees");
+  if (inXv && roles.sidelineTaker === player.name) tags.push("Sidelines");
   if (inXv && roles.puckoutKeeper === player.name) tags.push("Puck-outs");
   return tags;
 }
@@ -66,7 +67,7 @@ function PlayerDetail({
           <p>
             {LINE_LABELS[player.position]} · {match.overall}
             {overallDelta !== 0 ? ` (${formatDelta(overallDelta)} from training)` : ""}
-            {showCondition && condition ? ` · fatigue ${condition.fatigue}` : ""}
+            {showCondition && condition ? ` · fitness ${fitnessOf(condition)}` : ""}
           </p>
         </div>
         <b className={overallDelta > 0 ? "is-up" : overallDelta < 0 ? "is-down" : ""}>{match.overall}</b>
@@ -75,11 +76,11 @@ function PlayerDetail({
         <div className="attr-group">
           <h4>Condition</h4>
           <div className="attr-row">
-            <span>Fatigue</span>
+            <span>Match fitness</span>
             <div className="attr-bar">
-              <i className={isOvertrained(condition) ? "is-warn" : ""} style={{ width: `${condition.fatigue}%` }} />
+              <i className={isOvertrained(condition) ? "is-warn" : ""} style={{ width: `${fitnessOf(condition)}%` }} />
             </div>
-            <em>{condition.fatigue}</em>
+            <em>{fitnessOf(condition)}</em>
             <span className="delta" />
           </div>
           <div className="attr-row">
@@ -104,7 +105,7 @@ function PlayerDetail({
           </p>
           {trainingLifts.length > 0 ? <p className="form-line">Profile stats: {trainingLifts.join(" · ")}</p> : null}
           {isOvertrained(condition) ? (
-            <p className="warn">Overtrained — profile stats are down until you recover.</p>
+            <p className="warn">Overtrained — match fitness is too low, so profile stats are down until you recover.</p>
           ) : (
             <p className="hint hint--tight">
               Training can lift these numbers a little (up to +4). The bars are the current profile; green is the change
@@ -142,7 +143,7 @@ function PlayerDetail({
             <li>Possessions {season.possessions} · passes {formatPair(season.passesCompleted, season.passesAttempted)}</li>
             <li>Shots {formatPair(season.scores, season.shots)} · high fielding {formatPair(season.highFieldingWon, season.highFieldingAttempted)}</li>
             <li>Puck-outs won {season.puckoutsWon} · tackles {formatPair(season.tacklesWon, season.tacklesAttempted)}</li>
-            <li>Ground {season.groundCovered} km · fatigue {season.fatigue}</li>
+            <li>Ground {season.groundCovered} km · fitness {season.fitness}</li>
           </ul>
         )}
       </div>
@@ -171,7 +172,7 @@ export function SquadScreen({ save, teams, viewTeamId, onViewTeam, picked, onTap
     .filter((player): player is RatedPlayer => Boolean(player));
   const rest = squad.filter((player) => !sheet.starters.includes(player.name));
   const xv = sheetPlayers(viewTeamId, sheet);
-  const roles = designatedRoles(xv);
+  const roles = designatedRoles(xv, ownTeam ? save.tactics : undefined);
   const selected = picked ? byName.get(picked) : undefined;
   const detailRef = useRef<HTMLLIElement | null>(null);
 

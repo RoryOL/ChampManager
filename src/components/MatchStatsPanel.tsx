@@ -1,12 +1,20 @@
-import type { PlayerMatchStats, TeamMatchStats } from "../types";
+import { useState } from "react";
+import type { PlayerCondition, PlayerMatchStats, RatedPlayer, TeamMatchStats } from "../types";
 import { formatPair } from "../lib/matchStats";
+import { PlayerMatchTable } from "./PlayerMatchTable";
 
 type Props = {
   homeName: string;
   awayName: string;
+  homeId: string;
+  awayId: string;
   homeStats: TeamMatchStats;
   awayStats: TeamMatchStats;
   players: PlayerMatchStats[];
+  homeSquad: RatedPlayer[];
+  awaySquad: RatedPlayer[];
+  homeCondition?: Record<string, PlayerCondition>;
+  awayCondition?: Record<string, PlayerCondition>;
   compact?: boolean;
 };
 
@@ -28,8 +36,23 @@ function TeamRow({
   );
 }
 
-export function MatchStatsPanel({ homeName, awayName, homeStats, awayStats, players, compact = false }: Props) {
-  const shown = compact ? players.filter((player) => player.started || player.minutes > 0).slice(0, 10) : players;
+export function MatchStatsPanel({
+  homeName,
+  awayName,
+  homeId,
+  awayId,
+  homeStats,
+  awayStats,
+  players,
+  homeSquad,
+  awaySquad,
+  homeCondition,
+  awayCondition,
+  compact = false,
+}: Props) {
+  const [team, setTeam] = useState<"home" | "away">("home");
+  const homePlayers = players.filter((player) => player.teamId === homeId);
+  const awayPlayers = players.filter((player) => player.teamId === awayId);
   return (
     <div className="match-stats">
       <table className="stat-compare">
@@ -64,27 +87,25 @@ export function MatchStatsPanel({ homeName, awayName, homeStats, awayStats, play
             away={formatPair(awayStats.tacklesWon, awayStats.tacklesAttempted)}
           />
           <TeamRow label="Ground km" home={homeStats.groundCovered} away={awayStats.groundCovered} />
-          <TeamRow label="Fatigue" home={homeStats.fatigue} away={awayStats.fatigue} />
+          <TeamRow label="Fitness" home={homeStats.fitness} away={awayStats.fitness} />
           <TeamRow label="Overall" home={homeStats.overall} away={awayStats.overall} />
         </tbody>
       </table>
-      <h4>{compact ? "On the ball" : "Players"}</h4>
-      <ul className="player-stats">
-        {shown.map((player) => (
-          <li key={`${player.teamId}:${player.name}`}>
-            <strong>{player.name}</strong>
-            <span>
-              {player.started ? "XV" : "Bench"} · {player.minutes}&apos; · rating {player.rating} · overall {player.overall} ·
-              fatigue {player.fatigue}
-            </span>
-            <em>
-              Poss {player.possessions} · Pass {formatPair(player.passesCompleted, player.passesAttempted)} · Shots{" "}
-              {formatPair(player.scores, player.shots)} · Field {formatPair(player.highFieldingWon, player.highFieldingAttempted)}{" "}
-              · Puck-outs {player.puckoutsWon} · Tackles {formatPair(player.tacklesWon, player.tacklesAttempted)} · {player.groundCovered} km
-            </em>
-          </li>
-        ))}
-      </ul>
+      <div className="speed-row pane-row">
+        <button type="button" className={team === "home" ? "is-active" : ""} onClick={() => setTeam("home")}>
+          {homeName}
+        </button>
+        <button type="button" className={team === "away" ? "is-active" : ""} onClick={() => setTeam("away")}>
+          {awayName}
+        </button>
+      </div>
+      <PlayerMatchTable
+        teamName={team === "home" ? homeName : awayName}
+        squad={team === "home" ? homeSquad : awaySquad}
+        stats={team === "home" ? homePlayers : awayPlayers}
+        condition={team === "home" ? homeCondition : awayCondition}
+      />
+      {compact ? null : <p className="hint hint--tight">Swipe the table sideways for every rating and match stat.</p>}
     </div>
   );
 }

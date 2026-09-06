@@ -1,5 +1,6 @@
 import type { GameSave, Tactics } from "../types";
 import { TacticControls } from "../components/TacticControls";
+import { sheetPlayers } from "../lib/players";
 
 type Props = {
   save: GameSave;
@@ -7,13 +8,14 @@ type Props = {
 };
 
 export function TacticsScreen({ save, onChange }: Props) {
+  const xv = sheetPlayers(save.clubId, save.sheet);
   return (
     <div className="screen">
       <p className="hint">
-        Build-up, puck-outs and aggression are dials. Slide tackling from light to aggressive — you win more hooks, but
-        give away more frees and bookings.
+        Build-up, puck-outs, aggression and pressure are dials. High pressure and aggression win more tackles but cost
+        match fitness. Pick long-free, short-free and sideline takers from the fifteen.
       </p>
-      <TacticControls tactics={save.tactics} onChange={onChange} />
+      <TacticControls tactics={save.tactics} onChange={onChange} xv={xv} />
     </div>
   );
 }

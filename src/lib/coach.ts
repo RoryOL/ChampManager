@@ -1,5 +1,5 @@
 import type { MatchEvent, PlayerMatchStats, Tactics, TeamMatchStats } from "../types";
-import { aggressionLabel, buildLabel, puckoutLabel } from "./attributes";
+import { aggressionLabel, buildLabel, pressureLabel, puckoutLabel } from "./attributes";
 
 type CoachInput = {
   clubId?: string;
@@ -57,6 +57,9 @@ export function liveCoachTip(
   if (tactics.aggression < 28 && minute >= 40) {
     tips.push("We are too light in the tackle. They are running through hooks.");
   }
+  if (tactics.pressure >= 78 && minute >= 41) {
+    tips.push("The press is winning ball, but the legs are going. Drop the pressure a notch.");
+  }
   const next = tips.find((tip) => !already.has(tip));
   return next ?? null;
 }
@@ -112,6 +115,14 @@ export function buildCoachReport(input: CoachInput): string[] {
     }
   } else if (ourTactics.aggression <= 28 && them.tacklesWon < us.tacklesAttempted && us.tacklesWon + 3 < them.tacklesWon) {
     notes.push(`Too light in the tackle. ${they} broke the first hook too often. Step the aggression up a notch.`);
+  }
+
+  if (ourTactics.pressure >= 72) {
+    notes.push(
+      `Pressure was ${pressureLabel(ourTactics.pressure).toLowerCase()} — tackles ${us.tacklesWon} won, but match fitness took a hit. Use it in spells, not for the full hour.`,
+    );
+  } else if (ourTactics.pressure <= 28 && us.tacklesWon + 3 < them.tacklesWon) {
+    notes.push(`We sat off them. ${they} had too much time on the ball. Turn the pressure up.`);
   }
 
   if (us.shots >= 6 && rate(us.scores, us.shots) < 0.38) {

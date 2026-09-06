@@ -866,3 +866,81 @@ html.native-app .device {
   text-transform: uppercase;
   color: var(--saffron);
 }
+
+.taker-select {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 10px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.taker-select select {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--ink);
+  font: inherit;
+}
+
+.chart-scroll {
+  overflow-x: auto;
+  margin: 8px 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.player-chart {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.player-chart caption {
+  caption-side: top;
+  text-align: left;
+  padding: 8px 10px 4px;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--saffron);
+}
+
+.player-chart th,
+.player-chart td {
+  padding: 5px 6px;
+  text-align: right;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.player-chart thead th {
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.player-chart th.is-sticky,
+.player-chart td.is-sticky {
+  position: sticky;
+  left: 0;
+  text-align: left;
+  background: var(--surface);
+  z-index: 1;
+  max-width: 108px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.player-chart tbody th.is-sticky {
+  font-weight: 600;
+  color: var(--ink);
+}
+
