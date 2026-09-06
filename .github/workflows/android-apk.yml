@@ -37,6 +37,11 @@ jobs:
       - name: Commit sideload APK
         if: ${{ github.event_name == 'workflow_dispatch' || !startsWith(github.event.head_commit.message, 'Refresh the sideload APK') }}
         run: |
+          git fetch origin main
+          if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]; then
+            echo "main has moved on; skip APK commit from this stale run"
+            exit 0
+          fi
           mkdir -p releases
           cp android/app/build/outputs/apk/debug/app-debug.apk releases/ChampManager.apk
           git add releases/ChampManager.apk
@@ -47,4 +52,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "Refresh the sideload APK"
+          git pull --rebase origin main
           git push
