@@ -396,6 +396,7 @@ export type MatchLive = {
   homeSecond?: HalfPlan;
   awaySecond?: HalfPlan;
   combined?: SimulatedMatch;
+  injuries?: Record<string, import("./lib/injuries").RolledInjury[]>;
 };
 
 export type WeekState = {
@@ -403,6 +404,8 @@ export type WeekState = {
   deadlineAt: number | null;
   ready: Record<string, { at: number }>;
   lives: Record<string, MatchLive>;
+  batchLabel?: string;
+  batchMatchIds?: string[];
 };
 
 export type Campaign = {

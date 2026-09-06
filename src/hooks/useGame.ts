@@ -462,7 +462,7 @@ export function useGame() {
         cursor: startSecond ? Math.max(halfIndex, 1) : 0,
         phase: startSecond ? "second" : "first",
         openingSheet: save.sheet,
-        injuries: [],
+        injuries: row.injuries?.[activeSeat.clubId] ?? [],
       });
       return;
     }
@@ -641,7 +641,16 @@ export function useGame() {
         if (row?.combined && waiting.length === 0) {
           const halfIndex = row.combined.events.findIndex((event) => event.kind === "half") + 1;
           if (skipPlayback) {
-            finishLive({ ...live, user: row.combined, phase: "finished", cursor: row.combined.events.length }, { sheet });
+            finishLive(
+              {
+                ...live,
+                user: row.combined,
+                phase: "finished",
+                cursor: row.combined.events.length,
+                injuries: row.injuries?.[activeSeat.clubId] ?? live.injuries,
+              },
+              { sheet },
+            );
             return;
           }
           setLive({
@@ -649,6 +658,7 @@ export function useGame() {
             user: row.combined,
             phase: "second",
             cursor: Math.max(halfIndex, 1),
+            injuries: row.injuries?.[activeSeat.clubId] ?? live.injuries,
           });
           return;
         }

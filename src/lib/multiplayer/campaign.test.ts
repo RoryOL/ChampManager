@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { applyInjury, isInjured } from "../injuries";
 import { matchPlayed } from "../scoring";
 import { DEFAULT_TACTICS, defaultSheet } from "../players";
 import { PRESEASON_WEEKS } from "../training";
@@ -110,6 +111,16 @@ describe("multiplayer campaign", () => {
     const finished = championshipOf(campaign).matches.find((match) => match.id === live!.matchId);
     expect(finished && matchPlayed(finished)).toBe(true);
     expect(liveForClub(campaign, "ballyea")?.combined?.events.some((event) => event.kind === "full")).toBe(true);
+
+    const inbox = campaign.clubs.ballyea.inbox;
+    expect(inbox.some((item) => item.kind === "match" && item.matchId === live!.matchId)).toBe(true);
+    expect(inbox.some((item) => item.kind === "press" && item.matchId === live!.matchId)).toBe(true);
+    expect(inbox.some((item) => item.title.startsWith("Elsewhere:"))).toBe(true);
+    expect(campaign.clubs.ballyea.trainingDue).toBe(true);
+    const injured = Object.values(campaign.clubs.ballyea.condition).some((row) => isInjured(row));
+    if (injured) {
+      expect(inbox.some((item) => item.kind === "injury")).toBe(true);
+    }
   });
 
   it("lets the host force the rest of a human match after half-time", () => {
@@ -120,5 +131,37 @@ describe("multiplayer campaign", () => {
     campaign = forceAdvance(campaign, "host", NOW + 203);
     const finished = championshipOf(campaign).matches.find((match) => match.id === matchId);
     expect(finished && matchPlayed(finished)).toBe(true);
+  });
+
+  it("ticks training injuries off and writes a recovery note", () => {
+    let campaign = startedCampaign();
+    const name = campaign.clubs.ballyea.sheet.starters[0]!;
+    campaign = {
+      ...campaign,
+      clubs: {
+        ...campaign.clubs,
+        ballyea: {
+          ...campaign.clubs.ballyea,
+          condition: applyInjury(campaign.clubs.ballyea.condition, name, {
+            weeksLeft: 1,
+            durationWeeks: 1,
+            ailment: "corked thigh",
+            source: "match",
+          }),
+        },
+      },
+    };
+    campaign = trainClub(campaign, "ballyea", "skills", NOW + 10);
+    expect(campaign.clubs.ballyea.inbox.some((item) => item.kind === "recovery" && item.playerName === name)).toBe(true);
+    expect(isInjured(campaign.clubs.ballyea.condition[name])).toBe(false);
+  });
+
+  it("puts a chairman welcome in each seat's inbox when the championship starts", () => {
+    const campaign = startedCampaign();
+    expect(campaign.clubs.ballyea.inbox.some((item) => item.kind === "chairman")).toBe(true);
+    expect(campaign.clubs["inagh-kilnamona"].inbox.some((item) => item.kind === "chairman")).toBe(true);
+    expect(campaign.clubs.ballyea.inbox.find((item) => item.kind === "chairman")?.id).not.toBe(
+      campaign.clubs["inagh-kilnamona"].inbox.find((item) => item.kind === "chairman")?.id,
+    );
   });
 });
