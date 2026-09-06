@@ -21,6 +21,7 @@ import { championshipFromSave } from "../gameStorage";
 import { momentumAt, simulateMatch } from "../matchEngine";
 import { combineHalves, reportFromSim } from "../matchStats";
 import { applyMatchMood } from "../mood";
+import { ambitionFor, newsItem } from "../news";
 import { clubTactics, DEFAULT_TACTICS, defaultSheet, ratedSquad } from "../players";
 import { resolveMatchSides, teamById } from "../resolve";
 import { nextOpenBatch } from "../schedule";
@@ -200,7 +201,7 @@ export function startCampaign(
 export function saveFromCampaign(campaign: Campaign, clubId: string): GameSave {
   const club = campaign.clubs[clubId] ?? newClub(clubId);
   return {
-    version: 4,
+    version: 5,
     clubId,
     seed: campaign.seed,
     tactics: club.tactics,
@@ -212,6 +213,7 @@ export function saveFromCampaign(campaign: Campaign, clubId: string): GameSave {
     condition: club.condition,
     trainingDue: club.trainingDue,
     reports: campaign.reports,
+    ambition: ambitionFor(clubId).target,
   };
 }
 
@@ -274,7 +276,15 @@ function applyClubTraining(campaign: Campaign, clubId: string, focus: TrainingFo
   const title = campaign.phase === "preseason" ? `Preseason week ${campaign.preseasonWeek} session` : "Midweek session";
   const nextClub = pushInbox(
     { ...club, condition: result.condition, trainingDue: false },
-    [{ id: newsId(now), date, title, body: result.summary }],
+    [
+      newsItem({
+        id: newsId(now),
+        kind: "training",
+        date,
+        title,
+        body: result.summary,
+      }),
+    ],
   );
   let next = withClub(campaign, clubId, nextClub);
   if (campaign.phase === "preseason") {
@@ -378,12 +388,13 @@ function lockPreseason(campaign: Campaign, now: number): Campaign {
       clubs[seat.clubId] = pushInbox(
         { ...club, trainingDue: false },
         [
-          {
+          newsItem({
             id: newsId(now),
+            kind: "training",
             date: "2026-07-23",
             title: "Championship week",
             body: "Preseason is over. Pick your fifteen — the first championship day waits on every manager.",
-          },
+          }),
         ],
       );
     } else {
@@ -480,17 +491,27 @@ function finishSim(campaign: Campaign, sim: SimulatedMatch, first: SimulatedMatc
       clubs[seat.clubId] = pushInbox(
         { ...club, condition, trainingDue: true },
         [
-          {
+          newsItem({
             id: newsId(Date.now()),
+            kind: "match",
             date,
             title: headline,
             body: `${homeTeam ? compactName(homeTeam) : "Home"} ${formatScoreWithTotal(sim.homeScore)} to ${formatScoreWithTotal(sim.awayScore)}. Coach: ${sim.coachReport.join(" ")}`,
             matchId: sim.matchId,
-          },
+          }),
         ],
       );
     } else {
-      clubs[seat.clubId] = pushInbox(club, [{ id: newsId(Date.now()), date, title: headline, body: elsewhere, matchId: sim.matchId }]);
+      clubs[seat.clubId] = pushInbox(club, [
+        newsItem({
+          id: newsId(Date.now()),
+          kind: "match",
+          date,
+          title: headline,
+          body: elsewhere,
+          matchId: sim.matchId,
+        }),
+      ]);
     }
   }
   return {

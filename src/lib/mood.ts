@@ -25,6 +25,24 @@ export function moodAdjust(condition: PlayerCondition): number {
   return 0;
 }
 
+export function applyNewsMood(
+  condition: Record<string, PlayerCondition>,
+  names: string[],
+  delta: number,
+  note: string,
+): Record<string, PlayerCondition> {
+  const next = { ...condition };
+  for (const name of names) {
+    const current = { ...(next[name] ?? { fatigue: 0, sharpness: 38, mood: 58 }) };
+    next[name] = {
+      ...current,
+      mood: clampMood(moodValue(current) + delta),
+      moodNote: note,
+    };
+  }
+  return next;
+}
+
 export function starterOutOfPosition(player: RatedPlayer, index: number): boolean {
   const line = XV_SLOTS[index] ?? player.position;
   return player.ratings.familiarity[line] < 12;

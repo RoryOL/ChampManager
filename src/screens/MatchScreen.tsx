@@ -11,6 +11,7 @@ import { ShotMap } from "../components/ShotMap";
 import { WeatherBanner } from "../components/WeatherBanner";
 import { liveStats } from "../lib/matchStats";
 import { ratedSquad, sheetPlayers, swapPlayersInSheet } from "../lib/players";
+import { injuredNamesFromEvents, isInjured, sitInjuredPlayers } from "../lib/injuries";
 import { conditionFor, matchRatings } from "../lib/training";
 import { resolveMatchSides, teamById } from "../lib/resolve";
 import { formatScore } from "../lib/scoring";
@@ -58,7 +59,7 @@ export function MatchScreen({
   const [speed, setSpeed] = useState<(typeof SPEEDS)[number]["id"]>("slow");
   const [pane, setPane] = useState<"call" | "stats">("call");
   const [htTactics, setHtTactics] = useState<Tactics>(save.tactics);
-  const [htSheet, setHtSheet] = useState<TeamSheet>(save.sheet);
+  const [htSheet, setHtSheet] = useState<TeamSheet>(live.openingSheet);
   const [htPicked, setHtPicked] = useState<string | null>(null);
   const interval = SPEEDS.find((item) => item.id === speed)?.ms ?? 1100;
   const playing = live.phase === "first" || live.phase === "second";
@@ -78,6 +79,13 @@ export function MatchScreen({
   const homeSquad = useMemo(() => (homeId ? ratedSquad(homeId) : []), [homeId]);
   const awaySquad = useMemo(() => (awayId ? ratedSquad(awayId) : []), [awayId]);
   const htXv = useMemo(() => sheetPlayers(save.clubId, htSheet), [htSheet, save.clubId]);
+
+  useEffect(() => {
+    if (live.phase !== "half-time") return;
+    const hurt = injuredNamesFromEvents(live.user.events.slice(0, live.cursor), save.clubId);
+    if (hurt.length === 0) return;
+    setHtSheet((current) => sitInjuredPlayers(current, squad, save.condition, hurt));
+  }, [live.cursor, live.phase, live.user.events, save.clubId, save.condition, squad]);
   const chart = liveStats(live.user, Math.max(live.cursor, 1), {
     home: homeId === save.clubId ? save.condition : undefined,
     away: awayId === save.clubId ? save.condition : undefined,
@@ -108,6 +116,7 @@ export function MatchScreen({
     if (kind === "red") return "is-card is-red";
     if (kind === "booking") return "is-card is-yellow";
     if (kind === "coach" || kind === "half") return "is-coach";
+    if (kind === "injury") return "is-injury";
     return "is-play";
   };
 
@@ -118,6 +127,11 @@ export function MatchScreen({
     }
     if (htPicked === name) {
       setHtPicked(null);
+      return;
+    }
+    const inSheet = (player: string) => htSheet.starters.includes(player) || htSheet.subs.includes(player);
+    if ((isInjured(save.condition[name]) && !inSheet(name)) || (isInjured(save.condition[htPicked]) && !inSheet(htPicked))) {
+      setHtPicked(name);
       return;
     }
     setHtSheet(swapPlayersInSheet(htSheet, htPicked, name));

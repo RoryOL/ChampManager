@@ -9,6 +9,7 @@ import { moodLabel, moodValue } from "../lib/mood";
 import { defaultSheet, designatedRoles, ratedSquad, sheetPlayers } from "../lib/players";
 import { FORMATION_ROWS } from "../lib/squads";
 import { boostTotal, conditionFor, fitnessOf, isOvertrained, matchRatings, matchStat } from "../lib/training";
+import { injuryLine, isInjured } from "../lib/injuries";
 
 type Props = {
   save: GameSave;
@@ -107,6 +108,11 @@ function PlayerDetail({
           {trainingLifts.length > 0 ? <p className="form-line">Profile stats: {trainingLifts.join(" · ")}</p> : null}
           {isOvertrained(condition) ? (
             <p className="warn">Overtrained — match fitness is too low, so profile stats are down until you recover.</p>
+          ) : isInjured(condition) ? (
+            <p className="warn">
+              Injured — {condition.injury ? injuryLine(condition.injury) : "sidelined"}. He is out of the fifteen until
+              he comes back.
+            </p>
           ) : (
             <p className="hint hint--tight">
               Training can lift these numbers a little (up to +4). Younger players take the work better and get match
@@ -271,6 +277,9 @@ export function SquadScreen({ save, teams, viewTeamId, onViewTeam, picked, onTap
                     {player.position} · {player.age} · {GRADE_LABEL[player.grade]}
                     {sheet.starters.includes(player.name) ? " · XV" : " · Bench"}
                     {roleTags(player, roles, sheet.starters.includes(player.name)).map((tag) => ` · ${tag}`)}
+                    {ownTeam && isInjured(conditionFor(player.name, save.condition))
+                      ? ` · Out · ${injuryLine(conditionFor(player.name, save.condition).injury!)}`
+                      : ""}
                     {ownTeam && isOvertrained(conditionFor(player.name, save.condition)) ? " · Tired" : ""}
                     {ownTeam && boostTotal(conditionFor(player.name, save.condition)) > 0 ? " · In form" : ""}
                   </em>

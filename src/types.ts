@@ -158,6 +158,13 @@ export type AttributeBoosts = Partial<
   Record<Exclude<keyof PlayerRatings, "familiarity" | "overall">, number>
 >;
 
+export type PlayerInjury = {
+  weeksLeft: number;
+  durationWeeks: number;
+  ailment: string;
+  source: "match" | "training";
+};
+
 export type PlayerCondition = {
   fatigue: number;
   sharpness: number;
@@ -165,18 +172,30 @@ export type PlayerCondition = {
   moodNote?: string;
   /** Small training lifts on 1–20 profile stats. Natural ability is the unboosted baseline. */
   boosts?: AttributeBoosts;
+  injury?: PlayerInjury;
 };
 
 export type TrainingFocus = "fitness" | "skills" | "setpieces" | "challenge" | "recovery";
 
 export type CalendarPhase = "preseason" | "season";
 
+export type NewsKind = "chairman" | "match" | "press" | "injury" | "training" | "recovery";
+
+export type NewsTone = "positive" | "negative" | "neutral";
+
+export type AmbitionTarget = "canon" | "final" | "semi" | "quarter" | "group";
+
 export type NewsItem = {
   id: string;
+  kind: NewsKind;
+  source: string;
   title: string;
   body: string;
   date: string;
   matchId?: string;
+  playerName?: string;
+  read?: boolean;
+  tone?: NewsTone;
 };
 
 export type ShotKind = "point" | "goal" | "wide" | "save" | "free" | "sixtyFive" | "sideline";
@@ -216,6 +235,7 @@ export type MatchEventKind =
   | "puckout"
   | "turnover"
   | "coach"
+  | "injury"
   | "half"
   | "full";
 
@@ -331,7 +351,7 @@ export type TeamSheet = {
 };
 
 export type GameSave = {
-  version: 4;
+  version: 5;
   clubId: string;
   seed: number;
   tactics: Tactics;
@@ -343,6 +363,7 @@ export type GameSave = {
   condition: Record<string, PlayerCondition>;
   trainingDue: boolean;
   reports: Record<string, MatchReport>;
+  ambition: AmbitionTarget;
 };
 
 export type LivePhase = "first" | "half-time" | "half-wait" | "second" | "finished";

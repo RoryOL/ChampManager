@@ -3,7 +3,7 @@ import { seedChampionship } from "../data/championship";
 import { compactName } from "../lib/display";
 import { momentumAt, simulateMatch } from "../lib/matchEngine";
 import { combineHalves, reportFromSim } from "../lib/matchStats";
-import { applyMatchMood } from "../lib/mood";
+import { applyMatchMood, applyNewsMood } from "../lib/mood";
 import {
   addSeat,
   championshipOf,
@@ -41,7 +41,29 @@ import {
 import { clubTactics, defaultSheet, ratedSquad, swapPlayersInSheet } from "../lib/players";
 import { resolveMatchSides, teamById } from "../lib/resolve";
 import { nextBatch } from "../lib/schedule";
-import { formatScore, formatScoreWithTotal, matchPlayed, scoreTotal, stageLabel } from "../lib/scoring";
+import { formatScore, matchPlayed, scoreTotal, stageLabel } from "../lib/scoring";
+import {
+  applyInjury,
+  injuredNamesFromEvents,
+  insertInjuryEvents,
+  rollMatchInjuries,
+  rollTrainingInjuries,
+  sitInjuredPlayers,
+  tickInjuries,
+  type RolledInjury,
+} from "../lib/injuries";
+import {
+  chairmanAfterMatch,
+  chairmanWelcome,
+  elsewhereRoundup,
+  injuryNews,
+  localPressItem,
+  markNewsRead,
+  matchReportItem,
+  newsItem,
+  remainingWeeks,
+  recoveryNews,
+} from "../lib/news";
 import {
   applyMatchFatigue,
   applyTraining,
@@ -82,10 +104,33 @@ export type LiveMatch = {
   cursor: number;
   phase: LivePhase;
   openingSheet: TeamSheet;
+  injuries: RolledInjury[];
 };
 
-function newsId(): string {
-  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+function decorateUserMatch(
+  sim: SimulatedMatch,
+  save: GameSave,
+  championship: Championship,
+  period: "first" | "second" | "full",
+): { sim: SimulatedMatch; injuries: RolledInjury[] } {
+  if (sim.homeId !== save.clubId && sim.awayId !== save.clubId) {
+    return { sim, injuries: [] };
+  }
+  const squad = ratedSquad(save.clubId);
+  const injuries = rollMatchInjuries({
+    clubId: save.clubId,
+    squad,
+    condition: save.condition,
+    seed: save.seed,
+    matchId: sim.matchId,
+    period,
+    remainingWeeks: remainingWeeks(save, championship, save.clubId),
+    teamId: save.clubId,
+    played: sim.players
+      .filter((row) => row.teamId === save.clubId)
+      .map((row) => ({ name: row.name, minutes: row.minutes, started: row.started })),
+  });
+  return { sim: insertInjuryEvents(sim, injuries), injuries };
 }
 
 function localSeatsFor(campaign: Campaign, selfId: string): Seat[] {
@@ -160,13 +205,15 @@ export function useGame() {
   const takeCharge = useCallback((clubId: string) => {
     const club = teamById(seedChampionship, clubId);
     const started = newSave(clubId);
-    const welcome: NewsItem = {
-      id: newsId(),
-      date: PRESEASON_DATES[0],
-      title: `Welcome to ${club?.name ?? "the club"}`,
-      body: `Preseason is underway. Six weeks of training before Round 1. Work the panel, watch match fitness, then set your championship fifteen.`,
-    };
-    commitSolo(withInbox(started, [welcome]));
+    if (!club) {
+      commitSolo(started);
+      setLive(null);
+      setPicked(null);
+      setViewTeamId(clubId);
+      return;
+    }
+    const welcome = chairmanWelcome({ club, seed: started.seed, date: PRESEASON_DATES[0] });
+    commitSolo(withInbox({ ...started, ambition: welcome.ambition }, [welcome.item]));
     setLive(null);
     setPicked(null);
     setViewTeamId(clubId);
@@ -299,13 +346,20 @@ export function useGame() {
         setPicked(null);
         return;
       }
-      if (!editingOwnTeam) {
+      if (!editingOwnTeam || !save) {
+        setPicked(name);
+        return;
+      }
+      const inSheet = (player: string) => save.sheet.starters.includes(player) || save.sheet.subs.includes(player);
+      const pickedOut = Boolean(save.condition[picked]?.injury && save.condition[picked]?.injury?.weeksLeft);
+      const nameOut = Boolean(save.condition[name]?.injury && save.condition[name]?.injury?.weeksLeft);
+      if ((nameOut && !inSheet(name)) || (pickedOut && !inSheet(picked))) {
         setPicked(name);
         return;
       }
       swapPlayers(picked, name);
     },
-    [picked, save?.clubId, swapPlayers, viewTeamId],
+    [picked, save, swapPlayers, viewTeamId],
   );
 
   const passDevice = useCallback((playerId: string) => {
@@ -322,6 +376,9 @@ export function useGame() {
       const batch = nextBatch(championship, save.clubId);
       if (!batch) return null;
 
+      const squad = ratedSquad(save.clubId);
+      const userSheet = sitInjuredPlayers(save.sheet, squad, save.condition);
+      let injuries: RolledInjury[] = [];
       const simulated = batch.matches
         .map((match) => {
           const { homeId, awayId } = resolveMatchSides(championship, match);
@@ -329,12 +386,12 @@ export function useGame() {
           const isUser = homeId === save.clubId || awayId === save.clubId;
           const homeTeam = teamById(championship, homeId);
           const awayTeam = teamById(championship, awayId);
-          return simulateMatch({
+          const sim = simulateMatch({
             matchId: match.id,
             homeId,
             awayId,
-            homeSheet: homeId === save.clubId ? save.sheet : defaultSheet(homeId),
-            awaySheet: awayId === save.clubId ? save.sheet : defaultSheet(awayId),
+            homeSheet: homeId === save.clubId ? userSheet : defaultSheet(homeId),
+            awaySheet: awayId === save.clubId ? userSheet : defaultSheet(awayId),
             homeTactics: homeId === save.clubId ? save.tactics : clubTactics(homeId),
             awayTactics: awayId === save.clubId ? save.tactics : clubTactics(awayId),
             homeCondition: homeId === save.clubId ? save.condition : undefined,
@@ -345,6 +402,10 @@ export function useGame() {
             period: isUser && mode === "first" ? "first" : "full",
             seed: save.seed,
           });
+          if (!isUser) return sim;
+          const decorated = decorateUserMatch(sim, save, championship, mode === "first" ? "first" : "full");
+          injuries = decorated.injuries;
+          return decorated.sim;
         })
         .filter((item): item is SimulatedMatch => Boolean(item));
 
@@ -359,8 +420,9 @@ export function useGame() {
           label: batch.label,
           match: batch.matches[0],
           cursor: 0,
-          phase: "finished",
-          openingSheet: save.sheet,
+          phase: "finished" as const,
+          openingSheet: userSheet,
+          injuries,
         };
       }
       if (!user || !batch.userMatch) return null;
@@ -371,7 +433,8 @@ export function useGame() {
         match: batch.userMatch,
         cursor: 0,
         phase: mode === "first" ? "first" : "finished",
-        openingSheet: save.sheet,
+        openingSheet: userSheet,
+        injuries,
       };
     },
     [campaign, championship, save],
@@ -399,6 +462,7 @@ export function useGame() {
         cursor: startSecond ? Math.max(halfIndex, 1) : 0,
         phase: startSecond ? "second" : "first",
         openingSheet: save.sheet,
+        injuries: [],
       });
       return;
     }
@@ -447,46 +511,118 @@ export function useGame() {
       const sides = userMatch ? resolveMatchSides(championship, userMatch) : { homeId: null, awayId: null };
       const home = sides.homeId ? teamById(championship, sides.homeId) : undefined;
       const away = sides.awayId ? teamById(championship, sides.awayId) : undefined;
+      const opponent = sides.homeId === base.clubId ? away : home;
       const ourScore =
         sides.homeId === base.clubId ? current.user.homeScore : current.user.awayScore;
       const theirScore =
         sides.homeId === base.clubId ? current.user.awayScore : current.user.homeScore;
       const result =
         scoreTotal(ourScore) > scoreTotal(theirScore) ? "win" : scoreTotal(ourScore) < scoreTotal(theirScore) ? "loss" : "draw";
+      const squad = ratedSquad(base.clubId);
       next = {
         ...next,
         condition: applyMatchMood(
           next.condition,
-          ratedSquad(base.clubId),
+          squad,
           current.openingSheet,
           sheet,
           current.user.players,
           result,
         ),
       };
-      const coach = current.user.coachReport.join(" ");
-      const items: NewsItem[] = [
-        {
-          id: newsId(),
-          date: userMatch?.date ?? "",
-          title: `${home?.name ?? "Home"} ${formatScore(current.user.homeScore)} ${away?.name ?? "Away"} ${formatScore(current.user.awayScore)}`,
-          body: `${club?.name} ${current.label.toLowerCase()} finishes ${formatScoreWithTotal(current.user.homeScore)} to ${formatScoreWithTotal(current.user.awayScore)}. Coach: ${coach}`,
-          matchId: current.user.matchId,
-        },
-      ];
-      for (const other of current.others) {
+      for (const rolled of current.injuries) {
+        next = { ...next, condition: applyInjury(next.condition, rolled.name, rolled.injury) };
+      }
+      next = {
+        ...next,
+        sheet: sitInjuredPlayers(sheet, squad, next.condition),
+      };
+      const date = userMatch?.date ?? "";
+      const items: NewsItem[] = [];
+      if (club && home && away) {
+        items.push(
+          matchReportItem({
+            clubId: base.clubId,
+            clubName: club.name,
+            homeName: home.name,
+            awayName: away.name,
+            homeScore: current.user.homeScore,
+            awayScore: current.user.awayScore,
+            sim: current.user,
+            date,
+            seed: base.seed,
+            stageLabel: userMatch ? stageLabel(userMatch.stage, userMatch.round) : current.label,
+          }),
+        );
+        if (opponent) {
+          const chair = chairmanAfterMatch({
+            club,
+            opponent,
+            ourScore,
+            theirScore,
+            result,
+            date,
+            seed: base.seed,
+            matchId: current.user.matchId,
+            ambition: next.ambition,
+          });
+          if (chair) items.push(chair);
+          const press = localPressItem({
+            club,
+            opponent,
+            ourScore,
+            theirScore,
+            result,
+            date,
+            seed: base.seed,
+            matchId: current.user.matchId,
+            ambition: next.ambition,
+            played: next.matches.filter((match) => match.homeScore && match.awayScore).length,
+          });
+          items.push(press);
+          if (press.tone === "negative") {
+            next = {
+              ...next,
+              condition: applyNewsMood(
+                next.condition,
+                squad.map((player) => player.name),
+                -7,
+                "The local paper went after the team.",
+              ),
+            };
+          }
+        }
+      }
+      for (const rolled of current.injuries) {
+        items.push(
+          injuryNews({
+            rolled,
+            date,
+            seed: base.seed,
+            key: current.user.matchId,
+            clubName: club?.name ?? "the club",
+          }),
+        );
+      }
+      const otherLines = current.others.map((other) => {
         const match = championship.matches.find((item) => item.id === other.matchId);
         const otherSides = match ? resolveMatchSides(championship, match) : { homeId: null, awayId: null };
         const otherHome = otherSides.homeId ? teamById(championship, otherSides.homeId) : undefined;
         const otherAway = otherSides.awayId ? teamById(championship, otherSides.awayId) : undefined;
-        items.push({
-          id: newsId(),
-          date: match?.date ?? "",
-          title: `${otherHome?.name ?? "Home"} ${formatScore(other.homeScore)} ${otherAway?.name ?? "Away"} ${formatScore(other.awayScore)}`,
-          body: `${match ? stageLabel(match.stage, match.round) : current.label} elsewhere is in.`,
-          matchId: other.matchId,
-        });
-      }
+        const stars = other.players
+          .filter((row) => row.started)
+          .sort((a, b) => b.rating - a.rating)
+          .slice(0, 1);
+        const star = stars[0] ? ` ${stars[0].name} stood out.` : "";
+        return `${otherHome?.name ?? "Home"} ${formatScore(other.homeScore)} ${otherAway?.name ?? "Away"} ${formatScore(other.awayScore)}.${star}`;
+      });
+      const roundup = elsewhereRoundup({
+        lines: otherLines,
+        date,
+        seed: base.seed,
+        label: current.label,
+      });
+      if (roundup) items.push(roundup);
       next = withInbox(next, items);
       commitSolo(next);
       setLive({ ...current, cursor: current.user.events.length, phase: "finished" });
@@ -519,7 +655,10 @@ export function useGame() {
         setLive({ ...live, phase: "half-wait" });
         return;
       }
-      commitSolo(withSheet(withTactics(save, tactics), sheet));
+      const squad = ratedSquad(save.clubId);
+      const hurt = injuredNamesFromEvents(live.user.events, save.clubId);
+      const workingSheet = sitInjuredPlayers(sheet, squad, save.condition, hurt);
+      commitSolo(withSheet(withTactics(save, tactics), workingSheet));
       const { homeId, awayId } = resolveMatchSides(championship, live.match);
       if (!homeId || !awayId) return;
       const first = live.user;
@@ -529,8 +668,8 @@ export function useGame() {
         matchId: first.matchId,
         homeId,
         awayId,
-        homeSheet: homeId === save.clubId ? sheet : defaultSheet(homeId),
-        awaySheet: awayId === save.clubId ? sheet : defaultSheet(awayId),
+        homeSheet: homeId === save.clubId ? workingSheet : defaultSheet(homeId),
+        awaySheet: awayId === save.clubId ? workingSheet : defaultSheet(awayId),
         homeTactics: homeId === save.clubId ? tactics : clubTactics(homeId),
         awayTactics: awayId === save.clubId ? tactics : clubTactics(awayId),
         homeCondition: homeId === save.clubId ? save.condition : undefined,
@@ -545,20 +684,26 @@ export function useGame() {
         seed: save.seed,
         climate: first.climate,
       });
-      const combined = combineHalves(first, second, {
+      const decorated = decorateUserMatch(second, save, championship, "second");
+      const combined = combineHalves(first, decorated.sim, {
         clubId: save.clubId,
         homeName: homeTeam ? compactName(homeTeam) : "Home",
         awayName: awayTeam ? compactName(awayTeam) : "Away",
       });
+      const injuries = [...live.injuries, ...decorated.injuries];
       if (skipPlayback) {
-        const base = withSheet(withTactics(save, tactics), sheet);
-        finishLive({ ...live, user: combined, phase: "finished", cursor: combined.events.length }, { sheet, base });
+        const base = withSheet(withTactics(save, tactics), workingSheet);
+        finishLive(
+          { ...live, user: combined, phase: "finished", cursor: combined.events.length, injuries },
+          { sheet: workingSheet, base },
+        );
         return;
       }
       setLive({
         ...live,
         user: combined,
         phase: "second",
+        injuries,
       });
     },
     [activeSeat, campaign, championship, commitCampaign, commitSolo, finishLive, live, save],
@@ -624,16 +769,37 @@ export function useGame() {
         return;
       }
       const squad = ratedSquad(save.clubId);
-      const result = applyTraining(squad, save.condition, focus);
+      const club = teamById(championship, save.clubId);
       const date =
         save.phase === "preseason"
           ? (PRESEASON_DATES[save.preseasonWeek - 1] ?? PRESEASON_DATES.at(-1) ?? "")
           : championship.matches.find((match) => !matchPlayed(match))?.date ?? "";
+      const ticked = tickInjuries(save.condition, squad);
+      const trained = applyTraining(squad, ticked.condition, focus);
+      const weeks = remainingWeeks(save, championship, save.clubId);
+      const freshInjuries = rollTrainingInjuries({
+        squad,
+        condition: trained.condition,
+        focus,
+        seed: save.seed,
+        weekKey: `${save.phase}-${save.preseasonWeek}-${date}`,
+        remainingWeeks: weeks,
+      });
+      let condition = trained.condition;
+      for (const rolled of freshInjuries) {
+        condition = applyInjury(condition, rolled.name, rolled.injury);
+      }
+      const sheet = sitInjuredPlayers(save.sheet, squad, condition);
       let next: GameSave = {
         ...save,
-        condition: result.condition,
+        condition,
+        sheet,
         trainingDue: false,
       };
+      const items: NewsItem[] = ticked.recovered.map((name) =>
+        recoveryNews({ name, date, seed: save.seed }),
+      );
+      const trainingBody = trained.summary;
       if (save.phase === "preseason") {
         const week = save.preseasonWeek + 1;
         if (week > PRESEASON_WEEKS) {
@@ -643,38 +809,73 @@ export function useGame() {
             preseasonWeek: week,
             trainingDue: false,
           };
-          next = withInbox(next, [
-            {
-              id: newsId(),
+          items.push(
+            newsItem({
+              id: `${save.seed}-preseason-done`,
+              kind: "training",
               date: "2026-07-23",
               title: "Championship week",
-              body: result.summary + " Preseason is over. Pick your fifteen — Round 1 is next.",
-            },
-          ]);
+              body: `${trainingBody} Preseason is over. Pick your fifteen — Round 1 is next.`,
+            }),
+          );
         } else {
           next = { ...next, preseasonWeek: week, trainingDue: true };
-          next = withInbox(next, [
-            {
-              id: newsId(),
+          items.push(
+            newsItem({
+              id: `${save.seed}-preseason-${save.preseasonWeek}`,
+              kind: "training",
               date,
               title: `Preseason week ${save.preseasonWeek} complete`,
-              body: result.summary,
-            },
-          ]);
+              body: trainingBody,
+            }),
+          );
         }
       } else {
-        next = withInbox(next, [
-          {
-            id: newsId(),
+        items.push(
+          newsItem({
+            id: `${save.seed}-midweek-${date}`,
+            kind: "training",
             date,
             title: "Midweek session",
-            body: result.summary,
-          },
-        ]);
+            body: trainingBody,
+          }),
+        );
       }
+      for (const rolled of freshInjuries) {
+        items.push(
+          injuryNews({
+            rolled,
+            date,
+            seed: save.seed,
+            key: `train-${date}-${rolled.name}`,
+            clubName: club?.name ?? "the club",
+          }),
+        );
+      }
+      next = withInbox(next, items);
       commitSolo(next);
     },
-    [activeSeat, campaign, championship.matches, commitCampaign, commitSolo, save],
+    [activeSeat, campaign, championship, commitCampaign, commitSolo, save],
+  );
+
+  const readNews = useCallback(
+    (id: string) => {
+      if (campaign && activeSeat) {
+        const club = campaign.clubs[activeSeat.clubId];
+        if (!club) return;
+        commitCampaign({
+          ...campaign,
+          clubs: {
+            ...campaign.clubs,
+            [activeSeat.clubId]: { ...club, inbox: markNewsRead(club.inbox, id) },
+          },
+        });
+        return;
+      }
+      if (!save) return;
+      commitSolo({ ...save, inbox: markNewsRead(save.inbox, id) });
+    },
+    [activeSeat, campaign, commitCampaign, commitSolo, save],
   );
 
   const confirmWeek = useCallback(() => {
@@ -762,5 +963,6 @@ export function useGame() {
     changeWaitHours,
     copyCode,
     copySnapshot,
+    readNews,
   };
 }

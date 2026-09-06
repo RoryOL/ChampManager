@@ -109,6 +109,17 @@ export default function App() {
               onUnready={game.undoReady}
               onForce={game.forceWeek}
               onPass={game.passDevice}
+              onReadNews={game.readNews}
+              onOpenMatch={(matchId) => {
+                setFixtureId(matchId);
+                setPage("fixtures");
+              }}
+              onOpenPlayer={(name) => {
+                game.setViewTeamId(game.save!.clubId);
+                game.setPicked(name);
+                setFixtureId(null);
+                setPage("squad");
+              }}
             />
           )}
           {page === "squad" && (
