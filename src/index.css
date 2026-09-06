@@ -549,7 +549,7 @@ html.native-app .device {
 }
 
 .commentary__item {
-  border-left: 4px solid var(--team, var(--saffron));
+  border-left: 5px solid var(--team, var(--saffron));
   padding: 6px 10px;
   border-radius: 8px;
   background: var(--surface);

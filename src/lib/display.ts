@@ -15,29 +15,37 @@ export function compactName(team: Team): string {
   return team.name;
 }
 
-export function isDarkHex(hex: string): boolean {
+function hexLuma(hex: string): number {
   const raw = hex.replace("#", "");
-  if (raw.length < 6) return true;
+  if (raw.length < 6) return 0;
   const r = Number.parseInt(raw.slice(0, 2), 16);
   const g = Number.parseInt(raw.slice(2, 4), 16);
   const b = Number.parseInt(raw.slice(4, 6), 16);
-  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 < 0.58;
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+}
+
+export function isDarkHex(hex: string): boolean {
+  return hexLuma(hex) < 0.58;
 }
 
 export function teamAccent(team?: Team): {
   primary: string;
   secondary: string;
   ink: string;
+  stripe: string;
   wash: string;
 } {
   const primary = team?.colours.primary ?? "#5c7a99";
   const secondary = team?.colours.secondary ?? "#e8c547";
-  const dark = isDarkHex(primary);
+  const luma = hexLuma(primary);
+  const dark = luma < 0.58;
   return {
     primary,
     secondary,
     ink: dark ? secondary : primary,
-    wash: dark ? `${primary}d8` : `${primary}2e`,
+    stripe: luma < 0.18 ? secondary : primary,
+    // Near-black jerseys (Ballyea) need the gold wash or scores vanish on the navy pitch.
+    wash: luma < 0.12 ? `${secondary}36` : dark ? `${primary}b8` : `${primary}2e`,
   };
 }
 

@@ -223,10 +223,10 @@ export function MatchScreen({
                   key={`${event.minute}-${event.kind}-${index}`}
                   className={`commentary__item ${eventClass(event.kind)}`}
                   style={{
-                    ["--team" as string]: accent.primary,
+                    ["--team" as string]: accent.stripe,
                     ["--team-ink" as string]: accent.ink,
                     ["--team-wash" as string]: accent.wash,
-                    borderLeftColor: accent.primary,
+                    borderLeftColor: accent.stripe,
                     color: accent.ink,
                     background: isScoreKind(event.kind) ? accent.wash : undefined,
                   }}

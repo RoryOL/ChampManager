@@ -80,7 +80,7 @@ export function KeyEventsBar({ events, homeId, awayId, home, away }: Props) {
   return (
     <section className="key-events" aria-label="Key events">
       <div className="key-events__grid">
-        <article className="key-events__side" style={{ borderColor: homeAccent.primary, color: homeAccent.ink }}>
+        <article className="key-events__side" style={{ borderColor: homeAccent.stripe, color: homeAccent.ink }}>
           <strong>{home ? compactName(home) : "Home"}</strong>
           <p>
             <span>Goals</span> {homeId ? groupGoals(events, homeId) : "—"}
@@ -89,7 +89,7 @@ export function KeyEventsBar({ events, homeId, awayId, home, away }: Props) {
             <span>Points</span> {homeId ? groupPoints(events, homeId) : "—"}
           </p>
         </article>
-        <article className="key-events__side" style={{ borderColor: awayAccent.primary, color: awayAccent.ink }}>
+        <article className="key-events__side" style={{ borderColor: awayAccent.stripe, color: awayAccent.ink }}>
           <strong>{away ? compactName(away) : "Away"}</strong>
           <p>
             <span>Goals</span> {awayId ? groupGoals(events, awayId) : "—"}
