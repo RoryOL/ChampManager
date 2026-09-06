@@ -25,7 +25,7 @@ Download the APK from GitHub (this is a direct file, not an in-chat link):
 
 On a phone, open that URL in Chrome. If Android blocks the install, allow **Install unknown apps** for Chrome, then install. Open **ChampManager** from the launcher.
 
-This is a debug-signed APK (fine for sideloading; not a Play Store build). A copy also lands on **Actions → Android APK → Artifacts** after each push to `main`.
+This is a debug-signed APK (fine for sideloading; not a Play Store build). Every push to `main` rebuilds it, commits `releases/ChampManager.apk`, and uploads a copy under **Actions → Android APK → Artifacts**.
 
 To rebuild it locally (needs JDK 21 and the Android SDK):
 
