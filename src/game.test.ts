@@ -3,7 +3,7 @@ import { seedChampionship } from "./data/championship";
 import { ageResponse, GRADE_LABEL, profileFor } from "./data/playerProfiles";
 import { buildCoachReport } from "./lib/coach";
 import { migrateSave } from "./lib/gameStorage";
-import { seasonStatsFor } from "./lib/matchStats";
+import { seasonStatsFor, lastMatchRating } from "./lib/matchStats";
 import { applyMatchMood } from "./lib/mood";
 import { openPlayConversion } from "./lib/shooting";
 import { crossWind, parallelWind, passCompleteChance, rollClimate, withWindFor } from "./lib/weather";
@@ -18,12 +18,13 @@ import {
   tackleChance,
   yellowOnFoulChance,
 } from "./lib/matchEngine";
-import { clubTactics, DEFAULT_TACTICS, defaultSheet, playerAge, ratePlayer, ratedSquad, sideStrength } from "./lib/players";
+import { clubTactics, DEFAULT_TACTICS, defaultSheet, matchOrderIndex, matchShirtNumber, matchSlot, playerAge, ratePlayer, ratedSquad, sideStrength } from "./lib/players";
 import { nextBatch } from "./lib/schedule";
 import { matchPlayed } from "./lib/scoring";
 import { ATTRIBUTE_KEYS } from "./lib/attributes";
 import { applyMatchFatigue, applyTraining, averageMatchOverall, defaultCondition, fitnessOf, isOvertrained, matchRatings, matchStat } from "./lib/training";
 import type { Tactics } from "./types";
+import { nextSwapPick } from "./components/SwapConfirmBar";
 
 describe("new game championship", () => {
   it("starts with every tie unplayed", () => {
@@ -885,5 +886,178 @@ describe("match fitness", () => {
     expect(hard[forward!.name]?.fatigue ?? 0).toBeGreaterThan(easy[forward!.name]?.fatigue ?? 0);
     expect(fitnessOf(hard[forward!.name] ?? defaultCondition())).toBeLessThan(fitnessOf(easy[forward!.name] ?? defaultCondition()));
     expect(isOvertrained({ fatigue: 80, sharpness: 50 })).toBe(true);
+  });
+});
+
+describe("match shirts and swap confirmation", () => {
+  it("numbers the fifteen 1–15 in slot order and the bench from 16", () => {
+    const sheet = defaultSheet("ballyea");
+    expect(matchShirtNumber(sheet, sheet.starters[0])).toBe(1);
+    expect(matchShirtNumber(sheet, sheet.starters[14])).toBe(15);
+    expect(matchSlot(sheet, sheet.starters[0])).toBe("GK");
+    expect(matchSlot(sheet, sheet.starters[7])).toBe("MF");
+    expect(matchSlot(sheet, sheet.starters[14])).toBe("FF");
+    expect(matchShirtNumber(sheet, sheet.subs[0])).toBe(16);
+    expect(matchSlot(sheet, sheet.subs[0])).toBe("SUB");
+    expect(matchOrderIndex(sheet, sheet.subs[0])).toBe(15);
+    expect(matchShirtNumber(sheet, "Nobody")).toBeUndefined();
+  });
+
+  it("does not swap until two names are picked", () => {
+    expect(nextSwapPick(null, null, "A")).toEqual({ first: "A", second: null });
+    expect(nextSwapPick("A", null, "B")).toEqual({ first: "A", second: "B" });
+    expect(nextSwapPick("A", "B", "A")).toEqual({ first: "B", second: null });
+    expect(nextSwapPick("A", "B", "C")).toEqual({ first: "A", second: "C" });
+  });
+
+  it("reads the latest match rating in championship order", () => {
+    const reports = {
+      first: {
+        matchId: "first",
+        homeId: "ballyea",
+        awayId: "feakle",
+        homeScore: { goals: 0, points: 0 },
+        awayScore: { goals: 0, points: 0 },
+        homeTactics: DEFAULT_TACTICS,
+        awayTactics: DEFAULT_TACTICS,
+        homeSheet: defaultSheet("ballyea"),
+        awaySheet: defaultSheet("feakle"),
+        homeStats: {
+          teamId: "ballyea",
+          possessions: 0,
+          passesAttempted: 0,
+          passesCompleted: 0,
+          shots: 0,
+          scores: 0,
+          highFieldingAttempted: 0,
+          highFieldingWon: 0,
+          puckoutsWon: 0,
+          tacklesAttempted: 0,
+          tacklesWon: 0,
+          groundCovered: 0,
+          fatigue: 0,
+          fitness: 100,
+          overall: 0,
+          rating: 0,
+        },
+        awayStats: {
+          teamId: "feakle",
+          possessions: 0,
+          passesAttempted: 0,
+          passesCompleted: 0,
+          shots: 0,
+          scores: 0,
+          highFieldingAttempted: 0,
+          highFieldingWon: 0,
+          puckoutsWon: 0,
+          tacklesAttempted: 0,
+          tacklesWon: 0,
+          groundCovered: 0,
+          fatigue: 0,
+          fitness: 100,
+          overall: 0,
+          rating: 0,
+        },
+        players: [
+          {
+            name: "Tony Kelly",
+            teamId: "ballyea",
+            started: true,
+            minutes: 60,
+            possessions: 1,
+            passesAttempted: 1,
+            passesCompleted: 1,
+            shots: 1,
+            scores: 1,
+            highFieldingAttempted: 0,
+            highFieldingWon: 0,
+            puckoutsWon: 0,
+            tacklesAttempted: 0,
+            tacklesWon: 0,
+            groundCovered: 1,
+            fatigue: 10,
+            fitness: 90,
+            overall: 19,
+            rating: 7.1,
+            mood: 60,
+          },
+        ],
+        coachReport: [],
+      },
+      second: {
+        matchId: "second",
+        homeId: "ballyea",
+        awayId: "feakle",
+        homeScore: { goals: 0, points: 0 },
+        awayScore: { goals: 0, points: 0 },
+        homeTactics: DEFAULT_TACTICS,
+        awayTactics: DEFAULT_TACTICS,
+        homeSheet: defaultSheet("ballyea"),
+        awaySheet: defaultSheet("feakle"),
+        homeStats: {
+          teamId: "ballyea",
+          possessions: 0,
+          passesAttempted: 0,
+          passesCompleted: 0,
+          shots: 0,
+          scores: 0,
+          highFieldingAttempted: 0,
+          highFieldingWon: 0,
+          puckoutsWon: 0,
+          tacklesAttempted: 0,
+          tacklesWon: 0,
+          groundCovered: 0,
+          fatigue: 0,
+          fitness: 100,
+          overall: 0,
+          rating: 0,
+        },
+        awayStats: {
+          teamId: "feakle",
+          possessions: 0,
+          passesAttempted: 0,
+          passesCompleted: 0,
+          shots: 0,
+          scores: 0,
+          highFieldingAttempted: 0,
+          highFieldingWon: 0,
+          puckoutsWon: 0,
+          tacklesAttempted: 0,
+          tacklesWon: 0,
+          groundCovered: 0,
+          fatigue: 0,
+          fitness: 100,
+          overall: 0,
+          rating: 0,
+        },
+        players: [
+          {
+            name: "Tony Kelly",
+            teamId: "ballyea",
+            started: true,
+            minutes: 60,
+            possessions: 1,
+            passesAttempted: 1,
+            passesCompleted: 1,
+            shots: 1,
+            scores: 1,
+            highFieldingAttempted: 0,
+            highFieldingWon: 0,
+            puckoutsWon: 0,
+            tacklesAttempted: 0,
+            tacklesWon: 0,
+            groundCovered: 1,
+            fatigue: 10,
+            fitness: 90,
+            overall: 19,
+            rating: 8.6,
+            mood: 70,
+          },
+        ],
+        coachReport: [],
+      },
+    };
+    expect(lastMatchRating(reports, "ballyea", "Tony Kelly", ["first", "second"])).toBe(8.6);
+    expect(lastMatchRating(reports, "ballyea", "Tony Kelly", ["second", "first"])).toBe(7.1);
   });
 });

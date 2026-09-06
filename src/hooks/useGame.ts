@@ -958,6 +958,7 @@ export function useGame() {
     resign,
     setTactics,
     tapPlayer,
+    swapPlayers,
     setPicked,
     goToMatch,
     skipMatch,

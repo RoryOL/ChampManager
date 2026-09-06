@@ -329,6 +329,25 @@ export function seasonStatsFor(
   return combined;
 }
 
+export function lastMatchRating(
+  reports: Record<string, MatchReport>,
+  teamId: string,
+  name: string,
+  matchIds?: string[],
+): number | undefined {
+  const ids = matchIds ?? Object.keys(reports);
+  for (let i = ids.length - 1; i >= 0; i--) {
+    const row = reports[ids[i]]?.players.find((player) => player.teamId === teamId && player.name === name);
+    if (row) return row.rating;
+  }
+  return undefined;
+}
+
+export function formatMatchRating(value: number | undefined): string {
+  if (value === undefined || value <= 0) return "–";
+  return Number.isInteger(value) ? `${value}` : value.toFixed(1);
+}
+
 export function formatPair(made: number, attempted: number): string {
   if (attempted <= 0) return `${made}`;
   return `${made}/${attempted}`;

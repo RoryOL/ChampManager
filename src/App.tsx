@@ -135,7 +135,9 @@ export default function App() {
               onTapPlayer={game.tapPlayer}
             />
           )}
-          {page === "tactics" && <TacticsScreen save={game.save} onChange={game.setTactics} />}
+          {page === "tactics" && (
+            <TacticsScreen save={game.save} onChange={game.setTactics} onSwap={game.swapPlayers} />
+          )}
           {page === "fixtures" && selectedMatch && game.save ? (
             <MatchDetailScreen
               championship={game.championship}
