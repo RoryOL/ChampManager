@@ -46,7 +46,7 @@ export const seedChampionship: Championship = {
       name: "Inagh-Kilnamona",
       irishName: "Eidhneach-Cill na Móna",
       nickname: "The Combo",
-      colours: { primary: "#f0c400", secondary: "#1f7a32", label: "Yellow and green" },
+      colours: { primary: "#f0c400", secondary: "#2f9d4a", label: "Yellow and green" },
     },
     {
       id: "clonlara",
@@ -80,19 +80,19 @@ export const seedChampionship: Championship = {
       id: "scariff",
       name: "Scariff",
       irishName: "An Scairbh",
-      colours: { primary: "#207a3c", secondary: "#f4f4f0", label: "Green and white" },
+      colours: { primary: "#2d8f44", secondary: "#f4f4f0", label: "Green and white" },
     },
     {
       id: "broadford",
       name: "Broadford",
       irishName: "Áth Leathan",
-      colours: { primary: "#1e7a3a", secondary: "#f5d000", label: "Green and yellow" },
+      colours: { primary: "#2f9d4a", secondary: "#f5d000", label: "Green and yellow" },
     },
     {
       id: "clooney-quin",
       name: "Clooney-Quin",
       irishName: "Cluain Aodha-Cuinche",
-      colours: { primary: "#c41e3a", secondary: "#1f7a3a", label: "Red and green" },
+      colours: { primary: "#c41e3a", secondary: "#2f9d4a", label: "Red and green" },
       note: "2025 runners-up",
     },
     {
@@ -105,7 +105,7 @@ export const seedChampionship: Championship = {
       id: "feakle",
       name: "Feakle",
       irishName: "An Fhiacail",
-      colours: { primary: "#228b22", secondary: "#ffd100", label: "Green and yellow" },
+      colours: { primary: "#2f9d4a", secondary: "#ffd100", label: "Green and yellow" },
       note: "2024 county champions",
     },
     {
@@ -113,7 +113,7 @@ export const seedChampionship: Championship = {
       name: "O'Callaghan's Mills",
       irishName: "Muillte Uí Cheallacháin",
       nickname: "The Mills",
-      colours: { primary: "#246b38", secondary: "#e8c547", label: "Green and yellow" },
+      colours: { primary: "#2d8f44", secondary: "#e8c547", label: "Green and yellow" },
       note: "Promoted from Premier Intermediate",
     },
     {
@@ -134,7 +134,7 @@ export const seedChampionship: Championship = {
       name: "Wolfe Tones",
       irishName: "Wolfe Tones na Sionna",
       nickname: "The Tones",
-      colours: { primary: "#1b6b3a", secondary: "#f4f4f0", label: "Green and white" },
+      colours: { primary: "#2f9d4a", secondary: "#f4f4f0", label: "Green and white" },
     },
     {
       id: "sixmilebridge",

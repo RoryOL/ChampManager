@@ -127,7 +127,7 @@ describe("club colours", () => {
     expect(byId["clooney-quin"]?.colours.label.toLowerCase()).toContain("red");
     expect(byId["clooney-quin"]?.colours.label.toLowerCase()).toContain("green");
     expect(byId["clooney-quin"]?.colours.primary).toBe("#c41e3a");
-    expect(byId["clooney-quin"]?.colours.secondary).toBe("#1f7a3a");
+    expect(byId["clooney-quin"]?.colours.secondary).toBe("#2f9d4a");
     expect(byId.ballyea?.colours.label).toMatch(/black/i);
     expect(byId["eire-og"]?.colours.label).toMatch(/red/i);
     expect(byId.clonlara?.colours.label).toMatch(/gold/i);
@@ -217,7 +217,7 @@ describe("match engine", () => {
     const sweeper: Tactics = { ...DEFAULT_TACTICS, shape: "sweeper", mentality: "contain" };
     let traditionalGoals = 0;
     let sweeperGoals = 0;
-    for (let seed = 1; seed <= 24; seed += 1) {
+    for (let seed = 1; seed <= 48; seed += 1) {
       traditionalGoals += simulateMatch({
         matchId: "g1-r1-a",
         homeId: "ballyea",

@@ -405,7 +405,7 @@ function toProfile(listing: Listing): PlayerProfile {
   return {
     grade: listing.grade,
     age: listing.age,
-    overallMin: listing.overallMin ?? band.min,
+    overallMin: listing.overallMin ?? (listing.grade === "D" ? 8 : band.min),
     overallMax: listing.overallMax ?? band.max,
     note: listing.note ?? band.note,
   };
@@ -426,7 +426,7 @@ export function profileFor(teamId: string, name: string, panel = false): PlayerP
   if (panel) {
     return { grade: "D", age, overallMin: 5, overallMax: 10, note: GRADE_BAND.D.note };
   }
-  return { grade: "D", age, overallMin: 6, overallMax: 12, note: GRADE_BAND.D.note };
+  return { grade: "D", age, overallMin: 8, overallMax: 12, note: GRADE_BAND.D.note };
 }
 
 /** Younger panels take training better and shake off fatigue faster. */
