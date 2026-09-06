@@ -1,8 +1,10 @@
 import { seedChampionship } from "../data/championship";
 import { DEFAULT_TACTICS, defaultSheet } from "./players";
 import { clampDial } from "./attributes";
+import { ambitionFor, migrateNewsItem } from "./news";
 import { defaultCondition, ensureCondition, squadNames } from "./training";
 import type {
+  AmbitionTarget,
   CalendarPhase,
   Championship,
   GameSave,
@@ -112,19 +114,39 @@ export function migrateSave(raw: unknown): GameSave | null {
     condition?: Record<string, PlayerCondition>;
     trainingDue?: boolean;
     reports?: Record<string, MatchReport>;
+    ambition?: AmbitionTarget;
   };
   if (!parsed.clubId || !parsed.sheet || !Array.isArray(parsed.matches)) return null;
-  if (parsed.version !== 1 && parsed.version !== 2 && parsed.version !== 3 && parsed.version !== 4) return null;
+  if (
+    parsed.version !== 1 &&
+    parsed.version !== 2 &&
+    parsed.version !== 3 &&
+    parsed.version !== 4 &&
+    parsed.version !== 5
+  ) {
+    return null;
+  }
   const names = squadNames(parsed.clubId);
   const returning = parsed.version === 1 || parsed.version === 2;
+  const inbox = Array.isArray(parsed.inbox)
+    ? parsed.inbox.map(migrateNewsItem).filter((item): item is NewsItem => Boolean(item))
+    : [];
+  const ambition: AmbitionTarget =
+    parsed.ambition === "canon" ||
+    parsed.ambition === "final" ||
+    parsed.ambition === "semi" ||
+    parsed.ambition === "quarter" ||
+    parsed.ambition === "group"
+      ? parsed.ambition
+      : ambitionFor(parsed.clubId).target;
   return {
-    version: 4,
+    version: 5,
     clubId: parsed.clubId,
     seed: typeof parsed.seed === "number" ? parsed.seed : 1,
     tactics: migrateTactics(parsed.tactics),
     sheet: parsed.sheet,
     matches: parsed.matches,
-    inbox: Array.isArray(parsed.inbox) ? parsed.inbox : [],
+    inbox,
     phase: parsed.phase === "preseason" || parsed.phase === "season" ? parsed.phase : returning ? "season" : "preseason",
     preseasonWeek:
       typeof parsed.preseasonWeek === "number"
@@ -135,13 +157,14 @@ export function migrateSave(raw: unknown): GameSave | null {
     condition: ensureCondition(names, parsed.condition ?? {}, returning ? { fatigue: 28, sharpness: 58, mood: 60 } : defaultCondition()),
     trainingDue: typeof parsed.trainingDue === "boolean" ? parsed.trainingDue : !returning,
     reports: parsed.reports ?? {},
+    ambition,
   };
 }
 
 export function newSave(clubId: string): GameSave {
   const championship = structuredClone(seedChampionship);
   return {
-    version: 4,
+    version: 5,
     clubId,
     seed: Math.floor(Math.random() * 1_000_000_000),
     tactics: DEFAULT_TACTICS,
@@ -157,6 +180,7 @@ export function newSave(clubId: string): GameSave {
     condition: ensureCondition(squadNames(clubId), {}, defaultCondition()),
     trainingDue: true,
     reports: {},
+    ambition: ambitionFor(clubId).target,
   };
 }
 
@@ -202,7 +226,7 @@ export function clearSave(): void {
 }
 
 export function withInbox(save: GameSave, items: NewsItem[]): GameSave {
-  return { ...save, inbox: [...items, ...save.inbox].slice(0, 40) };
+  return { ...save, inbox: [...items, ...save.inbox].slice(0, 80) };
 }
 
 export function withTactics(save: GameSave, tactics: Tactics): GameSave {

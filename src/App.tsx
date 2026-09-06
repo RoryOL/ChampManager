@@ -72,6 +72,17 @@ export default function App() {
               onSkip={game.skipMatch}
               onResign={game.resign}
               onTrain={game.trainWeek}
+              onReadNews={game.readNews}
+              onOpenMatch={(matchId) => {
+                setFixtureId(matchId);
+                setPage("fixtures");
+              }}
+              onOpenPlayer={(name) => {
+                game.setViewTeamId(game.save!.clubId);
+                game.setPicked(name);
+                setFixtureId(null);
+                setPage("squad");
+              }}
             />
           )}
           {page === "squad" && (

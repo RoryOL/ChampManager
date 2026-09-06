@@ -630,7 +630,7 @@ describe("save migration", () => {
       matches: [],
       inbox: [],
     });
-    expect(migrated?.version).toBe(4);
+    expect(migrated?.version).toBe(5);
     expect(migrated?.reports).toEqual({});
     expect(migrated?.tactics.mentality).toBe("attacking");
     expect(migrated?.tactics.build).toBeGreaterThan(60);
