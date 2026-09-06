@@ -34,7 +34,7 @@ export default function App() {
   return (
     <div className="device">
       <div className="status-bar" aria-hidden="true">
-        <span>ChampManager</span>
+        <span>Capture the Canon</span>
         <span>SHC 26</span>
       </div>
 
@@ -59,7 +59,7 @@ export default function App() {
             <ClubBadge team={club} size="sm" variant="crest" />
             <div>
               <p>Clare SHC 2026</p>
-              <h1>{club ? compactName(club) : "ChampManager"}</h1>
+              <h1>{club ? compactName(club) : "Capture the Canon"}</h1>
             </div>
           </header>
           {page === "home" && (
@@ -72,6 +72,17 @@ export default function App() {
               onSkip={game.skipMatch}
               onResign={game.resign}
               onTrain={game.trainWeek}
+              onReadNews={game.readNews}
+              onOpenMatch={(matchId) => {
+                setFixtureId(matchId);
+                setPage("fixtures");
+              }}
+              onOpenPlayer={(name) => {
+                game.setViewTeamId(game.save!.clubId);
+                game.setPicked(name);
+                setFixtureId(null);
+                setPage("squad");
+              }}
             />
           )}
           {page === "squad" && (

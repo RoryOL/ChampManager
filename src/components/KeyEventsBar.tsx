@@ -54,10 +54,17 @@ function cardBits(events: MatchEvent[]): { text: string; kind: MatchEventKind }[
     }));
 }
 
+function injuryBits(events: MatchEvent[]): string[] {
+  return events
+    .filter((event) => event.kind === "injury" && event.playerName)
+    .map((event) => `${lastName(event.playerName)} ${event.minute}'`);
+}
+
 export function KeyEventsBar({ events, homeId, awayId, home, away }: Props) {
   const homeAccent = teamAccent(home);
   const awayAccent = teamAccent(away);
   const cards = cardBits(events);
+  const injuries = injuryBits(events);
   return (
     <section className="key-events" aria-label="Key events">
       <div className="key-events__grid">
@@ -91,6 +98,11 @@ export function KeyEventsBar({ events, homeId, awayId, home, away }: Props) {
               </em>
             ))}
       </p>
+      {injuries.length > 0 ? (
+        <p className="key-events__cards">
+          <span>Injuries</span> {injuries.join(" · ")}
+        </p>
+      ) : null}
     </section>
   );
 }

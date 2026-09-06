@@ -1,7 +1,8 @@
 import { useState } from "react";
-import type { Championship, GameSave, Match, TrainingFocus } from "../types";
+import type { Championship, GameSave, Match, NewsItem, TrainingFocus } from "../types";
 import { ClubBadge } from "../components/ClubBadge";
 import { compactName, sideLabel } from "../lib/display";
+import { NEWS_KIND_LABEL } from "../lib/news";
 import { resolveMatchSides, teamById, teamGroup } from "../lib/resolve";
 import { formatDate, stageLabel } from "../lib/scoring";
 import { averageFitness, averageMatchOverall, averageSharpness, PRESEASON_WEEKS, TRAINING_OPTIONS } from "../lib/training";
@@ -17,7 +18,53 @@ type Props = {
   onSkip: () => void;
   onResign: () => void;
   onTrain: (focus: TrainingFocus) => void;
+  onReadNews: (id: string) => void;
+  onOpenMatch: (matchId: string) => void;
+  onOpenPlayer: (name: string) => void;
 };
+
+function preview(body: string): string {
+  const text = body.replace(/\s+/g, " ").trim();
+  return text.length > 110 ? `${text.slice(0, 107)}…` : text;
+}
+
+function NewsArticle({
+  item,
+  onBack,
+  onOpenMatch,
+  onOpenPlayer,
+}: {
+  item: NewsItem;
+  onBack: () => void;
+  onOpenMatch: (matchId: string) => void;
+  onOpenPlayer: (name: string) => void;
+}) {
+  return (
+    <article className={`news-article news-article--${item.tone ?? "neutral"}`}>
+      <button type="button" className="text-btn text-btn--back" onClick={onBack}>
+        Back to news
+      </button>
+      <p className="kicker">
+        {item.source || NEWS_KIND_LABEL[item.kind]}
+        {item.date ? ` · ${formatDate(item.date)}` : ""}
+      </p>
+      <h2>{item.title}</h2>
+      <p className="news-article__body">{item.body}</p>
+      <div className="row-actions">
+        {item.matchId ? (
+          <button type="button" className="btn" onClick={() => onOpenMatch(item.matchId!)}>
+            Open match
+          </button>
+        ) : null}
+        {item.playerName ? (
+          <button type="button" className="btn btn--ghost" onClick={() => onOpenPlayer(item.playerName!)}>
+            Open {item.playerName.split(" ").at(-1)}
+          </button>
+        ) : null}
+      </div>
+    </article>
+  );
+}
 
 export function HomeScreen({
   championship,
@@ -28,11 +75,15 @@ export function HomeScreen({
   onSkip,
   onResign,
   onTrain,
+  onReadNews,
+  onOpenMatch,
+  onOpenPlayer,
 }: Props) {
   const club = teamById(championship, save.clubId);
   const group = teamGroup(championship, save.clubId);
   const sides = nextMatch ? resolveMatchSides(championship, nextMatch) : null;
   const [focus, setFocus] = useState<TrainingFocus>("skills");
+  const [openId, setOpenId] = useState<string | null>(null);
   const squad = ratedSquad(save.clubId, save.seed);
   const names = squad.map((player) => player.name);
   const fitness = averageFitness(save.condition, names);
@@ -40,6 +91,26 @@ export function HomeScreen({
   const form = averageMatchOverall(squad, save.condition, save.sheet.starters);
   const preseason = save.phase === "preseason";
   const formDelta = Math.round((form.match - form.ability) * 10) / 10;
+  const opened = save.inbox.find((item) => item.id === openId) ?? null;
+  const unread = save.inbox.filter((item) => !item.read).length;
+
+  const openNews = (item: NewsItem) => {
+    setOpenId(item.id);
+    if (!item.read) onReadNews(item.id);
+  };
+
+  if (opened) {
+    return (
+      <div className="screen">
+        <NewsArticle
+          item={opened}
+          onBack={() => setOpenId(null)}
+          onOpenMatch={onOpenMatch}
+          onOpenPlayer={onOpenPlayer}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="screen">
@@ -63,7 +134,7 @@ export function HomeScreen({
         </button>
       </section>
 
-      <section className="card">
+      <section className="card card--compact">
         <p className="kicker">{preseason ? `Preseason · week ${Math.min(save.preseasonWeek, PRESEASON_WEEKS)} of ${PRESEASON_WEEKS}` : "Condition"}</p>
         <h3>
           Panel fitness {fitness} · sharpness {sharpness}
@@ -74,15 +145,6 @@ export function HomeScreen({
         <p className="xv-form">
           Championship XV match rating {form.match}
           {formDelta !== 0 ? ` (${formDelta > 0 ? "+" : ""}${formDelta})` : ""} · ability {form.ability}
-        </p>
-        <p className="tactic-copy">
-          {fitness <= 22
-            ? "Match fitness is on the floor. Ratings are down — a recovery week will pay you back in championship."
-            : preseason
-              ? "Each session slightly changes stats on the player profile (up to +4). Open Squad after you train."
-              : save.trainingDue
-                ? "A midweek session is available. Pick a focus and those profile stats will move a little."
-                : "The next championship day is the priority."}
         </p>
         {save.trainingDue ? (
           <>
@@ -106,66 +168,57 @@ export function HomeScreen({
             </div>
           </>
         ) : null}
+        {!preseason && nextMatch && sides ? (
+          <div className="row-actions">
+            <button type="button" className="btn" onClick={onGoToMatch}>
+              {sideLabel(championship, nextMatch.home)} v {sideLabel(championship, nextMatch.away)}
+            </button>
+            <button type="button" className="btn btn--ghost" onClick={onSkip}>
+              Instant result
+            </button>
+          </div>
+        ) : null}
+        {!preseason && !nextMatch && batchLabel ? (
+          <div className="row-actions">
+            <button type="button" className="btn" onClick={onSkip}>
+              Simulate {batchLabel}
+            </button>
+          </div>
+        ) : null}
+        {!preseason && nextMatch ? (
+          <p className="hint hint--tight">
+            {stageLabel(nextMatch.stage, nextMatch.round)} · {formatDate(nextMatch.date)}
+            {nextMatch.venue ? ` · ${nextMatch.venue}` : ""} · {climateSummary(rollClimate(save.seed, nextMatch.id))}
+          </p>
+        ) : null}
+        {preseason && !save.trainingDue ? (
+          <p className="hint hint--tight">Round 1 waits after six weeks. Finish the session above when it is due.</p>
+        ) : null}
       </section>
 
-      {!preseason ? (
-        <section className="card next-card">
-          <p className="kicker">{batchLabel ?? "Championship complete"}</p>
-          {nextMatch && sides ? (
-            <>
-              <h2>
-                {sideLabel(championship, nextMatch.home)}
-                <small>v</small>
-                {sideLabel(championship, nextMatch.away)}
-              </h2>
-              <p>
-                {stageLabel(nextMatch.stage, nextMatch.round)} · {formatDate(nextMatch.date)}
-                {nextMatch.venue ? ` · ${nextMatch.venue}` : ""}
-              </p>
-              <p className="weather-banner">{climateSummary(rollClimate(save.seed, nextMatch.id))}</p>
-              <div className="row-actions">
-                <button type="button" className="btn" onClick={onGoToMatch}>
-                  Go to match
-                </button>
-                <button type="button" className="btn btn--ghost" onClick={onSkip}>
-                  Instant result
-                </button>
-              </div>
-            </>
-          ) : (
-            <>
-              <h2>{batchLabel ? "Results to come in" : "Season over"}</h2>
-              <p>
-                {batchLabel
-                  ? "You are not in this round. Simulate the remaining ties to keep the championship moving."
-                  : "Every championship match has been played."}
-              </p>
-              {batchLabel && (
-                <button type="button" className="btn" onClick={onSkip}>
-                  Simulate {batchLabel}
-                </button>
-              )}
-            </>
-          )}
-        </section>
-      ) : (
-        <section className="card">
-          <p className="kicker">Coming up</p>
-          <h2>Round 1 after six weeks</h2>
-          <p>Finish preseason training and the championship fifteen will be waiting.</p>
-        </section>
-      )}
-
       <section>
-        <h3 className="list-title">Inbox</h3>
-        <ul className="inbox">
+        <h3 className="list-title">
+          News
+          {unread > 0 ? <em className="news-count">{unread} new</em> : null}
+        </h3>
+        <ul className="inbox news-feed">
           {save.inbox.length === 0 ? (
             <li className="empty">Set your team, then go to the first match.</li>
           ) : (
             save.inbox.map((item) => (
               <li key={item.id}>
-                <strong>{item.title}</strong>
-                <span>{item.body}</span>
+                <button
+                  type="button"
+                  className={`news-item news-item--${item.tone ?? "neutral"}${item.read ? "" : " is-unread"}`}
+                  onClick={() => openNews(item)}
+                >
+                  <em>
+                    {item.source || NEWS_KIND_LABEL[item.kind]}
+                    {item.date ? ` · ${formatDate(item.date)}` : ""}
+                  </em>
+                  <strong>{item.title}</strong>
+                  <span>{preview(item.body)}</span>
+                </button>
               </li>
             ))
           )}

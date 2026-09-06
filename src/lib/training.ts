@@ -1,6 +1,7 @@
 import type { AttributeBoosts, PlayerCondition, PositionLine, RatedPlayer, Tactics, TrainingFocus } from "../types";
 import { ageResponse } from "../data/playerProfiles";
 import { ATTRIBUTE_KEYS, ATTRIBUTE_LABELS, clampDial, type AttributeKey } from "./attributes";
+import { isInjured } from "./injuries";
 import { moodAdjust } from "./mood";
 import { clampStat, computeOverall, ratedSquad } from "./players";
 
@@ -80,6 +81,7 @@ function cloneCondition(current: PlayerCondition): PlayerCondition {
     mood: current.mood,
     moodNote: current.moodNote,
     boosts: current.boosts ? { ...current.boosts } : undefined,
+    injury: current.injury ? { ...current.injury } : undefined,
   };
 }
 
@@ -119,6 +121,7 @@ export function conditionAdjust(condition: PlayerCondition): number {
   if (condition.sharpness >= 80) adjust += 1;
   else if (condition.sharpness < 28) adjust -= 1;
   adjust += moodAdjust(condition);
+  if (condition.injury && condition.injury.weeksLeft > 0) adjust -= 5;
   return adjust;
 }
 
@@ -176,6 +179,10 @@ export function applyTraining(
 
   for (const player of squad) {
     const current = cloneCondition(next[player.name] ?? defaultCondition());
+    if (isInjured(current)) {
+      next[player.name] = current;
+      continue;
+    }
     const alreadyHeavy = fitnessOf(current) <= 50;
     const response = ageResponse(player.age);
     let fatigue = current.fatigue;
@@ -217,7 +224,14 @@ export function applyTraining(
       sharpness = clampCondition(sharpness - 6);
       overtrained.push(player.name);
     }
-    next[player.name] = { fatigue, sharpness, boosts, mood: current.mood, moodNote: current.moodNote };
+    next[player.name] = {
+      fatigue,
+      sharpness,
+      boosts,
+      mood: current.mood,
+      moodNote: current.moodNote,
+      injury: current.injury,
+    };
   }
 
   const label = TRAINING_OPTIONS.find((item) => item.value === focus)?.title ?? focus;
@@ -283,6 +297,7 @@ export function applyMatchFatigue(
       boosts: current.boosts,
       mood: current.mood,
       moodNote: current.moodNote,
+      injury: current.injury,
     };
   };
   for (const name of starters) bump(name, true);
