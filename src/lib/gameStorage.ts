@@ -6,6 +6,7 @@ import type {
   CalendarPhase,
   Championship,
   GameSave,
+  MatchReport,
   NewsItem,
   PlayerCondition,
   Score,
@@ -86,13 +87,14 @@ export function migrateSave(raw: unknown): GameSave | null {
     preseasonWeek?: number;
     condition?: Record<string, PlayerCondition>;
     trainingDue?: boolean;
+    reports?: Record<string, MatchReport>;
   };
   if (!parsed.clubId || !parsed.sheet || !Array.isArray(parsed.matches)) return null;
-  if (parsed.version !== 1 && parsed.version !== 2 && parsed.version !== 3) return null;
+  if (parsed.version !== 1 && parsed.version !== 2 && parsed.version !== 3 && parsed.version !== 4) return null;
   const names = squadNames(parsed.clubId);
   const returning = parsed.version === 1 || parsed.version === 2;
   return {
-    version: 3,
+    version: 4,
     clubId: parsed.clubId,
     seed: typeof parsed.seed === "number" ? parsed.seed : 1,
     tactics: migrateTactics(parsed.tactics),
@@ -106,15 +108,16 @@ export function migrateSave(raw: unknown): GameSave | null {
         : returning
           ? 7
           : 1,
-    condition: ensureCondition(names, parsed.condition ?? {}, returning ? { fatigue: 28, sharpness: 58 } : defaultCondition()),
+    condition: ensureCondition(names, parsed.condition ?? {}, returning ? { fatigue: 28, sharpness: 58, mood: 60 } : defaultCondition()),
     trainingDue: typeof parsed.trainingDue === "boolean" ? parsed.trainingDue : !returning,
+    reports: parsed.reports ?? {},
   };
 }
 
 export function newSave(clubId: string): GameSave {
   const championship = structuredClone(seedChampionship);
   return {
-    version: 3,
+    version: 4,
     clubId,
     seed: Math.floor(Math.random() * 1_000_000_000),
     tactics: DEFAULT_TACTICS,
@@ -129,6 +132,7 @@ export function newSave(clubId: string): GameSave {
     preseasonWeek: 1,
     condition: ensureCondition(squadNames(clubId), {}, defaultCondition()),
     trainingDue: true,
+    reports: {},
   };
 }
 

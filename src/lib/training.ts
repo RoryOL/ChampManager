@@ -1,5 +1,6 @@
 import type { AttributeBoosts, PlayerCondition, RatedPlayer, TrainingFocus } from "../types";
 import { ATTRIBUTE_KEYS, ATTRIBUTE_LABELS, type AttributeKey } from "./attributes";
+import { moodAdjust } from "./mood";
 import { clampStat, computeOverall, ratedSquad } from "./players";
 
 export const PRESEASON_WEEKS = 6;
@@ -56,11 +57,11 @@ export const TRAINING_OPTIONS: {
 ];
 
 export function defaultCondition(): PlayerCondition {
-  return { fatigue: 16, sharpness: 38 };
+  return { fatigue: 16, sharpness: 38, mood: 58 };
 }
 
 export function midSeasonCondition(): PlayerCondition {
-  return { fatigue: 28, sharpness: 58 };
+  return { fatigue: 28, sharpness: 58, mood: 60 };
 }
 
 export function clampCondition(value: number): number {
@@ -75,6 +76,8 @@ function cloneCondition(current: PlayerCondition): PlayerCondition {
   return {
     fatigue: current.fatigue,
     sharpness: current.sharpness,
+    mood: current.mood,
+    moodNote: current.moodNote,
     boosts: current.boosts ? { ...current.boosts } : undefined,
   };
 }
@@ -109,6 +112,7 @@ export function conditionAdjust(condition: PlayerCondition): number {
   else if (condition.fatigue >= 65) adjust -= 1;
   if (condition.sharpness >= 80) adjust += 1;
   else if (condition.sharpness < 28) adjust -= 1;
+  adjust += moodAdjust(condition);
   return adjust;
 }
 
@@ -206,7 +210,7 @@ export function applyTraining(
       sharpness = clampCondition(sharpness - 6);
       overtrained.push(player.name);
     }
-    next[player.name] = { fatigue, sharpness, boosts };
+    next[player.name] = { fatigue, sharpness, boosts, mood: current.mood, moodNote: current.moodNote };
   }
 
   const label = TRAINING_OPTIONS.find((item) => item.value === focus)?.title ?? focus;
@@ -233,6 +237,8 @@ export function applyMatchFatigue(
       fatigue: clampCondition(current.fatigue + fatigueAdd - 6),
       sharpness: clampCondition(current.sharpness + sharpAdd),
       boosts: current.boosts,
+      mood: current.mood,
+      moodNote: current.moodNote,
     };
   };
   for (const name of starters) bump(name, 14, 3);

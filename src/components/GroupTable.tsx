@@ -8,6 +8,7 @@ type Props = {
   championship: Championship;
   group: Group;
   clubId?: string;
+  onOpenTeam?: (teamId: string) => void;
 };
 
 const statusLabel = {
@@ -17,7 +18,7 @@ const statusLabel = {
   pending: "",
 };
 
-export function GroupTable({ championship, group, clubId }: Props) {
+export function GroupTable({ championship, group, clubId, onOpenTeam }: Props) {
   const matches = championship.matches.filter(
     (match) => match.stage === "group" && match.groupId === group.id,
   );
@@ -53,11 +54,13 @@ export function GroupTable({ championship, group, clubId }: Props) {
                 >
                   <td>{row.position}</td>
                   <td>
-                    <span className="club-cell">
-                      <ClubBadge team={team} />
-                      <span>{team ? compactName(team) : row.teamId}</span>
-                      {statusLabel[row.status] ? <em className="status-tag">{statusLabel[row.status]}</em> : null}
-                    </span>
+                    <button type="button" className="club-link" onClick={() => onOpenTeam?.(row.teamId)}>
+                      <span className="club-cell">
+                        <ClubBadge team={team} />
+                        <span>{team ? compactName(team) : row.teamId}</span>
+                        {statusLabel[row.status] ? <em className="status-tag">{statusLabel[row.status]}</em> : null}
+                      </span>
+                    </button>
                   </td>
                   <td>{row.played}</td>
                   <td>{row.won}</td>

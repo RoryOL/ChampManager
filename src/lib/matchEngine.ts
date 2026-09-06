@@ -4,10 +4,13 @@ import type {
   PlayerCondition,
   Score,
   SimulatedMatch,
+  StatCredit,
   Tactics,
   TeamSheet,
 } from "../types";
 import { clampDial } from "./attributes";
+import { buildCoachReport, liveCoachTip } from "./coach";
+import { mergeCredits, passCredits, statsFromEvents } from "./matchStats";
 import { clubTactics, defaultSheet, sideProfile, type SideProfile } from "./players";
 
 const POINT_KINDS: ReadonlySet<MatchEventKind> = new Set(["point", "free", "sixtyFive", "sideline"]);
@@ -95,6 +98,9 @@ export function nextMomentum(
     case "puckout":
       delta = /broken|turned over/i.test(event.text) ? -6 : 4;
       break;
+    case "coach":
+      delta = 0;
+      break;
     default:
       delta = 0;
   }
@@ -123,6 +129,9 @@ export function simulateMatch(options: {
   awayTactics?: Tactics;
   homeCondition?: Record<string, PlayerCondition>;
   awayCondition?: Record<string, PlayerCondition>;
+  clubId?: string;
+  homeName?: string;
+  awayName?: string;
   period?: "first" | "second" | "full";
   startHome?: Score;
   startAway?: Score;
@@ -132,6 +141,7 @@ export function simulateMatch(options: {
   const period = options.period ?? "full";
   const seedKey = period === "second" ? `${options.seed}:${options.matchId}:second` : `${options.seed}:${options.matchId}`;
   const random = createRng(seedFrom(seedKey));
+  const statRng = createRng(seedFrom(`${seedKey}:stats`));
   const homeSheet = options.homeSheet ?? defaultSheet(options.homeId);
   const awaySheet = options.awaySheet ?? defaultSheet(options.awayId);
   const homeTactics = options.homeTactics ?? clubTactics(options.homeId);
@@ -149,11 +159,17 @@ export function simulateMatch(options: {
   const events: MatchEvent[] = [];
   const homeNames = homeSheet.starters;
   const awayNames = awaySheet.starters;
+  const periodMinutes = period === "first" ? 32 : period === "second" ? 30 : 62;
 
   const push = (event: Omit<MatchEvent, "momentum">) => {
     momentum = nextMomentum(momentum, event, options.homeId);
     events.push({ ...event, momentum });
   };
+
+  const tacticsFor = (teamId: string) => (teamId === options.homeId ? homeTactics : awayTactics);
+
+  const minuteCredits = (sheet: TeamSheet, teamId: string): StatCredit[] =>
+    sheet.starters.map((name) => ({ name, teamId, minutes: periodMinutes }));
 
   const credit = (teamId: string, kind: "point" | "goal") => {
     if (teamId === options.homeId) homeScore = addScore(homeScore, kind);
@@ -194,7 +210,14 @@ export function simulateMatch(options: {
           : kind === "sixtyFive"
             ? `65 — ${playerName} splits the posts.`
             : `Sideline cut from ${playerName}.`;
-      push({ minute, teamId, playerName, kind, text });
+      push({
+        minute,
+        teamId,
+        playerName,
+        kind,
+        text,
+        credits: [{ name: playerName, teamId, shots: 1, scores: 1, possessions: 1 }],
+      });
       return;
     }
     push({
@@ -208,6 +231,7 @@ export function simulateMatch(options: {
           : kind === "sixtyFive"
             ? `${playerName}'s 65 drops short.`
             : `${playerName}'s sideline drifts wide.`,
+      credits: [{ name: playerName, teamId, shots: 1, possessions: 1 }],
     });
   };
 
@@ -222,11 +246,14 @@ export function simulateMatch(options: {
     direct: number,
     longPuck: number,
   ) => {
+    const pendingCredits: StatCredit[] = [];
     if (random() < 0.16 + longPuck * 0.28) {
       const win =
         random() <
         Math.min(0.78, Math.max(0.28, 0.5 + (profile.puckout + profile.aerial - opp.aerial * 1.05 - 12) * 0.03));
       const fielder = pickName(names.slice(4, 9), random);
+      const oppFielder = pickName(oppNames.slice(4, 9), random);
+      const defendingId = teamId === options.homeId ? options.awayId : options.homeId;
       if (!win) {
         push({
           minute,
@@ -234,9 +261,24 @@ export function simulateMatch(options: {
           playerName: fielder,
           kind: "puckout",
           text: `Puck-out broken — ${fielder} loses the aerial contest.`,
+          credits: mergeCredits([
+            { name: fielder, teamId, highFieldingAttempted: 1, possessions: 1 },
+            {
+              name: oppFielder,
+              teamId: defendingId,
+              highFieldingAttempted: 1,
+              highFieldingWon: 1,
+              puckoutsWon: 1,
+            },
+          ]),
         });
         return;
       }
+      const winCredits: StatCredit[] = [
+        { name: fielder, teamId, highFieldingAttempted: 1, highFieldingWon: 1, puckoutsWon: 1, possessions: 1 },
+        { name: oppFielder, teamId: defendingId, highFieldingAttempted: 1 },
+        ...passCredits(names.slice(4, 12), teamId, statRng, 2 + Math.floor(statRng() * 3)),
+      ];
       if (random() < 0.45) {
         push({
           minute,
@@ -244,7 +286,11 @@ export function simulateMatch(options: {
           playerName: fielder,
           kind: "puckout",
           text: `${fielder} fields the puck-out around midfield.`,
+          credits: mergeCredits(winCredits),
         });
+      } else {
+        // Silent win still counts on the next action; stash on a tiny coach-less event via last attack credits.
+        pendingCredits.push(...winCredits);
       }
     } else if (random() < 0.12 + (1 - longPuck) * 0.28) {
       const safe = Math.min(0.82, Math.max(0.35, 0.42 + (profile.halfBackHands - 12) * 0.04));
@@ -256,19 +302,30 @@ export function simulateMatch(options: {
           playerName: halfBack,
           kind: "puckout",
           text: `Short puck-out turned over on ${halfBack}.`,
+          credits: [{ name: halfBack, teamId, possessions: 1, passesAttempted: 1 }],
         });
         return;
       }
+      pendingCredits.push(
+        { name: halfBack, teamId, possessions: 1, puckoutsWon: 1 },
+        ...passCredits(names.slice(4, 10), teamId, statRng, 2 + Math.floor(statRng() * 2)),
+      );
     }
 
     if (random() < tackleChance(opp.hooking, oppTactics.aggression ?? 46)) {
       const defender = pickName(oppNames.slice(0, 7), random);
+      const defendingId = teamId === options.homeId ? options.awayId : options.homeId;
       push({
         minute,
         teamId,
         playerName: defender,
         kind: "hook",
         text: `Hooked and blocked — ${defender} kills the attack.`,
+        credits: mergeCredits([
+          ...pendingCredits.splice(0, pendingCredits.length),
+          { name: defender, teamId: defendingId, tacklesAttempted: 1, tacklesWon: 1 },
+          ...passCredits(names.slice(6, 15), teamId, statRng, 1 + Math.floor(statRng() * 3)),
+        ]),
       });
       return;
     }
@@ -283,9 +340,14 @@ export function simulateMatch(options: {
           playerName: defender,
           kind: "booking",
           text: `Yellow card — ${defender} overcooks the challenge.`,
+          credits: [{ name: defender, teamId: defendingId, tacklesAttempted: 1 }],
         });
+      } else {
+        pendingCredits.push({ name: defender, teamId: defendingId, tacklesAttempted: 1 });
       }
       attemptSetPiece(teamId, "free", profile, minute);
+      const last = events.at(-1);
+      if (last) last.credits = mergeCredits([...(last.credits ?? []), ...pendingCredits.splice(0, pendingCredits.length)]);
       return;
     }
 
@@ -295,6 +357,14 @@ export function simulateMatch(options: {
       if (roll < 0.18) attemptSetPiece(teamId, "sixtyFive", profile, minute);
       else if (roll < 0.28) attemptSetPiece(teamId, "sideline", profile, minute);
       else attemptSetPiece(teamId, "free", profile, minute);
+      const last = events.at(-1);
+      if (last) {
+        last.credits = mergeCredits([
+          ...(last.credits ?? []),
+          ...pendingCredits.splice(0, pendingCredits.length),
+          ...passCredits(names.slice(6, 15), teamId, statRng, 1 + Math.floor(statRng() * 2)),
+        ]);
+      }
       return;
     }
 
@@ -306,16 +376,23 @@ export function simulateMatch(options: {
       0.28,
       Math.max(0.05, (directGoal + aerialGoal + (profile.attack - 12) * 0.008) * sweeperCut),
     );
+    const attackPasses = passCredits(names.slice(6, 15), teamId, statRng, 2 + Math.floor((1 - direct) * 3));
+    const flush = (extra: StatCredit[]) => mergeCredits([...pendingCredits.splice(0, pendingCredits.length), ...attackPasses, ...extra]);
 
     if (random() < goalChance) {
       if (random() < 0.3 + opp.defence * 0.008) {
         const keeper = opp.keeper?.name ?? "the goalkeeper";
+        const defendingId = teamId === options.homeId ? options.awayId : options.homeId;
         push({
           minute,
           teamId,
           playerName,
           kind: "save",
           text: `Saved — ${keeper} keeps out ${playerName}.`,
+          credits: flush([
+            { name: playerName, teamId, shots: 1, possessions: 1 },
+            ...(opp.keeper ? [{ name: keeper, teamId: defendingId, tacklesAttempted: 1, tacklesWon: 1 }] : []),
+          ]),
         });
         if (random() < 0.35 + direct * 0.1) {
           attemptSetPiece(teamId, "sixtyFive", profile, minute);
@@ -329,6 +406,7 @@ export function simulateMatch(options: {
         playerName,
         kind: "goal",
         text: `GOAL! ${playerName} finds the net.`,
+        credits: flush([{ name: playerName, teamId, shots: 1, scores: 1, possessions: 1 }]),
       });
       return;
     }
@@ -340,6 +418,7 @@ export function simulateMatch(options: {
         playerName,
         kind: "wide",
         text: `Wide from ${playerName}.`,
+        credits: flush([{ name: playerName, teamId, shots: 1, possessions: 1 }]),
       });
       if (direct > 0.55 && random() < 0.12 + direct * 0.12) {
         attemptSetPiece(teamId, "sixtyFive", profile, minute);
@@ -358,6 +437,7 @@ export function simulateMatch(options: {
       playerName,
       kind: "point",
       text: fromPlay,
+      credits: flush([{ name: playerName, teamId, shots: 1, scores: 1, possessions: 1 }]),
     });
   };
 
@@ -372,6 +452,7 @@ export function simulateMatch(options: {
         playerName: "",
         kind: "half",
         text: "Half-time whistle.",
+        credits: period === "first" ? [...minuteCredits(homeSheet, options.homeId), ...minuteCredits(awaySheet, options.awayId)] : undefined,
       });
       if (period === "first") break;
       continue;
@@ -403,6 +484,18 @@ export function simulateMatch(options: {
         awayLongPuck,
       );
     }
+    if (options.clubId) {
+      const tip = liveCoachTip(events, tacticsFor(options.clubId), options.clubId, minute);
+      if (tip) {
+        push({
+          minute,
+          teamId: options.clubId,
+          playerName: "",
+          kind: "coach",
+          text: tip,
+        });
+      }
+    }
   }
 
   if (period !== "first") {
@@ -412,10 +505,50 @@ export function simulateMatch(options: {
       playerName: "",
       kind: "full",
       text: "Full-time.",
+      credits: [...minuteCredits(homeSheet, options.homeId), ...minuteCredits(awaySheet, options.awayId)],
     });
   }
 
-  return { matchId: options.matchId, homeScore, awayScore, events };
+  const tallied = statsFromEvents(events, {
+    homeId: options.homeId,
+    awayId: options.awayId,
+    homeSheet,
+    awaySheet,
+    homeCondition: options.homeCondition,
+    awayCondition: options.awayCondition,
+  });
+  const coachReport = buildCoachReport({
+    clubId: options.clubId,
+    homeId: options.homeId,
+    awayId: options.awayId,
+    homeName: options.homeName ?? "Home",
+    awayName: options.awayName ?? "Away",
+    homeTactics,
+    awayTactics,
+    homeStats: tallied.homeStats,
+    awayStats: tallied.awayStats,
+    homeScore,
+    awayScore,
+    players: tallied.players,
+    events,
+  });
+
+  return {
+    matchId: options.matchId,
+    homeId: options.homeId,
+    awayId: options.awayId,
+    homeScore,
+    awayScore,
+    events,
+    homeTactics,
+    awayTactics,
+    homeSheet,
+    awaySheet,
+    homeStats: tallied.homeStats,
+    awayStats: tallied.awayStats,
+    players: tallied.players,
+    coachReport,
+  };
 }
 
 export function scoreFromEvents(

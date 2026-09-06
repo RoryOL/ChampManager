@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { seedChampionship } from "./data/championship";
+import { buildCoachReport } from "./lib/coach";
 import { migrateSave } from "./lib/gameStorage";
+import { seasonStatsFor } from "./lib/matchStats";
+import { applyMatchMood } from "./lib/mood";
 import {
   freeConversionChance,
   mistimedFoulChance,
@@ -322,7 +325,8 @@ describe("save migration", () => {
       matches: [],
       inbox: [],
     });
-    expect(migrated?.version).toBe(3);
+    expect(migrated?.version).toBe(4);
+    expect(migrated?.reports).toEqual({});
     expect(migrated?.tactics.mentality).toBe("attacking");
     expect(migrated?.tactics.build).toBeGreaterThan(60);
     expect(migrated?.tactics.puckout).toBeGreaterThan(60);
@@ -343,5 +347,194 @@ describe("schedule", () => {
 describe("club tactics", () => {
   it("varies AI setups instead of cloning the default", () => {
     expect(clubTactics("ballyea")).not.toEqual(clubTactics("sixmilebridge"));
+  });
+});
+
+describe("match intel", () => {
+  it("tracks possessions, shots and tackles for both panels", () => {
+    const result = simulateMatch({
+      matchId: "g1-r1-a",
+      homeId: "ballyea",
+      awayId: "inagh-kilnamona",
+      seed: 42,
+    });
+    expect(result.homeStats.possessions).toBeGreaterThan(0);
+    expect(result.awayStats.possessions).toBeGreaterThan(0);
+    expect(result.homeStats.shots + result.awayStats.shots).toBeGreaterThan(5);
+    expect(result.players.some((player) => player.minutes >= 30)).toBe(true);
+    expect(result.coachReport.length).toBeGreaterThan(0);
+  });
+
+  it("flags a long-ball plan that lost the aerials", () => {
+    const notes = buildCoachReport({
+      clubId: "ballyea",
+      homeId: "ballyea",
+      awayId: "inagh-kilnamona",
+      homeName: "Ballyea",
+      awayName: "Inagh-Kilnamona",
+      homeTactics: { ...DEFAULT_TACTICS, build: 88, puckout: 80 },
+      awayTactics: DEFAULT_TACTICS,
+      homeStats: {
+        teamId: "ballyea",
+        possessions: 20,
+        passesAttempted: 40,
+        passesCompleted: 22,
+        shots: 8,
+        scores: 2,
+        highFieldingAttempted: 10,
+        highFieldingWon: 2,
+        puckoutsWon: 2,
+        tacklesAttempted: 8,
+        tacklesWon: 3,
+        groundCovered: 90,
+        fatigue: 40,
+        overall: 13,
+        rating: 6,
+      },
+      awayStats: {
+        teamId: "inagh-kilnamona",
+        possessions: 24,
+        passesAttempted: 38,
+        passesCompleted: 28,
+        shots: 10,
+        scores: 6,
+        highFieldingAttempted: 10,
+        highFieldingWon: 8,
+        puckoutsWon: 7,
+        tacklesAttempted: 6,
+        tacklesWon: 4,
+        groundCovered: 88,
+        fatigue: 38,
+        overall: 13,
+        rating: 6.5,
+      },
+      homeScore: { goals: 0, points: 8 },
+      awayScore: { goals: 1, points: 12 },
+      players: [],
+      events: [],
+    });
+    expect(notes.join(" ")).toMatch(/long ball|aerials|puck-outs/i);
+  });
+
+  it("drops mood for players left on the bench after a loss", () => {
+    const squad = ratedSquad("ballyea");
+    const sheet = defaultSheet("ballyea");
+    const starter = squad.find((player) => sheet.starters.includes(player.name)) ?? squad[0];
+    const bench = squad.find((player) => !sheet.starters.includes(player.name)) ?? squad.at(-1);
+    const condition = Object.fromEntries(squad.map((player) => [player.name, defaultCondition()]));
+    const next = applyMatchMood(
+      condition,
+      squad,
+      sheet,
+      sheet,
+      [
+        {
+          name: starter.name,
+          teamId: "ballyea",
+          started: true,
+          minutes: 62,
+          possessions: 4,
+          passesAttempted: 6,
+          passesCompleted: 4,
+          shots: 3,
+          scores: 2,
+          highFieldingAttempted: 1,
+          highFieldingWon: 1,
+          puckoutsWon: 0,
+          tacklesAttempted: 2,
+          tacklesWon: 1,
+          groundCovered: 8,
+          fatigue: 40,
+          overall: 16,
+          rating: 8.2,
+          mood: 58,
+        },
+      ],
+      "loss",
+    );
+    expect(bench).toBeTruthy();
+    expect(next[bench!.name]?.mood ?? 58).toBeLessThan(defaultCondition().mood ?? 58);
+    expect(next[starter.name]?.mood ?? 58).toBeLessThan(70);
+  });
+
+  it("rolls season totals from stored match reports", () => {
+    const rolled = seasonStatsFor(
+      {
+        a: {
+          matchId: "a",
+          homeId: "ballyea",
+          awayId: "feakle",
+          homeScore: { goals: 1, points: 12 },
+          awayScore: { goals: 0, points: 10 },
+          homeTactics: DEFAULT_TACTICS,
+          awayTactics: DEFAULT_TACTICS,
+          homeSheet: defaultSheet("ballyea"),
+          awaySheet: defaultSheet("feakle"),
+          homeStats: {
+            teamId: "ballyea",
+            possessions: 1,
+            passesAttempted: 1,
+            passesCompleted: 1,
+            shots: 1,
+            scores: 1,
+            highFieldingAttempted: 1,
+            highFieldingWon: 1,
+            puckoutsWon: 1,
+            tacklesAttempted: 1,
+            tacklesWon: 1,
+            groundCovered: 1,
+            fatigue: 20,
+            overall: 15,
+            rating: 7,
+          },
+          awayStats: {
+            teamId: "feakle",
+            possessions: 0,
+            passesAttempted: 0,
+            passesCompleted: 0,
+            shots: 0,
+            scores: 0,
+            highFieldingAttempted: 0,
+            highFieldingWon: 0,
+            puckoutsWon: 0,
+            tacklesAttempted: 0,
+            tacklesWon: 0,
+            groundCovered: 0,
+            fatigue: 0,
+            overall: 0,
+            rating: 0,
+          },
+          players: [
+            {
+              name: "Tony Kelly",
+              teamId: "ballyea",
+              started: true,
+              minutes: 62,
+              possessions: 8,
+              passesAttempted: 10,
+              passesCompleted: 7,
+              shots: 4,
+              scores: 3,
+              highFieldingAttempted: 2,
+              highFieldingWon: 1,
+              puckoutsWon: 0,
+              tacklesAttempted: 1,
+              tacklesWon: 1,
+              groundCovered: 9.2,
+              fatigue: 40,
+              overall: 19,
+              rating: 8.4,
+              mood: 70,
+            },
+          ],
+          coachReport: [],
+        },
+      },
+      "ballyea",
+      "Tony Kelly",
+    );
+    expect(rolled.minutes).toBe(62);
+    expect(rolled.scores).toBe(3);
+    expect(rolled.rating).toBe(8.4);
   });
 });

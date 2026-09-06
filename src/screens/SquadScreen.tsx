@@ -1,8 +1,10 @@
 import { useEffect, useRef } from "react";
-import type { GameSave, PlayerCondition, RatedPlayer, Team } from "../types";
+import type { GameSave, PlayerCondition, PlayerMatchStats, RatedPlayer, Team } from "../types";
 import { ClubBadge } from "../components/ClubBadge";
 import { ATTRIBUTE_GROUPS, ATTRIBUTE_KEYS, ATTRIBUTE_LABELS, LINE_LABELS, POSITION_LINES, type AttributeKey } from "../lib/attributes";
 import { compactName } from "../lib/display";
+import { formatPair, seasonStatsFor } from "../lib/matchStats";
+import { moodLabel, moodValue } from "../lib/mood";
 import { defaultSheet, designatedRoles, ratedSquad, sheetPlayers } from "../lib/players";
 import { FORMATION_ROWS } from "../lib/squads";
 import { boostTotal, conditionFor, isOvertrained, matchRatings, matchStat } from "../lib/training";
@@ -40,10 +42,12 @@ function PlayerDetail({
   player,
   condition,
   showCondition,
+  season,
 }: {
   player: RatedPlayer;
   condition?: PlayerCondition;
   showCondition: boolean;
+  season: PlayerMatchStats;
 }) {
   const match = showCondition && condition ? matchRatings(player, condition) : player.ratings;
   const overallDelta = match.overall - player.ratings.overall;
@@ -86,6 +90,18 @@ function PlayerDetail({
             <em>{condition.sharpness}</em>
             <span className="delta" />
           </div>
+          <div className="attr-row">
+            <span>Mood</span>
+            <div className="attr-bar">
+              <i style={{ width: `${moodValue(condition)}%` }} />
+            </div>
+            <em>{moodValue(condition)}</em>
+            <span className="delta" />
+          </div>
+          <p className="hint hint--tight">
+            {moodLabel(moodValue(condition))}
+            {condition.moodNote ? ` — ${condition.moodNote}` : ". Wins, losses, the bench, substitutions and playing out of position all move this, and it feeds into match ratings."}
+          </p>
           {trainingLifts.length > 0 ? <p className="form-line">Profile stats: {trainingLifts.join(" · ")}</p> : null}
           {isOvertrained(condition) ? (
             <p className="warn">Overtrained — profile stats are down until you recover.</p>
@@ -116,6 +132,20 @@ function PlayerDetail({
           })}
         </div>
       ))}
+      <div className="attr-group">
+        <h4>Season so far</h4>
+        {season.minutes <= 0 ? (
+          <p className="hint hint--tight">No championship minutes yet.</p>
+        ) : (
+          <ul className="season-stats">
+            <li>Minutes {season.minutes} · match rating {season.rating} · overall {season.overall}</li>
+            <li>Possessions {season.possessions} · passes {formatPair(season.passesCompleted, season.passesAttempted)}</li>
+            <li>Shots {formatPair(season.scores, season.shots)} · high fielding {formatPair(season.highFieldingWon, season.highFieldingAttempted)}</li>
+            <li>Puck-outs won {season.puckoutsWon} · tackles {formatPair(season.tacklesWon, season.tacklesAttempted)}</li>
+            <li>Ground {season.groundCovered} km · fatigue {season.fatigue}</li>
+          </ul>
+        )}
+      </div>
       <div className="attr-group">
         <h4>Position familiarity</h4>
         <div className="fam-grid">
@@ -238,6 +268,7 @@ export function SquadScreen({ save, teams, viewTeamId, onViewTeam, picked, onTap
                   player={selected}
                   condition={ownTeam ? conditionFor(selected.name, save.condition) : undefined}
                   showCondition={ownTeam}
+                  season={seasonStatsFor(save.reports, viewTeamId, selected.name)}
                 />
               ) : null}
             </li>

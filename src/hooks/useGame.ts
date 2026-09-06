@@ -1,10 +1,13 @@
 import { useCallback, useMemo, useState } from "react";
 import { seedChampionship } from "../data/championship";
+import { compactName } from "../lib/display";
 import { momentumAt, simulateMatch } from "../lib/matchEngine";
+import { combineHalves, reportFromSim } from "../lib/matchStats";
+import { applyMatchMood } from "../lib/mood";
 import { clubTactics, defaultSheet, ratedSquad, swapPlayersInSheet } from "../lib/players";
 import { resolveMatchSides, teamById } from "../lib/resolve";
 import { nextBatch } from "../lib/schedule";
-import { formatScore, formatScoreWithTotal, matchPlayed, stageLabel } from "../lib/scoring";
+import { formatScore, formatScoreWithTotal, matchPlayed, scoreTotal, stageLabel } from "../lib/scoring";
 import {
   applyMatchFatigue,
   applyTraining,
@@ -41,6 +44,7 @@ export type LiveMatch = {
   match: Match;
   cursor: number;
   phase: LivePhase;
+  openingSheet: TeamSheet;
 };
 
 function newsId(): string {
@@ -134,6 +138,8 @@ export function useGame() {
           const { homeId, awayId } = resolveMatchSides(championship, match);
           if (!homeId || !awayId) return null;
           const isUser = homeId === save.clubId || awayId === save.clubId;
+          const homeTeam = teamById(championship, homeId);
+          const awayTeam = teamById(championship, awayId);
           return simulateMatch({
             matchId: match.id,
             homeId,
@@ -144,6 +150,9 @@ export function useGame() {
             awayTactics: awayId === save.clubId ? save.tactics : clubTactics(awayId),
             homeCondition: homeId === save.clubId ? save.condition : undefined,
             awayCondition: awayId === save.clubId ? save.condition : undefined,
+            clubId: save.clubId,
+            homeName: homeTeam ? compactName(homeTeam) : homeId,
+            awayName: awayTeam ? compactName(awayTeam) : awayId,
             period: isUser && mode === "first" ? "first" : "full",
             seed: save.seed,
           });
@@ -162,6 +171,7 @@ export function useGame() {
           match: batch.matches[0],
           cursor: 0,
           phase: "finished",
+          openingSheet: save.sheet,
         };
       }
       if (!user || !batch.userMatch) return null;
@@ -172,6 +182,7 @@ export function useGame() {
         match: batch.userMatch,
         cursor: 0,
         phase: mode === "first" ? "first" : "finished",
+        openingSheet: save.sheet,
       };
     },
     [championship, save],
@@ -199,6 +210,11 @@ export function useGame() {
         awayScore: item.awayScore,
       }));
       let next = writeScores(base, updates);
+      const reports = { ...next.reports };
+      for (const sim of [current.user, ...current.others]) {
+        reports[sim.matchId] = reportFromSim(sim);
+      }
+      next = { ...next, reports };
       next = {
         ...next,
         condition: applyMatchFatigue(next.condition, sheet.starters, sheet.subs),
@@ -209,12 +225,30 @@ export function useGame() {
       const sides = userMatch ? resolveMatchSides(championship, userMatch) : { homeId: null, awayId: null };
       const home = sides.homeId ? teamById(championship, sides.homeId) : undefined;
       const away = sides.awayId ? teamById(championship, sides.awayId) : undefined;
+      const ourScore =
+        sides.homeId === base.clubId ? current.user.homeScore : current.user.awayScore;
+      const theirScore =
+        sides.homeId === base.clubId ? current.user.awayScore : current.user.homeScore;
+      const result =
+        scoreTotal(ourScore) > scoreTotal(theirScore) ? "win" : scoreTotal(ourScore) < scoreTotal(theirScore) ? "loss" : "draw";
+      next = {
+        ...next,
+        condition: applyMatchMood(
+          next.condition,
+          ratedSquad(base.clubId),
+          current.openingSheet,
+          sheet,
+          current.user.players,
+          result,
+        ),
+      };
+      const coach = current.user.coachReport.join(" ");
       const items: NewsItem[] = [
         {
           id: newsId(),
           date: userMatch?.date ?? "",
           title: `${home?.name ?? "Home"} ${formatScore(current.user.homeScore)} ${away?.name ?? "Away"} ${formatScore(current.user.awayScore)}`,
-          body: `${club?.name} ${current.label.toLowerCase()} finishes ${formatScoreWithTotal(current.user.homeScore)} to ${formatScoreWithTotal(current.user.awayScore)}. The panel will need looking after before the next day out.`,
+          body: `${club?.name} ${current.label.toLowerCase()} finishes ${formatScoreWithTotal(current.user.homeScore)} to ${formatScoreWithTotal(current.user.awayScore)}. Coach: ${coach}`,
           matchId: current.user.matchId,
         },
       ];
@@ -245,6 +279,8 @@ export function useGame() {
       const { homeId, awayId } = resolveMatchSides(championship, live.match);
       if (!homeId || !awayId) return;
       const first = live.user;
+      const homeTeam = homeId ? teamById(championship, homeId) : undefined;
+      const awayTeam = awayId ? teamById(championship, awayId) : undefined;
       const second = simulateMatch({
         matchId: first.matchId,
         homeId,
@@ -255,18 +291,20 @@ export function useGame() {
         awayTactics: awayId === save.clubId ? tactics : clubTactics(awayId),
         homeCondition: homeId === save.clubId ? save.condition : undefined,
         awayCondition: awayId === save.clubId ? save.condition : undefined,
+        clubId: save.clubId,
+        homeName: homeTeam ? compactName(homeTeam) : homeId,
+        awayName: awayTeam ? compactName(awayTeam) : awayId,
         period: "second",
         startHome: first.homeScore,
         startAway: first.awayScore,
         startMomentum: momentumAt(first.events),
         seed: save.seed,
       });
-      const combined: SimulatedMatch = {
-        matchId: first.matchId,
-        homeScore: second.homeScore,
-        awayScore: second.awayScore,
-        events: [...first.events, ...second.events],
-      };
+      const combined = combineHalves(first, second, {
+        clubId: save.clubId,
+        homeName: homeTeam ? compactName(homeTeam) : "Home",
+        awayName: awayTeam ? compactName(awayTeam) : "Away",
+      });
       if (skipPlayback) {
         const base = withSheet(withTactics(save, tactics), sheet);
         finishLive({ ...live, user: combined, phase: "finished", cursor: combined.events.length }, { sheet, base });

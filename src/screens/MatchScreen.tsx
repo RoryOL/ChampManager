@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Championship, GameSave, Tactics, TeamSheet } from "../types";
 import type { LiveMatch } from "../hooks/useGame";
+import { MatchStatsPanel } from "../components/MatchStatsPanel";
 import { TacticControls } from "../components/TacticControls";
 import { compactName, sideLabel } from "../lib/display";
 import { momentumAt, scoreFromEvents } from "../lib/matchEngine";
+import { liveStats } from "../lib/matchStats";
 import { ratedSquad, swapPlayersInSheet } from "../lib/players";
 import { conditionFor, matchRatings } from "../lib/training";
 import { resolveMatchSides, teamById } from "../lib/resolve";
@@ -44,6 +46,7 @@ export function MatchScreen({
   const clock = visible.at(-1)?.minute ?? 0;
   const momentum = momentumAt(live.user.events, live.cursor);
   const [speed, setSpeed] = useState<(typeof SPEEDS)[number]["id"]>("slow");
+  const [pane, setPane] = useState<"call" | "stats">("call");
   const [htTactics, setHtTactics] = useState<Tactics>(save.tactics);
   const [htSheet, setHtSheet] = useState<TeamSheet>(save.sheet);
   const [htPicked, setHtPicked] = useState<string | null>(null);
@@ -56,8 +59,16 @@ export function MatchScreen({
     return () => window.clearInterval(timer);
   }, [interval, onAdvance, playing]);
 
+  useEffect(() => {
+    if (live.phase === "finished") setPane("stats");
+  }, [live.phase]);
+
   const squad = useMemo(() => ratedSquad(save.clubId), [save.clubId]);
   const byName = useMemo(() => new Map(squad.map((player) => [player.name, player])), [squad]);
+  const chart = liveStats(live.user, Math.max(live.cursor, 1), {
+    home: homeId === save.clubId ? save.condition : undefined,
+    away: awayId === save.clubId ? save.condition : undefined,
+  });
 
   const tapHt = (name: string) => {
     if (!htPicked) {
@@ -107,6 +118,19 @@ export function MatchScreen({
         </div>
         <span>{away ? compactName(away) : "Away"}</span>
       </div>
+      <p className="live-strip">
+        Poss {chart.homeStats.possessions}-{chart.awayStats.possessions} · Shots {chart.homeStats.scores}/{chart.homeStats.shots}-{chart.awayStats.scores}/{chart.awayStats.shots} · Puck-outs {chart.homeStats.puckoutsWon}-{chart.awayStats.puckoutsWon} · Tackles {chart.homeStats.tacklesWon}-{chart.awayStats.tacklesWon}
+      </p>
+      {live.phase !== "half-time" ? (
+        <div className="speed-row pane-row">
+          <button type="button" className={pane === "call" ? "is-active" : ""} onClick={() => setPane("call")}>
+            Commentary
+          </button>
+          <button type="button" className={pane === "stats" ? "is-active" : ""} onClick={() => setPane("stats")}>
+            Stats
+          </button>
+        </div>
+      ) : null}
       {live.phase === "half-time" ? (
         <div className="ht-panel">
           <h3>Half-time</h3>
@@ -136,13 +160,34 @@ export function MatchScreen({
             })}
           </ul>
         </div>
+      ) : pane === "stats" ? (
+        <div className="ht-panel">
+          {live.phase === "finished" && live.user.coachReport.length > 0 ? (
+            <section className="card">
+              <h3>Coach report</h3>
+              {live.user.coachReport.map((note) => (
+                <p key={note} className="tactic-copy">
+                  {note}
+                </p>
+              ))}
+            </section>
+          ) : null}
+          <MatchStatsPanel
+            homeName={home ? compactName(home) : "Home"}
+            awayName={away ? compactName(away) : "Away"}
+            homeStats={chart.homeStats}
+            awayStats={chart.awayStats}
+            players={chart.players}
+            compact={live.phase !== "finished"}
+          />
+        </div>
       ) : (
         <ol className="commentary">
           {visible
             .slice(-10)
             .reverse()
             .map((event, index) => (
-              <li key={`${event.minute}-${event.kind}-${index}`}>
+              <li key={`${event.minute}-${event.kind}-${index}`} className={event.kind === "coach" ? "is-coach" : ""}>
                 <span>{event.minute}&apos;</span>
                 {event.text}
               </li>

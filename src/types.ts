@@ -150,6 +150,8 @@ export type AttributeBoosts = Partial<
 export type PlayerCondition = {
   fatigue: number;
   sharpness: number;
+  mood?: number;
+  moodNote?: string;
   /** Small training lifts on 1–20 profile stats. Natural ability is the unboosted baseline. */
   boosts?: AttributeBoosts;
 };
@@ -177,8 +179,25 @@ export type MatchEventKind =
   | "hook"
   | "booking"
   | "puckout"
+  | "coach"
   | "half"
   | "full";
+
+export type StatCredit = {
+  name: string;
+  teamId: string;
+  possessions?: number;
+  passesAttempted?: number;
+  passesCompleted?: number;
+  shots?: number;
+  scores?: number;
+  highFieldingAttempted?: number;
+  highFieldingWon?: number;
+  puckoutsWon?: number;
+  tacklesAttempted?: number;
+  tacklesWon?: number;
+  minutes?: number;
+};
 
 export type MatchEvent = {
   minute: number;
@@ -187,13 +206,80 @@ export type MatchEvent = {
   kind: MatchEventKind;
   text: string;
   momentum?: number;
+  credits?: StatCredit[];
+};
+
+export type PlayerMatchStats = {
+  name: string;
+  teamId: string;
+  started: boolean;
+  minutes: number;
+  possessions: number;
+  passesAttempted: number;
+  passesCompleted: number;
+  shots: number;
+  scores: number;
+  highFieldingAttempted: number;
+  highFieldingWon: number;
+  puckoutsWon: number;
+  tacklesAttempted: number;
+  tacklesWon: number;
+  groundCovered: number;
+  fatigue: number;
+  overall: number;
+  rating: number;
+  mood: number;
+};
+
+export type TeamMatchStats = {
+  teamId: string;
+  possessions: number;
+  passesAttempted: number;
+  passesCompleted: number;
+  shots: number;
+  scores: number;
+  highFieldingAttempted: number;
+  highFieldingWon: number;
+  puckoutsWon: number;
+  tacklesAttempted: number;
+  tacklesWon: number;
+  groundCovered: number;
+  fatigue: number;
+  overall: number;
+  rating: number;
+};
+
+export type MatchReport = {
+  matchId: string;
+  homeId: string;
+  awayId: string;
+  homeScore: Score;
+  awayScore: Score;
+  homeTactics: Tactics;
+  awayTactics: Tactics;
+  homeSheet: TeamSheet;
+  awaySheet: TeamSheet;
+  homeStats: TeamMatchStats;
+  awayStats: TeamMatchStats;
+  players: PlayerMatchStats[];
+  coachReport: string[];
 };
 
 export type SimulatedMatch = {
   matchId: string;
+  homeId: string;
+  awayId: string;
   homeScore: Score;
   awayScore: Score;
   events: MatchEvent[];
+  homeTactics: Tactics;
+  awayTactics: Tactics;
+  homeSheet: TeamSheet;
+  awaySheet: TeamSheet;
+  homeStats: TeamMatchStats;
+  awayStats: TeamMatchStats;
+  players: PlayerMatchStats[];
+  coachReport: string[];
 };
 
 export type TeamSheet = {
@@ -202,7 +288,7 @@ export type TeamSheet = {
 };
 
 export type GameSave = {
-  version: 3;
+  version: 4;
   clubId: string;
   seed: number;
   tactics: Tactics;
@@ -213,6 +299,7 @@ export type GameSave = {
   preseasonWeek: number;
   condition: Record<string, PlayerCondition>;
   trainingDue: boolean;
+  reports: Record<string, MatchReport>;
 };
 
 export type LivePhase = "first" | "half-time" | "second" | "finished";

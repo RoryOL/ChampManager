@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { PageId } from "./types";
+import type { Match, PageId } from "./types";
 import { useGame } from "./hooks/useGame";
 import { BottomNav } from "./components/BottomNav";
 import { teamById } from "./lib/resolve";
@@ -9,13 +9,26 @@ import { HomeScreen } from "./screens/HomeScreen";
 import { SquadScreen } from "./screens/SquadScreen";
 import { TacticsScreen } from "./screens/TacticsScreen";
 import { FixturesScreen } from "./screens/FixturesScreen";
+import { MatchDetailScreen } from "./screens/MatchDetailScreen";
 import { TableScreen } from "./screens/TableScreen";
 import { MatchScreen } from "./screens/MatchScreen";
 
 export default function App() {
   const game = useGame();
   const [page, setPage] = useState<PageId>("home");
+  const [fixtureId, setFixtureId] = useState<string | null>(null);
   const club = game.save ? teamById(game.championship, game.save.clubId) : undefined;
+  const openTeam = (teamId: string) => {
+    game.setViewTeamId(teamId);
+    game.setPicked(null);
+    setFixtureId(null);
+    setPage("squad");
+  };
+  const openMatch = (match: Match) => {
+    setFixtureId(match.id);
+    setPage("fixtures");
+  };
+  const selectedMatch = game.championship.matches.find((match) => match.id === fixtureId);
 
   return (
     <div className="device">
@@ -73,11 +86,29 @@ export default function App() {
             />
           )}
           {page === "tactics" && <TacticsScreen save={game.save} onChange={game.setTactics} />}
-          {page === "fixtures" && (
-            <FixturesScreen championship={game.championship} save={game.save} />
+          {page === "fixtures" && selectedMatch && game.save ? (
+            <MatchDetailScreen
+              championship={game.championship}
+              save={game.save}
+              match={selectedMatch}
+              report={game.save.reports[selectedMatch.id] ?? null}
+              onBack={() => setFixtureId(null)}
+              onOpenTeam={openTeam}
+            />
+          ) : null}
+          {page === "fixtures" && !selectedMatch && (
+            <FixturesScreen championship={game.championship} save={game.save} onOpenMatch={openMatch} />
           )}
-          {page === "table" && <TableScreen championship={game.championship} save={game.save} />}
-          <BottomNav page={page} onChange={setPage} />
+          {page === "table" && (
+            <TableScreen championship={game.championship} save={game.save} onOpenTeam={openTeam} />
+          )}
+          <BottomNav
+            page={page}
+            onChange={(next) => {
+              if (next !== "fixtures") setFixtureId(null);
+              setPage(next);
+            }}
+          />
         </>
       )}
     </div>
