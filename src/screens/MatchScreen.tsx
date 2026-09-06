@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Championship, GameSave, Tactics, TeamSheet } from "../types";
 import type { LiveMatch } from "../hooks/useGame";
+import { ClubBadge } from "../components/ClubBadge";
 import { MatchStatsPanel } from "../components/MatchStatsPanel";
 import { TacticControls } from "../components/TacticControls";
 import { compactName, sideLabel, teamAccent } from "../lib/display";
@@ -135,11 +136,21 @@ export function MatchScreen({
       </header>
       <section className="scoreboard">
         <div>
-          <em style={{ color: homeAccent.ink }}>{home ? compactName(home) : sideLabel(championship, live.match.home)}</em>
+          <span className="scoreboard-club">
+            <ClubBadge team={home} size="md" variant="colours" />
+            <em style={{ color: homeAccent.ink }}>
+              {home ? compactName(home) : sideLabel(championship, live.match.home)}
+            </em>
+          </span>
           <b>{formatScore(score.home)}</b>
         </div>
         <div>
-          <em style={{ color: awayAccent.ink }}>{away ? compactName(away) : sideLabel(championship, live.match.away)}</em>
+          <span className="scoreboard-club">
+            <ClubBadge team={away} size="md" variant="colours" />
+            <em style={{ color: awayAccent.ink }}>
+              {away ? compactName(away) : sideLabel(championship, live.match.away)}
+            </em>
+          </span>
           <b>{formatScore(score.away)}</b>
         </div>
       </section>

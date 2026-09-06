@@ -1,4 +1,5 @@
 import type { Championship, GameSave, Match } from "../types";
+import { ClubBadge } from "../components/ClubBadge";
 import { compactName, sideLabel } from "../lib/display";
 import { resolveMatchSides, teamById } from "../lib/resolve";
 import { formatDate, formatScore, matchPlayed, stageLabel } from "../lib/scoring";
@@ -26,10 +27,16 @@ export function FixturesScreen({ championship, save, onOpenMatch }: Props) {
                 <p>
                   {stageLabel(match.stage, match.round)} · {formatDate(match.date)}
                 </p>
-                <strong>
-                  {home ? compactName(home) : sideLabel(championship, match.home)}
+                <strong className="fixture-sides">
+                  <span>
+                    {home ? <ClubBadge team={home} size="sm" variant="colours" /> : null}
+                    {home ? compactName(home) : sideLabel(championship, match.home)}
+                  </span>
                   {played ? ` ${formatScore(match.homeScore!)} ${formatScore(match.awayScore!)} ` : " v "}
-                  {away ? compactName(away) : sideLabel(championship, match.away)}
+                  <span>
+                    {away ? <ClubBadge team={away} size="sm" variant="colours" /> : null}
+                    {away ? compactName(away) : sideLabel(championship, match.away)}
+                  </span>
                 </strong>
                 <em>{played ? (save.reports[match.id] ? "Stats and tactics" : "Result") : "Preview tactics"}</em>
               </button>

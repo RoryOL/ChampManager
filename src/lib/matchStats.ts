@@ -249,7 +249,7 @@ export function statsFromEvents(
     const workrate = found ? found.player.ratings.workrate : 12;
     const minutes = Math.max(row.minutes, row.started ? 1 : 0);
     const position = found?.player.position ?? slotOf(row.teamId, row.name);
-    const drain = matchFatigueDelta(minutes, tactics, position, row.started);
+    const drain = matchFatigueDelta(minutes, tactics, position, row.started, found?.player.age);
     const fatigue = Math.max(0, Math.min(100, condition.fatigue + drain));
     const groundCovered = Math.round(minutes * (0.072 + workrate * 0.0032) * 10) / 10;
     return {

@@ -57,13 +57,13 @@ export function MatchDetailScreen({ championship, save, match, report, onBack, o
       <div className="row-actions">
         {homeId ? (
           <button type="button" className="btn btn--ghost" onClick={() => onOpenTeam(homeId)}>
-            {home ? <ClubBadge team={home} size="sm" /> : null}
+            {home ? <ClubBadge team={home} size="sm" variant="crest" /> : null}
             {home ? compactName(home) : "Home"} squad
           </button>
         ) : null}
         {awayId ? (
           <button type="button" className="btn btn--ghost" onClick={() => onOpenTeam(awayId)}>
-            {away ? <ClubBadge team={away} size="sm" /> : null}
+            {away ? <ClubBadge team={away} size="sm" variant="crest" /> : null}
             {away ? compactName(away) : "Away"} squad
           </button>
         ) : null}

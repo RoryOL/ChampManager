@@ -43,10 +43,19 @@ export function HomeScreen({
   return (
     <div className="screen">
       <section className="club-banner">
-        <ClubBadge team={club} size="md" />
+        <span
+          className="colour-sash"
+          style={
+            club
+              ? { background: `linear-gradient(180deg, ${club.colours.primary} 50%, ${club.colours.secondary} 50%)` }
+              : undefined
+          }
+        />
+        <ClubBadge team={club} size="lg" variant="crest" />
         <div>
           <p>{group?.name}</p>
           <h1>{club ? compactName(club) : "Club"}</h1>
+          {club ? <span className="colour-label">{club.colours.label}</span> : null}
         </div>
         <button type="button" className="text-btn" onClick={onResign}>
           Resign

@@ -26,11 +26,12 @@ export function ClubSelectScreen({ onTakeCharge }: Props) {
           return (
             <li key={team.id}>
               <button type="button" onClick={() => onTakeCharge(team.id)}>
-                <ClubBadge team={team} size="md" />
+                <ClubBadge team={team} size="lg" variant="crest" />
                 <span>
                   <strong>{compactName(team)}</strong>
                   <em>
-                    {group?.name} · {best ? `${best.name} ${best.ratings.overall}` : ""}
+                    {team.colours.label} · {group?.name}
+                    {best ? ` · ${best.name} ${best.ratings.overall}` : ""}
                   </em>
                 </span>
                 <b>Take charge</b>

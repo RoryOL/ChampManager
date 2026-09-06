@@ -1,12 +1,20 @@
 import type { Team } from "../types";
+import { ClubCrest } from "./ClubCrest";
 
 type Props = {
   team?: Team;
-  size?: "sm" | "md";
+  size?: "sm" | "md" | "lg";
+  /** Crests on team overview; colour splits during matches and compact lists. */
+  variant?: "colours" | "crest";
 };
 
-export function ClubBadge({ team, size = "sm" }: Props) {
-  const dim = size === "md" ? 28 : 18;
+const DIM = { sm: 18, md: 28, lg: 44 };
+
+export function ClubBadge({ team, size = "sm", variant = "colours" }: Props) {
+  if (variant === "crest") {
+    return <ClubCrest team={team} size={size} />;
+  }
+  const dim = DIM[size];
   return (
     <span
       className={`club-badge club-badge--${size}`}
