@@ -125,6 +125,51 @@ describe("player ratings", () => {
     expect(playerAge("sixmilebridge", "Mark Sheedy")).toBeLessThan(playerAge("clonlara", "John Conlon"));
     expect(profileFor("clooney-quin", "Peter Duggan").grade).toBe("A");
   });
+
+  it("rolls a fresh attribute set per career seed while staying inside the grade band", () => {
+    const first = ratePlayer("ballyea", "Tony Kelly", 7, 101);
+    const second = ratePlayer("ballyea", "Tony Kelly", 7, 202);
+    expect(first.overall).toBeGreaterThanOrEqual(19);
+    expect(second.overall).toBeGreaterThanOrEqual(19);
+    expect(first.frees).toBeGreaterThanOrEqual(17);
+    expect(second.frees).toBeGreaterThanOrEqual(17);
+    expect(ATTRIBUTE_KEYS.some((key) => first[key] !== second[key])).toBe(true);
+
+    const hassettA = ratePlayer("clooney-quin", "Callum Hassett", 13, 11);
+    const hassettB = ratePlayer("clooney-quin", "Callum Hassett", 13, 99);
+    expect(hassettA.overall).toBeGreaterThanOrEqual(10);
+    expect(hassettA.overall).toBeLessThanOrEqual(15);
+    expect(hassettB.overall).toBeGreaterThanOrEqual(10);
+    expect(hassettB.overall).toBeLessThanOrEqual(15);
+    expect(ATTRIBUTE_KEYS.some((key) => hassettA[key] !== hassettB[key])).toBe(true);
+  });
+
+  it("marks Clare underage history and natural lines from 2025/2026 panels", () => {
+    const clooney = ratedSquad("clooney-quin");
+    const hassett = clooney.find((player) => player.name === "Callum Hassett");
+    const scanlan = clooney.find((player) => player.name === "Sam Scanlan");
+    const duggan = clooney.find((player) => player.name === "Cillian Duggan");
+    const corry = clooney.find((player) => player.name === "Jimmy Corry");
+    expect(hassett?.grade).toBe("C");
+    expect(hassett?.position).toBe("FF");
+    expect(scanlan?.grade).toBe("C");
+    expect(scanlan?.position).toBe("FF");
+    expect(duggan?.position).toBe("GK");
+    expect(corry?.position).toBe("MF");
+    expect(profileFor("ballyea", "Peter Casey").grade).toBe("C");
+    expect(profileFor("clooney-quin", "John Conneally").grade).toBe("B");
+    expect(profileFor("inagh-kilnamona", "Conner Hegarty").grade).toBe("C");
+  });
+
+  it("gives every club a wider 2025/2026 championship panel", () => {
+    for (const team of seedChampionship.teams) {
+      expect(ratedSquad(team.id).length, team.name).toBeGreaterThanOrEqual(20);
+    }
+    const names = ratedSquad("clooney-quin").map((player) => player.name);
+    expect(names).toContain("Cillian Duggan");
+    expect(names).toContain("Jimmy Corry");
+    expect(names).toContain("Trevor Lee");
+  });
 });
 
 describe("club colours", () => {

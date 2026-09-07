@@ -130,7 +130,7 @@ function decorateUserMatch(
   if (sim.homeId !== save.clubId && sim.awayId !== save.clubId) {
     return { sim, injuries: [] };
   }
-  const squad = ratedSquad(save.clubId);
+  const squad = ratedSquad(save.clubId, save.seed);
   const injuries = rollMatchInjuries({
     clubId: save.clubId,
     squad,
@@ -439,7 +439,7 @@ export function useGame() {
       const batch = nextBatch(championship, save.clubId);
       if (!batch) return null;
 
-      const squad = ratedSquad(save.clubId);
+      const squad = ratedSquad(save.clubId, save.seed);
       const userSheet = sitInjuredPlayers(save.sheet, squad, save.condition);
       let injuries: RolledInjury[] = [];
       const simulated = batch.matches
@@ -464,6 +464,7 @@ export function useGame() {
             awayName: awayTeam ? compactName(awayTeam) : awayId,
             period: isUser && mode === "first" ? "first" : "full",
             seed: save.seed,
+            gameSeed: save.seed,
           });
           if (!isUser) return sim;
           const decorated = decorateUserMatch(sim, save, championship, mode === "first" ? "first" : "full", userSheet);
@@ -565,7 +566,7 @@ export function useGame() {
           sheet.starters,
           sheet.subs,
           extras?.base?.tactics ?? base.tactics,
-          ratedSquad(base.clubId),
+          ratedSquad(base.clubId, base.seed),
         ),
         trainingDue: true,
       };
@@ -581,7 +582,7 @@ export function useGame() {
         sides.homeId === base.clubId ? current.user.awayScore : current.user.homeScore;
       const result =
         scoreTotal(ourScore) > scoreTotal(theirScore) ? "win" : scoreTotal(ourScore) < scoreTotal(theirScore) ? "loss" : "draw";
-      const squad = ratedSquad(base.clubId);
+      const squad = ratedSquad(base.clubId, base.seed);
       next = {
         ...next,
         condition: applyMatchMood(
@@ -730,7 +731,7 @@ export function useGame() {
         setLive({ ...live, phase: "half-wait" });
         return;
       }
-      const squad = ratedSquad(save.clubId);
+      const squad = ratedSquad(save.clubId, save.seed);
       const hurt = injuredNamesFromEvents(live.user.events, save.clubId);
       const workingSheet = sitInjuredPlayers(sheet, squad, save.condition, hurt);
       commitSolo(withSheet(withTactics(save, tactics), workingSheet));
@@ -757,6 +758,7 @@ export function useGame() {
         startAway: first.awayScore,
         startMomentum: momentumAt(first.events),
         seed: save.seed,
+        gameSeed: save.seed,
         climate: first.climate,
       });
       const decorated = decorateUserMatch(second, save, championship, "second", workingSheet);
@@ -879,7 +881,7 @@ export function useGame() {
         commitCampaign(trainClub(campaign, activeSeat.clubId, session));
         return;
       }
-      const squad = ratedSquad(save.clubId);
+      const squad = ratedSquad(save.clubId, save.seed);
       const club = teamById(championship, save.clubId);
       const date =
         save.phase === "preseason"

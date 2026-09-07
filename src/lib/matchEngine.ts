@@ -189,6 +189,8 @@ export function simulateMatch(options: {
   startAway?: Score;
   startMomentum?: number;
   seed: number;
+  /** Career seed for player attributes. Omit in tests so ratings stay name-stable. */
+  gameSeed?: number;
   climate?: MatchClimate;
 }): SimulatedMatch {
   const period = options.period ?? "full";
@@ -201,8 +203,8 @@ export function simulateMatch(options: {
   const awaySheet = options.awaySheet ?? defaultSheet(options.awayId);
   const homeTactics = options.homeTactics ?? clubTactics(options.homeId);
   const awayTactics = options.awayTactics ?? clubTactics(options.awayId);
-  const home = sideProfile(options.homeId, homeSheet, homeTactics, options.homeCondition, climate);
-  const away = sideProfile(options.awayId, awaySheet, awayTactics, options.awayCondition, climate);
+  const home = sideProfile(options.homeId, homeSheet, homeTactics, options.homeCondition, options.gameSeed, climate);
+  const away = sideProfile(options.awayId, awaySheet, awayTactics, options.awayCondition, options.gameSeed, climate);
   const homeDirect = clampDial(homeTactics.build) / 100;
   const awayDirect = clampDial(awayTactics.build) / 100;
   const homeLongPuck = clampDial(homeTactics.puckout) / 100;
@@ -214,10 +216,10 @@ export function simulateMatch(options: {
   const events: MatchEvent[] = [];
   const homeNames = homeSheet.starters;
   const awayNames = awaySheet.starters;
-  const homeXv = sheetPlayers(options.homeId, homeSheet);
-  const awayXv = sheetPlayers(options.awayId, awaySheet);
-  const homeTeamwork = sideTeamwork(options.homeId, homeSheet, options.homeCondition);
-  const awayTeamwork = sideTeamwork(options.awayId, awaySheet, options.awayCondition);
+  const homeXv = sheetPlayers(options.homeId, homeSheet, options.gameSeed);
+  const awayXv = sheetPlayers(options.awayId, awaySheet, options.gameSeed);
+  const homeTeamwork = sideTeamwork(options.homeId, homeSheet, options.homeCondition, options.gameSeed);
+  const awayTeamwork = sideTeamwork(options.awayId, awaySheet, options.awayCondition, options.gameSeed);
   const playerOf = (teamId: string, name: string) =>
     (teamId === options.homeId ? homeXv : awayXv).find((player) => player.name === name);
   const periodMinutes = period === "first" ? 32 : period === "second" ? 30 : 62;
@@ -780,6 +782,7 @@ export function simulateMatch(options: {
     awayCondition: options.awayCondition,
     homeTactics,
     awayTactics,
+    gameSeed: options.gameSeed,
   });
   const coachReport = buildCoachReport({
     clubId: options.clubId,
@@ -815,6 +818,7 @@ export function simulateMatch(options: {
     awayStats: tallied.awayStats,
     players: tallied.players,
     coachReport,
+    gameSeed: options.gameSeed,
     climate,
     shots,
   };

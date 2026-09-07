@@ -212,11 +212,12 @@ function familiarityFor(seed: number, natural: PositionLine, floor: number): Pos
   return result;
 }
 
-export function ratePlayer(teamId: string, name: string, index: number): PlayerRatings {
-  const seed = hash(`${teamId}:${name.toLowerCase()}`);
-  const position = positionForIndex(index);
+export function ratePlayer(teamId: string, name: string, index: number, gameSeed?: number): PlayerRatings {
+  const seed =
+    gameSeed == null ? hash(`${teamId}:${name.toLowerCase()}`) : hash(`${gameSeed}:${teamId}:${name.toLowerCase()}`);
   const panel = index >= 15;
   const profile = profileFor(teamId, name, panel);
+  const position = profile.position ?? positionForIndex(index);
   const target = stat(seed, profile.overallMin, profile.overallMax);
   const floor = profile.grade === "A" ? profile.overallMin : 0;
   const base = target;
@@ -292,7 +293,7 @@ export function computeOverall(
   );
 }
 
-export function ratedSquad(teamId: string): RatedPlayer[] {
+export function ratedSquad(teamId: string, gameSeed?: number): RatedPlayer[] {
   const lineup = latestLineup(teamId);
   const order = [
     ...(lineup?.starters.map((player) => player.name) ?? []),
@@ -300,12 +301,13 @@ export function ratedSquad(teamId: string): RatedPlayer[] {
   ];
   const squad = squadFor(teamId);
   return squad.map((player) => {
-    const index = Math.max(0, order.indexOf(player.name));
+    const listed = order.indexOf(player.name);
+    const index = listed >= 0 ? listed : 15;
     const profile = profileFor(teamId, player.name, index >= 15);
     return {
       ...player,
-      position: positionForIndex(index),
-      ratings: ratePlayer(teamId, player.name, index),
+      position: profile.position,
+      ratings: ratePlayer(teamId, player.name, index, gameSeed),
       age: profile.age,
       grade: profile.grade,
     };
@@ -320,8 +322,8 @@ export function defaultSheet(teamId: string): TeamSheet {
   };
 }
 
-export function sheetPlayers(teamId: string, sheet: TeamSheet): RatedPlayer[] {
-  const squad = ratedSquad(teamId);
+export function sheetPlayers(teamId: string, sheet: TeamSheet, gameSeed?: number): RatedPlayer[] {
+  const squad = ratedSquad(teamId, gameSeed);
   const byName = new Map(squad.map((player) => [player.name, player]));
   return sheet.starters
     .map((name) => byName.get(name))
@@ -454,9 +456,10 @@ export function sideProfile(
   sheet: TeamSheet,
   tactics: Tactics,
   condition: Record<string, PlayerCondition> = {},
+  gameSeed?: number,
   climate?: MatchClimate,
 ): SideProfile {
-  const xv = sheetPlayers(teamId, sheet);
+  const xv = sheetPlayers(teamId, sheet, gameSeed);
   const scaled = (index: number, keys: AttributeKey[]) => {
     const player = xv[index];
     if (!player) return 12;
@@ -560,8 +563,9 @@ export function sideStrength(
   teamId: string,
   sheet: TeamSheet,
   tactics: Tactics,
+  gameSeed?: number,
 ): { attack: number; defence: number } {
-  const profile = sideProfile(teamId, sheet, tactics);
+  const profile = sideProfile(teamId, sheet, tactics, {}, gameSeed);
   return { attack: profile.attack, defence: profile.defence };
 }
 
@@ -569,8 +573,9 @@ export function sideTeamwork(
   teamId: string,
   sheet: TeamSheet,
   condition: Record<string, PlayerCondition> = {},
+  gameSeed?: number,
 ): number {
-  const xv = sheetPlayers(teamId, sheet);
+  const xv = sheetPlayers(teamId, sheet, gameSeed);
   if (xv.length === 0) return 12;
   const total = xv.reduce(
     (sum, player) => sum + matchStat(player.ratings.teamwork, conditionFor(player.name, condition), "teamwork"),

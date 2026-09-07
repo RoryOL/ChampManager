@@ -363,8 +363,8 @@ export function ensureCondition(
   return next;
 }
 
-export function squadNames(teamId: string): string[] {
-  return ratedSquad(teamId).map((player) => player.name);
+export function squadNames(teamId: string, gameSeed?: number): string[] {
+  return ratedSquad(teamId, gameSeed).map((player) => player.name);
 }
 
 export function conditionFor(name: string, map: Record<string, PlayerCondition>): PlayerCondition {

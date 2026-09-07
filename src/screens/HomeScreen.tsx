@@ -99,7 +99,7 @@ export function HomeScreen({
   const group = teamGroup(championship, save.clubId);
   const sides = nextMatch ? resolveMatchSides(championship, nextMatch) : null;
   const [openId, setOpenId] = useState<string | null>(null);
-  const squad = ratedSquad(save.clubId);
+  const squad = ratedSquad(save.clubId, save.seed);
   const names = squad.map((player) => player.name);
   const fitness = averageFitness(save.condition, names);
   const sharpness = averageSharpness(save.condition, names);
@@ -208,6 +208,7 @@ export function HomeScreen({
               tactics: save.tactics,
               sheet: save.sheet,
               condition: save.condition,
+              seed: save.seed,
             }).notes.map((note) => (
               <p key={note} className="hint hint--tight">
                 {note}

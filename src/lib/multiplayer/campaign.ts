@@ -364,7 +364,7 @@ function applyClubTraining(
   const club = campaign.clubs[clubId];
   if (!club || !club.trainingDue || campaign.phase === "lobby") return campaign;
   const weekSession = resolveSession(session);
-  const squad = ratedSquad(clubId);
+  const squad = ratedSquad(clubId, campaign.seed);
   const championship = championshipOf(campaign);
   const date =
     campaign.phase === "preseason"
@@ -598,7 +598,7 @@ function clubSheet(
 ): TeamSheet {
   const club = campaign.clubs[clubId];
   const sheet = override ?? club?.sheet ?? defaultSheet(clubId);
-  return sitInjuredPlayers(sheet, ratedSquad(clubId), club?.condition ?? {}, extraNames);
+  return sitInjuredPlayers(sheet, ratedSquad(clubId, campaign.seed), club?.condition ?? {}, extraNames);
 }
 
 function mergeInjuryMaps(
@@ -626,7 +626,7 @@ function decorateHumanMatch(
     if (!club) continue;
     const rolled = rollMatchInjuries({
       clubId,
-      squad: ratedSquad(clubId),
+      squad: ratedSquad(clubId, campaign.seed),
       condition: club.condition,
       seed: campaign.seed,
       matchId: sim.matchId,
@@ -639,7 +639,7 @@ function decorateHumanMatch(
     });
     if (rolled.length === 0) continue;
     const sheet = clubId === next.homeId ? next.homeSheet : next.awaySheet;
-    next = insertInjuryEvents(next, rolled, { clubId, squad: ratedSquad(clubId), sheet });
+    next = insertInjuryEvents(next, rolled, { clubId, squad: ratedSquad(clubId, campaign.seed), sheet });
     injuries[clubId] = rolled;
   }
   return { sim: next, injuries };
@@ -724,7 +724,7 @@ function finishSim(
     const opening = ours ? first.homeSheet : first.awaySheet;
     const closing = ours ? sim.homeSheet : sim.awaySheet;
     const tactics = ours ? sim.homeTactics : sim.awayTactics;
-    const squad = ratedSquad(seat.clubId);
+    const squad = ratedSquad(seat.clubId, campaign.seed);
     const rolled = injuriesByClub[seat.clubId] ?? [];
     let condition = applyMatchFatigue(club.condition, closing.starters, closing.subs, tactics, squad);
     condition = applyMatchMood(condition, squad, opening, closing, sim.players, result);
@@ -953,7 +953,7 @@ export function submitSecondHalf(
   const club = campaign.clubs[clubId] ?? newClub(clubId);
   const seated = sitInjuredPlayers(
     sheet,
-    ratedSquad(clubId),
+    ratedSquad(clubId, campaign.seed),
     club.condition,
     injuredNamesFromEvents(live.first.events, clubId),
   );

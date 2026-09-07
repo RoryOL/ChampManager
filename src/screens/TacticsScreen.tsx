@@ -15,8 +15,8 @@ type Props = {
 };
 
 export function TacticsScreen({ save, onChange, onSwap }: Props) {
-  const xv = sheetPlayers(save.clubId, save.sheet);
-  const squad = useMemo(() => ratedSquad(save.clubId), [save.clubId]);
+  const xv = sheetPlayers(save.clubId, save.sheet, save.seed);
+  const squad = useMemo(() => ratedSquad(save.clubId, save.seed), [save.clubId, save.seed]);
   const byName = useMemo(() => new Map(squad.map((player) => [player.name, player])), [squad]);
   const [first, setFirst] = useState<string | null>(null);
   const [second, setSecond] = useState<string | null>(null);

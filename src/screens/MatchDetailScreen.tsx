@@ -108,8 +108,8 @@ export function MatchDetailScreen({ championship, save, match, report, onBack, o
               homeStats={report.homeStats}
               awayStats={report.awayStats}
               players={report.players}
-              homeSquad={homeId ? ratedSquad(homeId) : []}
-              awaySquad={awayId ? ratedSquad(awayId) : []}
+              homeSquad={homeId ? ratedSquad(homeId, save.seed) : []}
+              awaySquad={awayId ? ratedSquad(awayId, save.seed) : []}
               homeSheet={report.homeSheet}
               awaySheet={report.awaySheet}
               homeCondition={homeId === save.clubId ? save.condition : undefined}
@@ -140,6 +140,7 @@ export function MatchDetailScreen({ championship, save, match, report, onBack, o
               tactics: save.tactics,
               sheet: save.sheet,
               condition: save.condition,
+              seed: save.seed,
             }).notes.map((note) => (
               <p key={note} className="tactic-copy">
                 {note}

@@ -197,14 +197,14 @@ function PlayerDetail({
 
 export function SquadScreen({ save, teams, viewTeamId, onViewTeam, picked, onTapPlayer, onSetPlan, onOpenTraining }: Props) {
   const ownTeam = viewTeamId === save.clubId;
-  const squad = ratedSquad(viewTeamId);
+  const squad = ratedSquad(viewTeamId, save.seed);
   const byName = new Map(squad.map((player) => [player.name, player]));
   const sheet = ownTeam ? save.sheet : defaultSheet(viewTeamId);
   const starters = sheet.starters
     .map((name) => byName.get(name))
     .filter((player): player is RatedPlayer => Boolean(player));
   const rest = squad.filter((player) => !sheet.starters.includes(player.name));
-  const xv = sheetPlayers(viewTeamId, sheet);
+  const xv = sheetPlayers(viewTeamId, sheet, save.seed);
   const roles = designatedRoles(xv, ownTeam ? save.tactics : undefined);
   const selected = picked ? byName.get(picked) : undefined;
   const detailRef = useRef<HTMLLIElement | null>(null);
