@@ -9,7 +9,7 @@ import { formatPair, seasonStatsFor } from "../lib/matchStats";
 import { moodLabel, moodValue } from "../lib/mood";
 import { defaultSheet, designatedRoles, ratedSquad, sheetPlayers } from "../lib/players";
 import { FORMATION_ROWS } from "../lib/squads";
-import { conditionFor, fitnessOf, isOvertrained, matchRatings, matchStat, planFor, visibleBoostTotal } from "../lib/training";
+import { conditionFor, fitnessOf, isOvertrained, matchRatings, planFor, trainedRatings, trainingDelta, visibleBoostTotal } from "../lib/training";
 import { injuryLine, isInjured } from "../lib/injuries";
 
 type Props = {
@@ -60,11 +60,12 @@ function PlayerDetail({
   onSetPlan?: (plan: PlayerPlan) => void;
 }) {
   const match = showCondition && condition ? matchRatings(player, condition) : player.ratings;
-  const overallDelta = match.overall - player.ratings.overall;
+  const trained = showCondition && condition ? trainedRatings(player, condition) : player.ratings;
+  const overallDelta = trained.overall - player.ratings.overall;
   const trainingLifts =
     showCondition && condition
       ? ATTRIBUTE_KEYS.map((key) => {
-          const delta = matchStat(player.ratings[key], condition, key) - player.ratings[key];
+          const delta = trainingDelta(condition, key);
           return delta !== 0 ? `${ATTRIBUTE_LABELS[key].toLowerCase()} ${formatDelta(delta)}` : null;
         }).filter((item): item is string => Boolean(item))
       : [];
@@ -75,7 +76,7 @@ function PlayerDetail({
           <h3>{player.name}</h3>
           <p>
             {LINE_LABELS[player.position]} · {player.age} · {GRADE_LABEL[player.grade]} · {match.overall}
-            {overallDelta !== 0 ? ` (${formatDelta(overallDelta)} from training)` : ""}
+            {overallDelta !== 0 ? ` (${formatDelta(overallDelta)} banked from training)` : ""}
             {showCondition && condition ? ` · fitness ${fitnessOf(condition)}` : ""}
           </p>
         </div>
@@ -142,7 +143,7 @@ function PlayerDetail({
           <h4>{group.label}</h4>
           {group.keys.map((key: AttributeKey) => {
             const value = match[key];
-            const delta = showCondition && condition ? matchStat(player.ratings[key], condition, key) - player.ratings[key] : 0;
+            const delta = showCondition && condition ? trainingDelta(condition, key) : 0;
             const locked = MENTAL_KEYS.includes(key);
             return (
               <div key={key} className="attr-row">

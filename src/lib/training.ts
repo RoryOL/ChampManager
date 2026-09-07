@@ -396,10 +396,31 @@ export function matchStat(base: number, condition: PlayerCondition, key: Attribu
   return clampStat(base + boost + conditionAdjust(condition));
 }
 
+export function trainedStat(base: number, condition: PlayerCondition, key: AttributeKey): number {
+  return clampStat(base + (condition.boosts?.[key] ?? 0));
+}
+
+export function trainingDelta(condition: PlayerCondition, key: AttributeKey): number {
+  const value = Math.round(condition.boosts?.[key] ?? 0);
+  return value === 0 ? 0 : value;
+}
+
 export function matchRatings(player: RatedPlayer, condition: PlayerCondition): RatedPlayer["ratings"] {
   const ratings = {} as Record<AttributeKey, number>;
   for (const key of ATTRIBUTE_KEYS) {
     ratings[key] = matchStat(player.ratings[key], condition, key);
+  }
+  return {
+    ...player.ratings,
+    ...ratings,
+    overall: computeOverall(ratings, player.ratings.familiarity, player.position),
+  };
+}
+
+export function trainedRatings(player: RatedPlayer, condition: PlayerCondition): RatedPlayer["ratings"] {
+  const ratings = {} as Record<AttributeKey, number>;
+  for (const key of ATTRIBUTE_KEYS) {
+    ratings[key] = trainedStat(player.ratings[key], condition, key);
   }
   return {
     ...player.ratings,

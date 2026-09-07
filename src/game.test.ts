@@ -22,7 +22,7 @@ import { clubTactics, DEFAULT_TACTICS, defaultSheet, matchOrderIndex, matchShirt
 import { nextBatch } from "./lib/schedule";
 import { matchPlayed } from "./lib/scoring";
 import { ATTRIBUTE_KEYS } from "./lib/attributes";
-import { applyMatchFatigue, applyTeamwork, applyTraining, applyWeekSession, averageMatchOverall, boostTotal, defaultCondition, fitnessOf, isOvertrained, matchStat, weekCoachCopy } from "./lib/training";
+import { applyMatchFatigue, applyTeamwork, applyTraining, applyWeekSession, averageMatchOverall, boostTotal, defaultCondition, fitnessOf, isOvertrained, matchStat, trainedStat, trainingDelta, weekCoachCopy } from "./lib/training";
 import { buildPreMatchBriefing } from "./lib/briefing";
 import type { Tactics } from "./types";
 import { nextSwapPick } from "./components/SwapConfirmBar";
@@ -666,6 +666,18 @@ describe("training", () => {
     expect(first.condition[squad[0].name]?.sharpness ?? 0).toBeGreaterThan(defaultCondition().sharpness);
     expect(second.overtrained.length).toBeGreaterThan(0);
     expect(isOvertrained(second.condition[squad[0].name] ?? defaultCondition())).toBe(true);
+  });
+
+  it("shows banked training without counting sharpness or tired legs", () => {
+    const squad = ratedSquad("ballyea").slice(0, 1);
+    const player = squad[0]!;
+    const fresh = { ...defaultCondition(), sharpness: 90, boosts: { speed: 0.6, passing: -0.2 } };
+    const tired = { ...fresh, fatigue: 80 };
+    expect(trainingDelta(fresh, "speed")).toBe(1);
+    expect(trainingDelta(fresh, "passing")).toBe(0);
+    expect(trainedStat(player.ratings.speed, fresh, "speed")).toBe(player.ratings.speed + 1);
+    expect(trainedStat(player.ratings.speed, tired, "speed")).toBe(player.ratings.speed + 1);
+    expect(matchStat(player.ratings.speed, tired, "speed")).toBeLessThan(trainedStat(player.ratings.speed, tired, "speed"));
   });
 
   it("banks small decimal lifts that do not always show on the card", () => {

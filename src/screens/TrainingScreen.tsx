@@ -14,12 +14,13 @@ import {
   conditionFor,
   defaultMixFor,
   fitnessOf,
-  matchStat,
   mixAbbrev,
   mixSummary,
   planFor,
   sessionForSlot,
   sessionsPerWeek,
+  trainedStat,
+  trainingDelta,
   type SquadTemplateId,
 } from "../lib/training";
 
@@ -250,8 +251,8 @@ export function TrainingScreen({ save, onBack, onTrain, onSetPlans, onSetIntensi
                     <td>{plan.recovery ? "Recovery" : mixAbbrev(plan.mix)}</td>
                     <td>{fitnessOf(condition)}</td>
                     {TABLE_KEYS.map((key) => {
-                      const value = matchStat(player.ratings[key], condition, key);
-                      const delta = value - player.ratings[key];
+                      const value = trainedStat(player.ratings[key], condition, key);
+                      const delta = trainingDelta(condition, key);
                       return (
                         <td key={key}>
                           {value}
