@@ -19,7 +19,8 @@ import {
   type AttributeKey,
 } from "./attributes";
 import { latestLineup, squadFor } from "./squads";
-import { conditionFor, matchStat } from "./training";
+import { isInjured, slotFit } from "./injuries";
+import { conditionFor, fitnessOf, matchStat } from "./training";
 
 const STAR_BIAS: Record<string, Partial<Record<AttributeKey, number>>> = {
   "Tony Kelly": {
@@ -320,6 +321,49 @@ export function defaultSheet(teamId: string): TeamSheet {
     starters: (lineup?.starters ?? []).map((player) => player.name).slice(0, 15),
     subs: (lineup?.subs ?? []).map((player) => player.name).slice(0, 5),
   };
+}
+
+function coachSlotScore(player: RatedPlayer, slotIndex: number, condition: Record<string, PlayerCondition>): number {
+  const healthy = isInjured(condition[player.name]) ? 0 : 800;
+  const fit = fitnessOf(conditionFor(player.name, condition));
+  return healthy + slotFit(player, slotIndex) + fit * 0.08;
+}
+
+/** Best available fifteen by slot, then five bench players. Injured lads sit if the panel allows. */
+export function coachPickSheet(
+  squad: RatedPlayer[],
+  condition: Record<string, PlayerCondition> = {},
+): TeamSheet {
+  const taken = new Set<string>();
+  const pick = (slotIndex: number) =>
+    [...squad]
+      .filter((player) => !taken.has(player.name))
+      .sort((a, b) => {
+        const delta = coachSlotScore(b, slotIndex, condition) - coachSlotScore(a, slotIndex, condition);
+        return delta !== 0 ? delta : a.name.localeCompare(b.name);
+      })[0];
+
+  const starters: string[] = [];
+  for (let index = 0; index < 15; index += 1) {
+    const next = pick(index);
+    if (!next) break;
+    starters.push(next.name);
+    taken.add(next.name);
+  }
+
+  const subs = [...squad]
+    .filter((player) => !taken.has(player.name))
+    .sort((a, b) => {
+      const ah = isInjured(condition[a.name]) ? 0 : 1;
+      const bh = isInjured(condition[b.name]) ? 0 : 1;
+      if (bh !== ah) return bh - ah;
+      const overall = b.ratings.overall - a.ratings.overall;
+      return overall !== 0 ? overall : a.name.localeCompare(b.name);
+    })
+    .slice(0, 5)
+    .map((player) => player.name);
+
+  return { starters, subs };
 }
 
 export function sheetPlayers(teamId: string, sheet: TeamSheet, gameSeed?: number): RatedPlayer[] {

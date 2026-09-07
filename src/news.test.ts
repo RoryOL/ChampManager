@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { seedChampionship } from "./data/championship";
-import { applyInjury, bestBenchForSlot, injuryChance, insertInjuryEvents, rollInjuryWeeks, sitInjuredPlayers, tickInjuries } from "./lib/injuries";
+import { applyInjury, bestBenchForSlot, injuryChance, insertInjuryEvents, isInjured, rollInjuryWeeks, sitInjuredPlayers, tickInjuries } from "./lib/injuries";
 import {
   ambitionFor,
   chairmanWelcome,
@@ -8,9 +8,11 @@ import {
   localPressItem,
   matchReportItem,
   migrateNewsItem,
+  NEWS_KIND_ICON,
+  NEWS_KIND_LABEL,
 } from "./lib/news";
 import { migrateSave, newSave } from "./lib/gameStorage";
-import { defaultSheet, ratedSquad } from "./lib/players";
+import { coachPickSheet, defaultSheet, ratedSquad } from "./lib/players";
 import { simulateMatch } from "./lib/matchEngine";
 import { defaultCondition } from "./lib/training";
 
@@ -132,6 +134,46 @@ describe("injuries", () => {
     expect(next.events[injuryAt + 1]?.kind).toBe("sub");
     expect(next.events[injuryAt + 1]?.playerName).toBe(incoming);
     expect(next.homeSheet.starters[0]).toBe(incoming);
+  });
+});
+
+describe("news kinds", () => {
+  it("gives every inbox kind a label and a left-side icon path", () => {
+    const kinds = Object.keys(NEWS_KIND_LABEL) as (keyof typeof NEWS_KIND_LABEL)[];
+    expect(kinds.length).toBeGreaterThanOrEqual(7);
+    for (const kind of kinds) {
+      expect(NEWS_KIND_LABEL[kind].length).toBeGreaterThan(0);
+      expect(NEWS_KIND_ICON[kind].length).toBeGreaterThan(10);
+    }
+  });
+});
+
+describe("coach team pick", () => {
+  it("names a unique fifteen by slot and a five-man bench", () => {
+    const squad = ratedSquad("ballyea");
+    const sheet = coachPickSheet(squad, {});
+    expect(sheet.starters).toHaveLength(15);
+    expect(sheet.subs).toHaveLength(5);
+    expect(new Set([...sheet.starters, ...sheet.subs]).size).toBe(20);
+    const gk = squad.find((player) => player.name === sheet.starters[0]);
+    expect(gk?.position).toBe("GK");
+    expect(sheet.starters).toContain("Tony Kelly");
+  });
+
+  it("sits an injured star and still fills the fifteen", () => {
+    const squad = ratedSquad("ballyea");
+    const injured = applyInjury({}, "Tony Kelly", {
+      weeksLeft: 3,
+      durationWeeks: 3,
+      ailment: "hamstring",
+      source: "training",
+    });
+    const sheet = coachPickSheet(squad, injured);
+    expect(sheet.starters).not.toContain("Tony Kelly");
+    expect(sheet.starters).toHaveLength(15);
+    const gk = squad.find((player) => player.name === sheet.starters[0]);
+    expect(gk?.position).toBe("GK");
+    expect(isInjured(injured[sheet.starters[0]!])).toBe(false);
   });
 });
 

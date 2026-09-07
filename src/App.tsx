@@ -152,7 +152,12 @@ export default function App() {
             />
           )}
           {page === "tactics" && (
-            <TacticsScreen save={game.save} onChange={game.setTactics} onSwap={game.swapPlayers} />
+            <TacticsScreen
+              save={game.save}
+              onChange={game.setTactics}
+              onSwap={game.swapPlayers}
+              onSetSheet={game.setSheet}
+            />
           )}
           {page === "fixtures" && selectedMatch && game.save ? (
             <MatchDetailScreen

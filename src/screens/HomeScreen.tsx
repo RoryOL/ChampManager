@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { Campaign, Championship, GameSave, Match, NewsItem, Seat, WeekShape } from "../types";
 import { CampaignWeekCard } from "../components/CampaignWeekCard";
 import { ClubBadge } from "../components/ClubBadge";
+import { NewsKindIcon } from "../components/NewsKindIcon";
 import { WeekShapePicker } from "../components/WeekShapePicker";
 import { compactName, sideLabel } from "../lib/display";
 import { NEWS_KIND_LABEL } from "../lib/news";
@@ -56,7 +57,8 @@ function NewsArticle({
       <button type="button" className="text-btn text-btn--back" onClick={onBack}>
         Back to news
       </button>
-      <p className="kicker">
+      <p className="kicker kicker--news">
+        <NewsKindIcon kind={item.kind} />
         {item.source || NEWS_KIND_LABEL[item.kind]}
         {item.date ? ` · ${formatDate(item.date)}` : ""}
       </p>
@@ -282,12 +284,15 @@ export function HomeScreen({
                   className={`news-item news-item--${item.tone ?? "neutral"}${item.read ? "" : " is-unread"}`}
                   onClick={() => openNews(item)}
                 >
-                  <em>
-                    {item.source || NEWS_KIND_LABEL[item.kind]}
-                    {item.date ? ` · ${formatDate(item.date)}` : ""}
-                  </em>
-                  <strong>{item.title}</strong>
-                  <span>{preview(item.body)}</span>
+                  <NewsKindIcon kind={item.kind} />
+                  <span className="news-item__copy">
+                    <em>
+                      {item.source || NEWS_KIND_LABEL[item.kind]}
+                      {item.date ? ` · ${formatDate(item.date)}` : ""}
+                    </em>
+                    <strong>{item.title}</strong>
+                    <span>{preview(item.body)}</span>
+                  </span>
                 </button>
               </li>
             ))

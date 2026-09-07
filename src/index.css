@@ -395,7 +395,76 @@ html.native-app .device {
   background: var(--surface);
   border: 1px solid var(--line);
   display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: start;
+}
+
+.news-item__copy {
+  display: grid;
   gap: 4px;
+  min-width: 0;
+}
+
+.news-kind-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  display: grid;
+  place-items: center;
+  color: var(--saffron);
+  flex-shrink: 0;
+}
+
+.news-kind-icon svg {
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+}
+
+.news-kind-icon--chairman {
+  color: var(--saffron);
+}
+
+.news-kind-icon--match {
+  color: #e8d48a;
+}
+
+.news-kind-icon--press {
+  color: #8eb4d8;
+}
+
+.news-kind-icon--injury {
+  color: #e8785a;
+}
+
+.news-kind-icon--training {
+  color: #7dce8a;
+}
+
+.news-kind-icon--recovery {
+  color: #86c4a0;
+}
+
+.news-kind-icon--briefing {
+  color: #c9b07a;
+}
+
+.kicker--news {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.kicker--news .news-kind-icon {
+  width: 28px;
+  height: 28px;
+}
+
+.kicker--news .news-kind-icon svg {
+  width: 16px;
+  height: 16px;
 }
 
 .news-item em {
@@ -1206,6 +1275,40 @@ html.native-app .device {
 
 .squad-table tr.is-picked td,
 .squad-table tr.is-picked td.name {
+  background: var(--you);
+}
+
+.tactics-table th.num,
+.tactics-table td.num {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--surface);
+  min-width: 28px;
+}
+
+.tactics-table th.name,
+.tactics-table td.name {
+  position: sticky;
+  left: 28px;
+  z-index: 2;
+  text-align: left;
+  box-shadow: 6px 0 8px rgba(0, 0, 0, 0.18);
+}
+
+.tactics-table thead th.num,
+.tactics-table thead th.name {
+  z-index: 3;
+}
+
+.tactics-table tbody tr:hover td.num,
+.tactics-table tbody tr:hover td.name,
+.tactics-table tr.is-picked td.num {
+  background: var(--surface-2);
+}
+
+.tactics-table tr.is-picked td.num,
+.tactics-table tr.is-picked td.name {
   background: var(--you);
 }
 

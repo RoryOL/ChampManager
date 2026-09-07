@@ -147,7 +147,7 @@ export function tickInjuries(
   return { condition: next, recovered };
 }
 
-function slotFit(player: RatedPlayer, slotIndex: number): number {
+export function slotFit(player: RatedPlayer, slotIndex: number): number {
   const slot = XV_SLOTS[slotIndex] ?? "MF";
   const familiarity = player.ratings.familiarity[slot] ?? 0;
   let bonus = 0;

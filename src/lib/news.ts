@@ -28,6 +28,17 @@ export const NEWS_KIND_LABEL: Record<NewsKind, string> = {
   briefing: "Coach",
 };
 
+/** 24×24 filled paths for the home-news kind mark. */
+export const NEWS_KIND_ICON: Record<NewsKind, string> = {
+  chairman: "M12 3.5A3.7 3.7 0 1 1 8.3 7.2 3.7 3.7 0 0 1 12 3.5zM5 20v-1.4c0-2.8 3.1-4.6 7-4.6s7 1.8 7 4.6V20zm9.2-12.6 1.6-1.6 3.8 3.8-1.6 1.6zM3.4 16.8 11 9.2l1.8 1.8-7.6 7.6H3.4z",
+  match: "M4.2 5.2 6 3.4 12.4 9.8 10.6 11.6zm7.6 0L19.8 13.2 18 15l-6.4-6.4zM11 14.2a3.4 3.4 0 1 1-3.4 3.4 3.4 3.4 0 0 1 3.4-3.4z",
+  press: "M4 4.5h13.2A2.3 2.3 0 0 1 19.5 6.8V19.5H6.2A2.2 2.2 0 0 1 4 17.3zm3.2 3.2h9.2v1.7H7.2zm0 3.4h9.2v1.7H7.2zm0 3.4h6.4v1.7H7.2z",
+  injury: "M12 3a9 9 0 1 0 9 9 9 9 0 0 0-9-9zm-1.15 5.1h2.3v3.15H16.3v2.3h-3.15V16.7h-2.3v-3.15H7.7v-2.3h3.15z",
+  training: "M4.5 10.2h8.2a4.2 4.2 0 1 1 0 4.4H9.2L6.8 19H4.5v-8.8zm11.6 1.1a1.6 1.6 0 1 0 1.6 1.6 1.6 1.6 0 0 0-1.6-1.6z",
+  recovery: "M12 20.6S4.6 16 4.6 10.7A4.4 4.4 0 0 1 12 7.2a4.4 4.4 0 0 1 7.4 3.5C19.4 16 12 20.6 12 20.6z",
+  briefing: "M8.2 2.8h7.6v2.8H8.2zm-2.4 2.2h2.2v2.6h8.4V5h2.2v16.2H5.8zm3.4 6.4h7.2v1.7H9.2zm0 3.4h5.2v1.7H9.2z",
+};
+
 const AMBITION_LABEL: Record<AmbitionTarget, string> = {
   canon: "the Canon",
   final: "a county final",
