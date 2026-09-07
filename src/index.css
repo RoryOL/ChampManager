@@ -973,6 +973,10 @@ html.native-app .device {
   color: #3b4a5c;
 }
 
+.choice-stack button:disabled {
+  opacity: 0.55;
+}
+
 .mix-editor {
   display: grid;
   gap: 8px;

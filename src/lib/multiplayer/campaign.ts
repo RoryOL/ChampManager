@@ -15,6 +15,7 @@ import type {
   TrainingPlans,
   WaitHours,
   WeekSession,
+  WeekShape,
   WeekState,
 } from "../../types";
 import { compactName } from "../display";
@@ -48,6 +49,7 @@ import { formatScore, matchPlayed, scoreTotal, stageLabel } from "../scoring";
 import {
   applyMatchFatigue,
   applyTeamwork,
+  applyFullTrainingWeek,
   applyWeekSession,
   defaultCondition,
   DEFAULT_INTENSITY,
@@ -463,6 +465,106 @@ export function trainClub(
   now = Date.now(),
 ): Campaign {
   return tickCampaign(bump(applyClubTraining(campaign, clubId, session, now)), now);
+}
+
+/** Set the week shape and run every remaining session in one go. */
+export function trainClubWeek(
+  campaign: Campaign,
+  clubId: string,
+  weekShape: WeekShape,
+  now = Date.now(),
+): Campaign {
+  const shaped = withClubTraining(campaign, clubId, { weekShape });
+  const club = shaped.clubs[clubId];
+  if (!club || !club.trainingDue || shaped.phase === "lobby") return shaped;
+  const squad = ratedSquad(clubId, shaped.seed);
+  const championship = championshipOf(shaped);
+  const date =
+    shaped.phase === "preseason"
+      ? (PRESEASON_DATES[shaped.preseasonWeek - 1] ?? PRESEASON_DATES.at(-1) ?? "")
+      : championship.matches.find((match) => !matchPlayed(match))?.date ?? "";
+  const sessionsDone = club.sessionsDone ?? 0;
+  const result = applyFullTrainingWeek({
+    squad,
+    condition: club.condition,
+    sheet: club.sheet,
+    lastSheet: club.lastSheet,
+    plans: club.plans ?? {},
+    phase: shaped.phase === "season" ? "season" : "preseason",
+    preseasonWeek: shaped.preseasonWeek,
+    sessionsDone,
+    intensity: club.intensity ?? DEFAULT_INTENSITY,
+    weekShape,
+    requestedSession: "mixed",
+    seed: shaped.seed,
+    weekKey: `${shaped.phase}-${shaped.preseasonWeek}-${date}-${sessionsDone}`,
+    remainingWeeks: remainingWeeks(saveFromCampaign(shaped, clubId), championship, clubId),
+    weekDeltas: club.weekDeltas ?? {},
+  });
+  const team = teamById(championship, clubId);
+  const title =
+    shaped.phase === "preseason"
+      ? `Preseason week ${shaped.preseasonWeek} complete`
+      : "Midweek session";
+  const items: NewsItem[] = [
+    ...result.recovered.map((name) => recoveryNews({ name, date, seed: shaped.seed })),
+    newsItem({
+      id: newsId(now),
+      kind: "training",
+      date,
+      title,
+      body: result.summary,
+    }),
+    ...result.freshInjuries.map((rolled) =>
+      injuryNews({
+        rolled,
+        date,
+        seed: shaped.seed,
+        key: `train-week-${date}-${rolled.name}`,
+        clubName: team?.name ?? "the club",
+      }),
+    ),
+  ];
+  if (result.weekComplete) {
+    const coach = weekCoachCopy(
+      squad,
+      result.weekDeltas,
+      shaped.phase === "preseason" ? `Preseason week ${shaped.preseasonWeek}` : "Midweek",
+      result.condition,
+    );
+    items.push(
+      newsItem({
+        id: `${newsId(now)}-coach`,
+        kind: "briefing",
+        date,
+        title: coach.title,
+        body: coach.body,
+        tone: coach.tone,
+      }),
+    );
+  }
+  let nextClub = pushInbox(
+    {
+      ...club,
+      condition: result.condition,
+      sheet: result.sheet,
+      trainingDue: result.trainingDue,
+      lastSheet: result.lastSheet ?? club.lastSheet,
+      sessionsDone: result.sessionsDone,
+      trainingDeltas: result.deltas,
+      weekDeltas: result.weekComplete ? {} : result.weekDeltas,
+    },
+    items,
+  );
+  nextClub = withClubBriefing(nextClub, clubId, shaped);
+  let next = withClub(shaped, clubId, nextClub);
+  if (shaped.phase === "preseason" && result.weekComplete) {
+    next = {
+      ...next,
+      week: { ...next.week, ready: { ...next.week.ready, [clubId]: { at: now } } },
+    };
+  }
+  return tickCampaign(bump(next), now);
 }
 
 export function readyClub(campaign: Campaign, clubId: string, now = Date.now()): Campaign {

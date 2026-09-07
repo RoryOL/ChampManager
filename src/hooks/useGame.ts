@@ -17,6 +17,7 @@ import {
   submitSecondHalf,
   tickCampaign,
   trainClub,
+  trainClubWeek,
   unreadyClub,
   waitingOnSecondHalf,
   withClubPlans,
@@ -67,6 +68,7 @@ import {
 import {
   applyMatchFatigue,
   applyTeamwork,
+  applyFullTrainingWeek,
   applyWeekSession,
   DEFAULT_INTENSITY,
   DEFAULT_WEEK_SHAPE,
@@ -1022,6 +1024,142 @@ export function useGame() {
     [activeSeat, campaign, championship, commitCampaign, commitSolo, save],
   );
 
+  const trainFullWeek = useCallback(
+    (weekShape: WeekShape) => {
+      if (!save || !save.trainingDue) return;
+      if (campaign && activeSeat) {
+        commitCampaign(trainClubWeek(campaign, activeSeat.clubId, weekShape));
+        return;
+      }
+      const squad = ratedSquad(save.clubId, save.seed);
+      const club = teamById(championship, save.clubId);
+      const date =
+        save.phase === "preseason"
+          ? (PRESEASON_DATES[save.preseasonWeek - 1] ?? PRESEASON_DATES.at(-1) ?? "")
+          : championship.matches.find((match) => !matchPlayed(match))?.date ?? "";
+      const sessionsDone = save.sessionsDone ?? 0;
+      const result = applyFullTrainingWeek({
+        squad,
+        condition: save.condition,
+        sheet: save.sheet,
+        lastSheet: save.lastSheet,
+        plans: save.plans,
+        phase: save.phase,
+        preseasonWeek: save.preseasonWeek,
+        sessionsDone,
+        intensity: save.intensity ?? DEFAULT_INTENSITY,
+        weekShape,
+        requestedSession: "mixed",
+        seed: save.seed,
+        weekKey: `${save.phase}-${save.preseasonWeek}-${date}-${sessionsDone}`,
+        remainingWeeks: remainingWeeks(save, championship, save.clubId),
+        weekDeltas: save.weekDeltas ?? {},
+      });
+      let next: GameSave = {
+        ...save,
+        weekShape,
+        condition: result.condition,
+        sheet: result.sheet,
+        trainingDue: result.trainingDue,
+        lastSheet: result.lastSheet ?? save.lastSheet,
+        sessionsDone: result.sessionsDone,
+        trainingDeltas: result.deltas,
+        weekDeltas: result.weekComplete ? {} : result.weekDeltas,
+      };
+      const items: NewsItem[] = result.recovered.map((name) => recoveryNews({ name, date, seed: save.seed }));
+      if (save.phase === "preseason") {
+        const week = save.preseasonWeek + (result.weekComplete ? 1 : 0);
+        if (result.weekComplete && week > PRESEASON_WEEKS) {
+          next = {
+            ...next,
+            phase: "season",
+            preseasonWeek: week,
+            trainingDue: false,
+          };
+          items.push(
+            newsItem({
+              id: `${save.seed}-preseason-done`,
+              kind: "training",
+              date: "2026-07-23",
+              title: "Championship week",
+              body: `${result.summary} Preseason is over. Pick your fifteen — Round 1 is next.`,
+            }),
+          );
+        } else if (result.weekComplete) {
+          next = { ...next, preseasonWeek: week, trainingDue: true };
+          items.push(
+            newsItem({
+              id: `${save.seed}-preseason-${save.preseasonWeek}`,
+              kind: "training",
+              date,
+              title: `Preseason week ${save.preseasonWeek} complete`,
+              body: result.summary,
+            }),
+          );
+        } else {
+          items.push(
+            newsItem({
+              id: `${save.seed}-preseason-${save.preseasonWeek}-week`,
+              kind: "training",
+              date,
+              title: `Preseason week ${save.preseasonWeek}`,
+              body: result.summary,
+            }),
+          );
+        }
+        if (result.weekComplete) {
+          const coach = weekCoachCopy(squad, result.weekDeltas, `Preseason week ${save.preseasonWeek}`, result.condition);
+          items.push(
+            newsItem({
+              id: `${save.seed}-coach-${save.preseasonWeek}`,
+              kind: "briefing",
+              date: week > PRESEASON_WEEKS ? "2026-07-23" : date,
+              title: coach.title,
+              body: coach.body,
+              tone: coach.tone,
+            }),
+          );
+        }
+      } else {
+        items.push(
+          newsItem({
+            id: `${save.seed}-midweek-${date}`,
+            kind: "training",
+            date,
+            title: "Midweek session",
+            body: result.summary,
+          }),
+        );
+        const coach = weekCoachCopy(squad, result.weekDeltas, "Midweek", result.condition);
+        items.push(
+          newsItem({
+            id: `${save.seed}-coach-midweek-${date}`,
+            kind: "briefing",
+            date,
+            title: coach.title,
+            body: coach.body,
+            tone: coach.tone,
+          }),
+        );
+      }
+      for (const rolled of result.freshInjuries) {
+        items.push(
+          injuryNews({
+            rolled,
+            date,
+            seed: save.seed,
+            key: `train-week-${date}-${rolled.name}`,
+            clubName: club?.name ?? "the club",
+          }),
+        );
+      }
+      next = withInbox(next, items);
+      next = ensureMatchBriefing(next, championshipFromSave(next));
+      commitSolo(next);
+    },
+    [activeSeat, campaign, championship, commitCampaign, commitSolo, save],
+  );
+
   const readNews = useCallback(
     (id: string) => {
       if (campaign && activeSeat) {
@@ -1126,6 +1264,7 @@ export function useGame() {
     continueSecondHalf,
     skipRest,
     trainWeek,
+    trainFullWeek,
     confirmWeek,
     undoReady,
     forceWeek,

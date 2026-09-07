@@ -124,6 +124,7 @@ export default function App() {
               }}
               onOpenTraining={() => setPage("training")}
               onSetWeekShape={game.setWeekShape}
+              onRunWeek={game.trainFullWeek}
             />
           )}
           {page === "squad" && (
