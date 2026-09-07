@@ -2,9 +2,10 @@ import { seedChampionship } from "../data/championship";
 import { DEFAULT_TACTICS, defaultSheet } from "./players";
 import { clampDial } from "./attributes";
 import { ambitionFor, migrateNewsItem } from "./news";
-import { defaultCondition, ensureCondition, squadNames } from "./training";
+import { defaultCondition, DEFAULT_INTENSITY, DEFAULT_WEEK_SHAPE, ensureCondition, squadNames } from "./training";
 import type {
   AmbitionTarget,
+  AttributeBoosts,
   CalendarPhase,
   Championship,
   GameSave,
@@ -14,7 +15,9 @@ import type {
   Score,
   Tactics,
   TeamSheet,
+  TrainingIntensity,
   TrainingPlans,
+  WeekShape,
 } from "../types";
 
 const STORAGE_KEY = "champ-manager:game-v1";
@@ -100,6 +103,14 @@ export function migrateTactics(raw: unknown): Tactics {
   };
 }
 
+function migrateIntensity(raw: unknown): TrainingIntensity {
+  return raw === "intense" || raw === "light" || raw === "balanced" ? raw : DEFAULT_INTENSITY;
+}
+
+function migrateWeekShape(raw: unknown): WeekShape {
+  return raw === "triple" || raw === "challenge" ? raw : DEFAULT_WEEK_SHAPE;
+}
+
 export function migrateSave(raw: unknown): GameSave | null {
   if (!raw || typeof raw !== "object") return null;
   const parsed = raw as {
@@ -118,6 +129,10 @@ export function migrateSave(raw: unknown): GameSave | null {
     ambition?: AmbitionTarget;
     plans?: TrainingPlans;
     lastSheet?: TeamSheet;
+    intensity?: unknown;
+    weekShape?: unknown;
+    sessionsDone?: unknown;
+    trainingDeltas?: unknown;
   };
   if (!parsed.clubId || !parsed.sheet || !Array.isArray(parsed.matches)) return null;
   if (
@@ -126,7 +141,8 @@ export function migrateSave(raw: unknown): GameSave | null {
     parsed.version !== 3 &&
     parsed.version !== 4 &&
     parsed.version !== 5 &&
-    parsed.version !== 6
+    parsed.version !== 6 &&
+    parsed.version !== 7
   ) {
     return null;
   }
@@ -143,8 +159,12 @@ export function migrateSave(raw: unknown): GameSave | null {
     parsed.ambition === "group"
       ? parsed.ambition
       : ambitionFor(parsed.clubId).target;
+  const trainingDeltas =
+    parsed.trainingDeltas && typeof parsed.trainingDeltas === "object"
+      ? (parsed.trainingDeltas as Record<string, AttributeBoosts>)
+      : {};
   return {
-    version: 6,
+    version: 7,
     clubId: parsed.clubId,
     seed: typeof parsed.seed === "number" ? parsed.seed : 1,
     tactics: migrateTactics(parsed.tactics),
@@ -164,13 +184,17 @@ export function migrateSave(raw: unknown): GameSave | null {
     ambition,
     plans: parsed.plans ?? {},
     lastSheet: parsed.lastSheet,
+    intensity: migrateIntensity(parsed.intensity),
+    weekShape: migrateWeekShape(parsed.weekShape),
+    sessionsDone: typeof parsed.sessionsDone === "number" ? Math.max(0, Math.min(3, Math.round(parsed.sessionsDone))) : 0,
+    trainingDeltas,
   };
 }
 
 export function newSave(clubId: string): GameSave {
   const championship = structuredClone(seedChampionship);
   return {
-    version: 6,
+    version: 7,
     clubId,
     seed: Math.floor(Math.random() * 1_000_000_000),
     tactics: DEFAULT_TACTICS,
@@ -188,6 +212,10 @@ export function newSave(clubId: string): GameSave {
     reports: {},
     ambition: ambitionFor(clubId).target,
     plans: {},
+    intensity: DEFAULT_INTENSITY,
+    weekShape: DEFAULT_WEEK_SHAPE,
+    sessionsDone: 0,
+    trainingDeltas: {},
   };
 }
 
@@ -250,4 +278,11 @@ export function withCondition(save: GameSave, condition: Record<string, PlayerCo
 
 export function withPlans(save: GameSave, plans: TrainingPlans): GameSave {
   return { ...save, plans };
+}
+
+export function withTrainingPrefs(
+  save: GameSave,
+  prefs: Partial<Pick<GameSave, "intensity" | "weekShape" | "plans">>,
+): GameSave {
+  return { ...save, ...prefs };
 }

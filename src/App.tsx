@@ -9,6 +9,7 @@ import { ClubSelectScreen } from "./screens/ClubSelectScreen";
 import { LobbyScreen } from "./screens/LobbyScreen";
 import { HomeScreen } from "./screens/HomeScreen";
 import { SquadScreen } from "./screens/SquadScreen";
+import { TrainingScreen } from "./screens/TrainingScreen";
 import { TacticsScreen } from "./screens/TacticsScreen";
 import { FixturesScreen } from "./screens/FixturesScreen";
 import { MatchDetailScreen } from "./screens/MatchDetailScreen";
@@ -106,8 +107,6 @@ export default function App() {
               onGoToMatch={game.goToMatch}
               onSkip={game.skipMatch}
               onResign={game.resign}
-              onTrain={game.trainWeek}
-              onSetPlans={game.setPlans}
               onReady={game.confirmWeek}
               onUnready={game.undoReady}
               onForce={game.forceWeek}
@@ -137,6 +136,17 @@ export default function App() {
               picked={game.picked}
               onTapPlayer={game.tapPlayer}
               onSetPlan={(name, plan) => game.setPlans({ ...game.save!.plans, [name]: plan })}
+              onOpenTraining={() => setPage("training")}
+            />
+          )}
+          {page === "training" && (
+            <TrainingScreen
+              save={game.save}
+              onBack={() => setPage("squad")}
+              onTrain={game.trainWeek}
+              onSetPlans={game.setPlans}
+              onSetIntensity={game.setIntensity}
+              onSetWeekShape={game.setWeekShape}
             />
           )}
           {page === "tactics" && (

@@ -1,19 +1,29 @@
 import type {
   AttributeBoosts,
+  CalendarPhase,
   PlayerCondition,
   PlayerPlan,
   PositionLine,
   RatedPlayer,
   Tactics,
   TeamSheet,
+  TrainingIntensity,
   TrainingMix,
   TrainingPlans,
   TrainingType,
   WeekSession,
+  WeekShape,
 } from "../types";
 import { ageResponse } from "../data/playerProfiles";
 import { ATTRIBUTE_KEYS, ATTRIBUTE_LABELS, MENTAL_KEYS, clampDial, type AttributeKey } from "./attributes";
-import { isInjured } from "./injuries";
+import {
+  applyInjury,
+  isInjured,
+  rollTrainingInjuries,
+  sitInjuredPlayers,
+  tickInjuries,
+  type RolledInjury,
+} from "./injuries";
 import { moodAdjust } from "./mood";
 import { clampStat, computeOverall, ratedSquad } from "./players";
 
@@ -65,6 +75,82 @@ export const SESSION_OPTIONS: { value: WeekSession; title: string; copy: string 
     copy: "The whole panel eases off so match fitness comes back. Banked training still shows once the legs are fresh.",
   },
 ];
+
+export const INTENSITY_OPTIONS: { value: TrainingIntensity; title: string; copy: string }[] = [
+  {
+    value: "light",
+    title: "Light",
+    copy: "Easier on the legs. Stats move slowly. Nobody picks up a training injury.",
+  },
+  {
+    value: "balanced",
+    title: "Balanced",
+    copy: "A normal week. Lifts come through without training injuries.",
+  },
+  {
+    value: "intense",
+    title: "Intense",
+    copy: "Faster lifts, heavier legs, and a real chance of picking up a knock in training.",
+  },
+];
+
+export const WEEK_SHAPE_OPTIONS: { value: WeekShape; title: string; copy: string }[] = [
+  {
+    value: "challenge",
+    title: "Two sessions + challenge",
+    copy: "Two mixed sessions, then a challenge match for the fifteen.",
+  },
+  {
+    value: "triple",
+    title: "Three sessions",
+    copy: "Three mixed sessions and no midweek game.",
+  },
+];
+
+export type SquadTemplateId = "position" | "balanced" | "defensive" | "attacking" | "tactics" | "physical" | "setpieces";
+
+export const SQUAD_TEMPLATES: { id: SquadTemplateId; title: string; copy: string; mix?: TrainingMix }[] = [
+  { id: "position", title: "By position", copy: "Each man works the split for his line." },
+  {
+    id: "balanced",
+    title: "Balanced",
+    copy: "Even split across the five areas.",
+    mix: { defensive: 20, attacking: 20, tactics: 20, physical: 20, setpieces: 20 },
+  },
+  {
+    id: "defensive",
+    title: "Defensive",
+    copy: "Tackling and marking first.",
+    mix: { defensive: 50, attacking: 5, tactics: 20, physical: 20, setpieces: 5 },
+  },
+  {
+    id: "attacking",
+    title: "Attacking",
+    copy: "Shooting and movement first.",
+    mix: { defensive: 5, attacking: 50, tactics: 20, physical: 20, setpieces: 5 },
+  },
+  {
+    id: "tactics",
+    title: "Tactics",
+    copy: "Passing, vision and first touch.",
+    mix: { defensive: 10, attacking: 10, tactics: 50, physical: 20, setpieces: 10 },
+  },
+  {
+    id: "physical",
+    title: "Physical",
+    copy: "Speed, strength and acceleration.",
+    mix: { defensive: 10, attacking: 10, tactics: 15, physical: 55, setpieces: 10 },
+  },
+  {
+    id: "setpieces",
+    title: "Set pieces",
+    copy: "Frees, sidelines and puck-outs.",
+    mix: { defensive: 5, attacking: 10, tactics: 20, physical: 15, setpieces: 50 },
+  },
+];
+
+export const DEFAULT_INTENSITY: TrainingIntensity = "balanced";
+export const DEFAULT_WEEK_SHAPE: WeekShape = "challenge";
 
 export function emptyMix(): TrainingMix {
   return { defensive: 0, attacking: 0, tactics: 0, physical: 0, setpieces: 0 };
@@ -152,11 +238,60 @@ export function applyPlansToSquad(squad: RatedPlayer[], template: PlayerPlan): T
   return next;
 }
 
+export function applyTemplateToPlayers(
+  squad: RatedPlayer[],
+  current: TrainingPlans,
+  templateId: SquadTemplateId,
+  names: string[],
+): TrainingPlans {
+  const wanted = new Set(names);
+  const next = { ...current };
+  const preset = SQUAD_TEMPLATES.find((item) => item.id === templateId);
+  for (const player of squad) {
+    if (!wanted.has(player.name)) continue;
+    if (templateId === "position" || !preset?.mix) {
+      next[player.name] = { mix: defaultMixFor(player.position), recovery: false };
+    } else {
+      next[player.name] = { mix: normalizeMix(preset.mix), recovery: false };
+    }
+  }
+  return next;
+}
+
+export function sessionsPerWeek(phase: CalendarPhase): number {
+  return phase === "preseason" ? 3 : 1;
+}
+
+export function sessionForSlot(
+  phase: CalendarPhase,
+  weekShape: WeekShape,
+  sessionsDone: number,
+  requested: WeekSession = "mixed",
+): WeekSession {
+  if (phase !== "preseason") return requested;
+  if (weekShape === "challenge" && sessionsDone >= 2) return "challenge";
+  return "mixed";
+}
+
+export function intensityLoad(intensity: TrainingIntensity): { fatigue: number; lift: "light" | "balanced" | "intense" } {
+  if (intensity === "light") return { fatigue: 0.55, lift: "light" };
+  if (intensity === "intense") return { fatigue: 1.45, lift: "intense" };
+  return { fatigue: 1, lift: "balanced" };
+}
+
 export function mixSummary(mix: TrainingMix): string {
   const parts = TRAINING_TYPE_OPTIONS.filter((option) => (mix[option.value] ?? 0) > 0).map(
     (option) => `${option.title} ${mix[option.value]}%`,
   );
   return parts.length > 0 ? parts.join(" · ") : "No work set";
+}
+
+export function mixAbbrev(mix: TrainingMix): string {
+  const parts = TRAINING_TYPE_OPTIONS.filter((option) => (mix[option.value] ?? 0) >= 15).map((option) => {
+    const short = option.title === "Set pieces" ? "Set" : option.title.slice(0, 3);
+    return `${short} ${mix[option.value]}`;
+  });
+  return parts.length > 0 ? parts.join(" · ") : "—";
 }
 
 export function dominantType(mix: TrainingMix): TrainingType | null {
@@ -276,15 +411,22 @@ function liftBoosts(current: AttributeBoosts | undefined, keys: AttributeKey[], 
   return next;
 }
 
-function liftFromMix(current: AttributeBoosts | undefined, mix: TrainingMix): AttributeBoosts {
+function liftFromMix(
+  current: AttributeBoosts | undefined,
+  mix: TrainingMix,
+  intensity: TrainingIntensity = "balanced",
+): AttributeBoosts {
   let next = current;
+  const minShare = intensity === "light" ? 28 : intensity === "intense" ? 8 : 10;
+  const twoShare = intensity === "light" ? 55 : intensity === "intense" ? 18 : 25;
+  const allShare = intensity === "light" ? 80 : intensity === "intense" ? 38 : 50;
   for (const type of TRAINING_TYPES) {
     const share = mix[type] ?? 0;
-    if (share < 10) continue;
+    if (share < minShare) continue;
     const keys = TRAINING_TYPE_KEYS[type];
-    if (share >= 50) {
+    if (share >= allShare) {
       next = liftBoosts(next, keys);
-    } else if (share >= 25) {
+    } else if (share >= twoShare) {
       next = liftBoosts(next, keys.slice(0, Math.min(2, keys.length)));
     } else {
       next = liftBoosts(next, keys.slice(0, 1));
@@ -322,6 +464,15 @@ function joinLabels(keys: AttributeKey[]): string {
   return `${labels.slice(0, -1).join(", ")} and ${labels.at(-1)}`;
 }
 
+function boostDeltas(before: AttributeBoosts | undefined, after: AttributeBoosts | undefined): AttributeBoosts {
+  const deltas: AttributeBoosts = {};
+  for (const key of ATTRIBUTE_KEYS) {
+    const change = (after?.[key] ?? 0) - (before?.[key] ?? 0);
+    if (change !== 0) deltas[key] = change;
+  }
+  return deltas;
+}
+
 export function applyTraining(
   squad: RatedPlayer[],
   condition: Record<string, PlayerCondition>,
@@ -329,11 +480,20 @@ export function applyTraining(
   plans: TrainingPlans = {},
   sheet?: TeamSheet,
   previous?: TeamSheet,
-): { condition: Record<string, PlayerCondition>; overtrained: string[]; summary: string; lastSheet?: TeamSheet } {
+  intensity: TrainingIntensity = "balanced",
+): {
+  condition: Record<string, PlayerCondition>;
+  overtrained: string[];
+  summary: string;
+  lastSheet?: TeamSheet;
+  deltas: Record<string, AttributeBoosts>;
+} {
   const next = { ...condition };
   const overtrained: string[] = [];
   const lifted = new Set<AttributeKey>();
   const used = new Set([...(sheet?.starters ?? []), ...(sheet?.subs ?? [])]);
+  const deltas: Record<string, AttributeBoosts> = {};
+  const loadMul = intensityLoad(intensity).fatigue;
 
   for (const player of squad) {
     const current = cloneCondition(next[player.name] ?? defaultCondition());
@@ -349,22 +509,22 @@ export function applyTraining(
     let fatigue = current.fatigue;
     let sharpness = current.sharpness;
     let boosts = current.boosts;
+    const before = boosts;
 
     if (recovery) {
       fatigue -= 24 * response.recover;
       sharpness += 1 * response.train;
     } else if (inChallenge) {
-      fatigue += (alreadyHeavy ? 26 : 18) * response.fatigue;
+      fatigue += (alreadyHeavy ? 26 : 18) * response.fatigue * loadMul;
       sharpness += (alreadyHeavy ? -2 : 9) * response.train;
     } else if (session === "challenge") {
       fatigue -= 12 * response.recover;
       sharpness += 1 * response.train;
     } else {
       const load = sessionLoad(plan.mix, alreadyHeavy);
-      fatigue += load.fatigue * response.fatigue;
+      fatigue += load.fatigue * response.fatigue * loadMul;
       sharpness += load.sharpness * response.train;
-      const before = boosts;
-      boosts = liftFromMix(boosts, plan.mix);
+      boosts = liftFromMix(boosts, plan.mix, intensity);
       for (const key of ATTRIBUTE_KEYS) {
         if ((boosts[key] ?? 0) > (before?.[key] ?? 0)) lifted.add(key);
       }
@@ -384,29 +544,117 @@ export function applyTraining(
       moodNote: current.moodNote,
       injury: current.injury,
     };
+    const playerDelta = boostDeltas(before, boosts);
+    if (Object.keys(playerDelta).length > 0) deltas[player.name] = playerDelta;
   }
 
   let lastSheet = sheet;
   if (session === "challenge" && sheet) {
     const teamworked = applyTeamwork(next, sheet, previous, "challenge");
+    for (const name of [...sheet.starters, ...sheet.subs]) {
+      const extra = boostDeltas(next[name]?.boosts, teamworked.condition[name]?.boosts);
+      if (Object.keys(extra).length > 0) {
+        deltas[name] = { ...(deltas[name] ?? {}), ...extra };
+      }
+    }
     Object.assign(next, teamworked.condition);
     lastSheet = teamworked.lastSheet;
   }
 
   const label = SESSION_OPTIONS.find((item) => item.value === session)?.title ?? session;
   const liftedText = joinLabels([...lifted]);
+  const intensityNote =
+    intensity === "intense" ? " Intense work lands harder on the legs." : intensity === "light" ? " Light work keeps the legs fresher." : "";
   const summary =
     overtrained.length > 0
       ? `${label} is done, but ${overtrained.length} player${overtrained.length === 1 ? " is" : "s are"} overtrained. The work is banked, yet match ratings look heavy until fitness recovers.`
       : session === "recovery"
         ? "Recovery week lands. Match fitness is back up, so banked ratings show through again."
         : session === "challenge"
-          ? "Challenge match is in the book. Teamwork lifts when the same lads stay in the same positions. Mental attributes did not move."
+          ? `Challenge match is in the book. Teamwork lifts when the same lads stay in the same positions. Mental attributes did not move.${intensityNote}`
           : liftedText
-            ? `${label} session is in the book. ${liftedText.charAt(0).toUpperCase()}${liftedText.slice(1)} are up on the player profiles — open the squad to see the numbers move. Workrate and composure stay as they are.`
-            : `${label} session is in the book. Open the squad to see who took a lift. Workrate and composure stay as they are.`;
+            ? `${label} session is in the book. ${liftedText.charAt(0).toUpperCase()}${liftedText.slice(1)} are up on the player profiles — open the squad to see the numbers move. Workrate and composure stay as they are.${intensityNote}`
+            : `${label} session is in the book. Open the squad to see who took a lift. Workrate and composure stay as they are.${intensityNote}`;
 
-  return { condition: next, overtrained, summary, lastSheet };
+  return { condition: next, overtrained, summary, lastSheet, deltas };
+}
+
+export function applyWeekSession(options: {
+  squad: RatedPlayer[];
+  condition: Record<string, PlayerCondition>;
+  sheet: TeamSheet;
+  lastSheet?: TeamSheet;
+  plans: TrainingPlans;
+  phase: CalendarPhase;
+  preseasonWeek: number;
+  sessionsDone: number;
+  intensity: TrainingIntensity;
+  weekShape: WeekShape;
+  requestedSession?: WeekSession;
+  seed: number;
+  weekKey: string;
+  remainingWeeks: number;
+}): {
+  condition: Record<string, PlayerCondition>;
+  sheet: TeamSheet;
+  lastSheet?: TeamSheet;
+  sessionsDone: number;
+  trainingDue: boolean;
+  summary: string;
+  recovered: string[];
+  freshInjuries: RolledInjury[];
+  deltas: Record<string, AttributeBoosts>;
+  weekComplete: boolean;
+  session: WeekSession;
+} {
+  const intensity = options.intensity ?? "balanced";
+  const weekShape = options.weekShape ?? "challenge";
+  const session = sessionForSlot(options.phase, weekShape, options.sessionsDone, options.requestedSession ?? "mixed");
+  let recovered: string[] = [];
+  let condition = options.condition;
+  if (options.sessionsDone === 0) {
+    const ticked = tickInjuries(condition, options.squad);
+    condition = ticked.condition;
+    recovered = ticked.recovered;
+  }
+  const trained = applyTraining(
+    options.squad,
+    condition,
+    session,
+    options.plans,
+    options.sheet,
+    options.lastSheet,
+    intensity,
+  );
+  const freshInjuries = rollTrainingInjuries({
+    squad: options.squad,
+    condition: trained.condition,
+    focus: session,
+    seed: options.seed,
+    weekKey: options.weekKey,
+    remainingWeeks: options.remainingWeeks,
+    intensity,
+  });
+  condition = trained.condition;
+  for (const rolled of freshInjuries) {
+    condition = applyInjury(condition, rolled.name, rolled.injury);
+  }
+  const sheet = sitInjuredPlayers(options.sheet, options.squad, condition);
+  const nextDone = options.sessionsDone + 1;
+  const weekComplete = nextDone >= sessionsPerWeek(options.phase);
+  return {
+    condition,
+    sheet,
+    lastSheet: trained.lastSheet ?? options.lastSheet,
+    sessionsDone: weekComplete ? 0 : nextDone,
+    trainingDue: !weekComplete,
+    summary: trained.summary,
+    recovered,
+    freshInjuries,
+    deltas: trained.deltas,
+    weekComplete,
+    session,
+  };
 }
 
 export function applyTeamwork(
