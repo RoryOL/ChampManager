@@ -127,7 +127,7 @@ export const SHAPE_OPTIONS: { value: Tactics["shape"]; title: string; copy: stri
   {
     value: "sweeper",
     title: "Sweeper (7 backs)",
-    copy: "Drop a seventh defender, leaving five forwards. Cuts goals against you; those forwards cover more ground and lose match fitness faster.",
+    copy: "Drop a seventh defender, leaving five forwards. The extra man at the back makes a goal a rare look; those forwards cover more ground and lose match fitness faster.",
   },
 ];
 

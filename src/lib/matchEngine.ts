@@ -3,6 +3,7 @@ import type {
   MatchEvent,
   MatchEventKind,
   PlayerCondition,
+  RatedPlayer,
   Score,
   ShotAttempt,
   SimulatedMatch,
@@ -13,6 +14,12 @@ import type {
 import { clampDial } from "./attributes";
 import { buildCoachReport, liveCoachTip } from "./coach";
 import { mergeCredits, passChain, deliverTo, statsFromEvents } from "./matchStats";
+import {
+  injuryText,
+  rollMatchInjuries,
+  subEventFor,
+  type RolledInjury,
+} from "./injuries";
 import { clubTactics, defaultSheet, sheetPlayers, sideProfile, sideTeamwork, type SideProfile } from "./players";
 import {
   conversionContext,
@@ -75,16 +82,59 @@ export function tackleChance(hooking: number, aggression: number, pressure = 48,
   );
 }
 
-export function mistimedFoulChance(aggression: number): number {
-  return Math.min(0.32, Math.max(0.03, 0.035 + (clampDial(aggression) / 100) * 0.22));
+function composureCardMul(composure: number): number {
+  return Math.max(0.65, Math.min(1.65, 1.28 - (composure - 10) * 0.055));
 }
 
-export function yellowOnFoulChance(aggression: number): number {
-  return Math.min(0.4, Math.max(0.02, 0.04 + (clampDial(aggression) / 100) * 0.3));
+export function mistimedFoulChance(aggression: number, wet = false): number {
+  const base = Math.min(0.32, Math.max(0.03, 0.035 + (clampDial(aggression) / 100) * 0.22));
+  return Math.min(0.38, base * (wet ? 1.18 : 1));
 }
 
-export function redOnFoulChance(aggression: number): number {
-  return Math.min(0.16, Math.max(0.02, 0.03 + (clampDial(aggression) / 100) * 0.1));
+export function yellowOnFoulChance(aggression: number, composure = 12, wet = false): number {
+  const base = Math.min(0.4, Math.max(0.02, 0.04 + (clampDial(aggression) / 100) * 0.3));
+  return Math.min(0.55, base * composureCardMul(composure) * (wet ? 1.15 : 1));
+}
+
+export function redOnFoulChance(aggression: number, composure = 12, wet = false): number {
+  const base = Math.min(0.16, Math.max(0.02, 0.03 + (clampDial(aggression) / 100) * 0.1));
+  return Math.min(0.28, base * composureCardMul(composure) * (wet ? 1.12 : 1));
+}
+
+/** After a send-off, play 6-2-5 regardless of who went: six backs, two midfielders, five forwards. */
+export function reshapeTo625(original: string[], out: Iterable<string>): string[] {
+  const banned = new Set(out);
+  const remaining = original.filter((name) => !banned.has(name));
+  if (remaining.length >= 15) return remaining.slice(0, 15);
+  const indexed = original.map((name, index) => ({ name, index })).filter((row) => !banned.has(row.name));
+  const used = new Set<string>();
+  const take = (want: (index: number) => boolean, count: number) => {
+    const picked: string[] = [];
+    const prefer = indexed.filter((row) => !used.has(row.name) && want(row.index));
+    const rest = indexed.filter((row) => !used.has(row.name));
+    for (const row of [...prefer, ...rest]) {
+      if (picked.length >= count) break;
+      picked.push(row.name);
+      used.add(row.name);
+    }
+    return picked;
+  };
+  const gk = take((index) => index === 0, 1);
+  const backs = take((index) => index >= 1 && index <= 6, 6);
+  const mids = take((index) => index >= 7 && index <= 8, 2);
+  const forwardCount = Math.max(0, remaining.length - gk.length - backs.length - mids.length);
+  const forwards = take((index) => index >= 9, forwardCount);
+  return [...gk, ...backs, ...mids, ...forwards];
+}
+
+export function sentOffNamesFromEvents(events: MatchEvent[], teamId?: string): string[] {
+  return [
+    ...new Set(
+      events
+        .filter((event) => event.kind === "red" && event.playerName && (!teamId || event.teamId === teamId))
+        .map((event) => event.playerName),
+    ),
+  ];
 }
 
 export function isScoreKind(kind: MatchEventKind): boolean {
@@ -192,6 +242,11 @@ export function simulateMatch(options: {
   /** Career seed for player attributes. Omit in tests so ratings stay name-stable. */
   gameSeed?: number;
   climate?: MatchClimate;
+  sentOff?: string[];
+  homeSquad?: RatedPlayer[];
+  awaySquad?: RatedPlayer[];
+  remainingWeeks?: number;
+  forcedRemovals?: { minute: number; teamId: string; name: string; kind: "red" | "injury" }[];
 }): SimulatedMatch {
   const period = options.period ?? "full";
   const seedKey = period === "second" ? `${options.seed}:${options.matchId}:second` : `${options.seed}:${options.matchId}`;
@@ -203,8 +258,6 @@ export function simulateMatch(options: {
   const awaySheet = options.awaySheet ?? defaultSheet(options.awayId);
   const homeTactics = options.homeTactics ?? clubTactics(options.homeId);
   const awayTactics = options.awayTactics ?? clubTactics(options.awayId);
-  const home = sideProfile(options.homeId, homeSheet, homeTactics, options.homeCondition, options.gameSeed, climate);
-  const away = sideProfile(options.awayId, awaySheet, awayTactics, options.awayCondition, options.gameSeed, climate);
   const homeDirect = clampDial(homeTactics.build) / 100;
   const awayDirect = clampDial(awayTactics.build) / 100;
   const homeLongPuck = clampDial(homeTactics.puckout) / 100;
@@ -214,25 +267,179 @@ export function simulateMatch(options: {
   let awayScore: Score = options.startAway ?? { goals: 0, points: 0 };
   let momentum = options.startMomentum ?? 50;
   const events: MatchEvent[] = [];
-  const homeNames = homeSheet.starters;
-  const awayNames = awaySheet.starters;
-  const homeXv = sheetPlayers(options.homeId, homeSheet, options.gameSeed);
-  const awayXv = sheetPlayers(options.awayId, awaySheet, options.gameSeed);
-  const homeTeamwork = sideTeamwork(options.homeId, homeSheet, options.homeCondition, options.gameSeed);
-  const awayTeamwork = sideTeamwork(options.awayId, awaySheet, options.awayCondition, options.gameSeed);
+  const homeOut = new Set((options.sentOff ?? []).filter((name) => homeSheet.starters.includes(name) || homeSheet.subs.includes(name)));
+  const awayOut = new Set((options.sentOff ?? []).filter((name) => awaySheet.starters.includes(name) || awaySheet.subs.includes(name)));
+  const homeSlots = [...homeSheet.starters];
+  const awaySlots = [...awaySheet.starters];
+  const homeSubs = [...homeSheet.subs];
+  const awaySubs = [...awaySheet.subs];
+  let homeNames = reshapeTo625(homeSlots, homeOut);
+  let awayNames = reshapeTo625(awaySlots, awayOut);
+  let homeLiveTactics: Tactics = homeNames.length < 15 ? { ...homeTactics, shape: "traditional" } : homeTactics;
+  let awayLiveTactics: Tactics = awayNames.length < 15 ? { ...awayTactics, shape: "traditional" } : awayTactics;
+  let home = sideProfile(options.homeId, { starters: homeNames, subs: homeSubs }, homeLiveTactics, options.homeCondition, options.gameSeed, climate);
+  let away = sideProfile(options.awayId, { starters: awayNames, subs: awaySubs }, awayLiveTactics, options.awayCondition, options.gameSeed, climate);
+  const homeRoster = options.homeSquad ?? sheetPlayers(options.homeId, homeSheet, options.gameSeed);
+  const awayRoster = options.awaySquad ?? sheetPlayers(options.awayId, awaySheet, options.gameSeed);
+  const homeTeamwork = sideTeamwork(options.homeId, { starters: homeNames, subs: homeSubs }, options.homeCondition, options.gameSeed);
+  const awayTeamwork = sideTeamwork(options.awayId, { starters: awayNames, subs: awaySubs }, options.awayCondition, options.gameSeed);
   const playerOf = (teamId: string, name: string) =>
-    (teamId === options.homeId ? homeXv : awayXv).find((player) => player.name === name);
+    (teamId === options.homeId ? homeRoster : awayRoster).find((player) => player.name === name)
+    ?? sheetPlayers(teamId, { starters: teamId === options.homeId ? homeNames : awayNames, subs: [] }, options.gameSeed).find(
+      (player) => player.name === name,
+    );
   const periodMinutes = period === "first" ? 32 : period === "second" ? 30 : 62;
+  const startMinute = period === "second" ? 32 : 1;
+  const endMinute = period === "first" ? 31 : 62;
+  const stints = new Map<string, number>();
+  const minuteBank: StatCredit[] = [];
+  const matchInjuries: RolledInjury[] = [];
+  const wet = climate.sky === "wet";
+  const keyFor = (teamId: string, name: string) => `${teamId}:${name}`;
+  const beginStint = (teamId: string, name: string, minute: number) => {
+    stints.set(keyFor(teamId, name), minute);
+  };
+  const endStint = (teamId: string, name: string, minute: number) => {
+    const key = keyFor(teamId, name);
+    const from = stints.get(key);
+    if (from === undefined) return;
+    stints.delete(key);
+    const span = Math.max(1, minute - from + 1);
+    const total = endMinute - startMinute + 1;
+    minuteBank.push({ name, teamId, minutes: Math.max(1, Math.round((span / total) * periodMinutes)) });
+  };
+  const fieldNames = (teamId: string) => (teamId === options.homeId ? homeNames : awayNames);
+  const refreshSide = (teamId: string) => {
+    if (teamId === options.homeId) {
+      homeNames = reshapeTo625(homeSlots, homeOut);
+      homeLiveTactics = homeNames.length < 15 ? { ...homeTactics, shape: "traditional" } : homeTactics;
+      home = sideProfile(
+        options.homeId,
+        { starters: homeNames, subs: homeSubs },
+        homeLiveTactics,
+        options.homeCondition,
+        options.gameSeed,
+        climate,
+      );
+    } else {
+      awayNames = reshapeTo625(awaySlots, awayOut);
+      awayLiveTactics = awayNames.length < 15 ? { ...awayTactics, shape: "traditional" } : awayTactics;
+      away = sideProfile(
+        options.awayId,
+        { starters: awayNames, subs: awaySubs },
+        awayLiveTactics,
+        options.awayCondition,
+        options.gameSeed,
+        climate,
+      );
+    }
+  };
+  const nextSub = (teamId: string) => {
+    const subs = teamId === options.homeId ? homeSubs : awaySubs;
+    const names = fieldNames(teamId);
+    const out = teamId === options.homeId ? homeOut : awayOut;
+    return subs.find((name) => !out.has(name) && !names.includes(name));
+  };
+  const dismiss = (teamId: string, name: string, minute: number) => {
+    const out = teamId === options.homeId ? homeOut : awayOut;
+    if (out.has(name) || !fieldNames(teamId).includes(name)) return;
+    endStint(teamId, name, minute);
+    out.add(name);
+    refreshSide(teamId);
+  };
+  const replaceInjured = (teamId: string, name: string, minute: number, rolled: RolledInjury) => {
+    if (!fieldNames(teamId).includes(name)) return;
+    endStint(teamId, name, minute);
+    matchInjuries.push(rolled);
+    push({
+      minute,
+      teamId,
+      playerName: name,
+      kind: "injury",
+      text: rolled.event.text,
+    });
+    const slots = teamId === options.homeId ? homeSlots : awaySlots;
+    const subs = teamId === options.homeId ? homeSubs : awaySubs;
+    const slot = slots.indexOf(name);
+    const incoming = nextSub(teamId);
+    if (incoming && slot >= 0) {
+      slots[slot] = incoming;
+      const subIndex = subs.indexOf(incoming);
+      if (subIndex >= 0) subs.splice(subIndex, 1);
+      beginStint(teamId, incoming, minute);
+      push(subEventFor(rolled, incoming));
+    } else {
+      (teamId === options.homeId ? homeOut : awayOut).add(name);
+    }
+    refreshSide(teamId);
+  };
+
+  for (const name of homeNames) beginStint(options.homeId, name, startMinute);
+  for (const name of awayNames) beginStint(options.awayId, name, startMinute);
+
+  const scheduledInjuries = [
+    ...(options.homeSquad
+      ? rollMatchInjuries({
+          clubId: options.homeId,
+          squad: options.homeSquad,
+          condition: options.homeCondition ?? {},
+          seed: options.seed,
+          matchId: options.matchId,
+          period,
+          remainingWeeks: options.remainingWeeks ?? 12,
+          teamId: options.homeId,
+          played: homeSheet.starters.map((name) => ({ name, minutes: periodMinutes, started: true })),
+        })
+      : []),
+    ...(options.awaySquad
+      ? rollMatchInjuries({
+          clubId: options.awayId,
+          squad: options.awaySquad,
+          condition: options.awayCondition ?? {},
+          seed: options.seed,
+          matchId: options.matchId,
+          period,
+          remainingWeeks: options.remainingWeeks ?? 12,
+          teamId: options.awayId,
+          played: awaySheet.starters.map((name) => ({ name, minutes: periodMinutes, started: true })),
+        })
+      : []),
+    ...(options.forcedRemovals ?? [])
+      .filter((item) => item.kind === "injury")
+      .map((item) => {
+        const ailment = "hamstring";
+        const weeks = 2;
+        const injury = { weeksLeft: weeks, durationWeeks: weeks, ailment, source: "match" as const };
+        return {
+          name: item.name,
+          minute: item.minute,
+          injury,
+          event: {
+            minute: item.minute,
+            teamId: item.teamId,
+            playerName: item.name,
+            kind: "injury" as const,
+            text: injuryText(item.name, ailment, weeks, options.remainingWeeks ?? 12),
+            momentum: 50,
+          },
+        } satisfies RolledInjury;
+      }),
+  ];
 
   const push = (event: Omit<MatchEvent, "momentum">) => {
     momentum = nextMomentum(momentum, event, options.homeId);
     events.push({ ...event, momentum });
   };
 
-  const tacticsFor = (teamId: string) => (teamId === options.homeId ? homeTactics : awayTactics);
+  const tacticsFor = (teamId: string) => (teamId === options.homeId ? homeLiveTactics : awayLiveTactics);
 
-  const minuteCredits = (sheet: TeamSheet, teamId: string): StatCredit[] =>
-    sheet.starters.map((name) => ({ name, teamId, minutes: periodMinutes }));
+  const flushMinutes = (minute: number): StatCredit[] => {
+    for (const name of [...homeNames]) endStint(options.homeId, name, minute);
+    for (const name of [...awayNames]) endStint(options.awayId, name, minute);
+    const credits = [...minuteBank];
+    minuteBank.length = 0;
+    return credits;
+  };
 
   const credit = (teamId: string, kind: "point" | "goal") => {
     if (teamId === options.homeId) homeScore = addScore(homeScore, kind);
@@ -480,21 +687,23 @@ export function simulateMatch(options: {
       return;
     }
 
-    if (random() < mistimedFoulChance(oppTactics.aggression ?? 46)) {
+    if (random() < mistimedFoulChance(oppTactics.aggression ?? 46, wet)) {
       const defender = pickName(oppNames.slice(0, 7), random);
       const agg = oppTactics.aggression ?? 46;
-      if (random() < yellowOnFoulChance(agg)) {
-        const red = random() < redOnFoulChance(agg);
+      const composure = playerOf(defendingId, defender)?.ratings.composure ?? 12;
+      if (random() < yellowOnFoulChance(agg, composure, wet)) {
+        const red = random() < redOnFoulChance(agg, composure, wet);
         push({
           minute,
           teamId: defendingId,
           playerName: defender,
           kind: red ? "red" : "booking",
           text: red
-            ? `RED CARD — ${defender} is sent off.`
+            ? `RED CARD — ${defender} is sent off. They'll play the rest 6-2-5.`
             : `Yellow card — ${defender} overcooks the challenge.`,
           credits: [{ name: defender, teamId: defendingId, tacklesAttempted: 1, freesConceded: 1 }],
         });
+        if (red) dismiss(defendingId, defender, minute);
       } else {
         pendingCredits.push({ name: defender, teamId: defendingId, tacklesAttempted: 1, freesConceded: 1 });
       }
@@ -546,7 +755,8 @@ export function simulateMatch(options: {
       return;
     }
     const intoShooter = deliverTo(teamId, moved.carrier, playerName);
-    const sweeperCut = oppTactics.shape === "sweeper" ? 0.62 : 1;
+    const sweeperCut = oppNames.length >= 15 && oppTactics.shape === "sweeper" ? 0.32 : 1;
+    const fiveForwardCut = names.length < 15 || tactics.shape === "sweeper" ? 0.82 : 1;
     const wind = conversionContext(climate, teamId, options.homeId, period);
     const convert = openPlayConversion({
       strikingDistance: striking,
@@ -559,7 +769,9 @@ export function simulateMatch(options: {
       wet: wind.wet,
     });
     const goalChance =
-      goalChanceFromDistance(distanceM, sweeperCut) * (direct > 0.6 ? 1.2 : 1) +
+      goalChanceFromDistance(distanceM, sweeperCut) *
+        fiveForwardCut *
+        (direct > 0.6 ? 1.2 : 1) +
       (direct > 0.62 && distanceM < 22 ? 0.05 : 0);
     const flush = (extra: StatCredit[]) =>
       mergeCredits([...pendingCredits.splice(0, pendingCredits.length), ...moved.credits, ...intoShooter, ...extra]);
@@ -699,9 +911,6 @@ export function simulateMatch(options: {
     });
   };
 
-  const startMinute = period === "second" ? 32 : 1;
-  const endMinute = period === "first" ? 31 : 62;
-
   for (let minute = startMinute; minute <= endMinute; minute += 1) {
     if (period !== "second" && minute === 31) {
       push({
@@ -710,10 +919,28 @@ export function simulateMatch(options: {
         playerName: "",
         kind: "half",
         text: "Half-time whistle.",
-        credits: period === "first" ? [...minuteCredits(homeSheet, options.homeId), ...minuteCredits(awaySheet, options.awayId)] : undefined,
+        credits: period === "first" ? flushMinutes(minute) : undefined,
       });
       if (period === "first") break;
       continue;
+    }
+    for (const item of options.forcedRemovals ?? []) {
+      if (item.minute !== minute || item.kind !== "red") continue;
+      if (!fieldNames(item.teamId).includes(item.name)) continue;
+      push({
+        minute,
+        teamId: item.teamId,
+        playerName: item.name,
+        kind: "red",
+        text: `RED CARD — ${item.name} is sent off. They'll play the rest 6-2-5.`,
+        credits: [{ name: item.name, teamId: item.teamId, tacklesAttempted: 1, freesConceded: 1 }],
+      });
+      dismiss(item.teamId, item.name, minute);
+    }
+    for (const rolled of scheduledInjuries) {
+      if (rolled.minute !== minute) continue;
+      if (!fieldNames(rolled.event.teamId).includes(rolled.name)) continue;
+      replaceInjured(rolled.event.teamId, rolled.name, minute, rolled);
     }
     playGroundContest(minute);
     if (random() < 0.55) playGroundContest(minute);
@@ -726,7 +953,7 @@ export function simulateMatch(options: {
         homeNames,
         home,
         away,
-        awayTactics,
+        awayLiveTactics,
         awayNames,
         minute,
         homeDirect,
@@ -741,7 +968,7 @@ export function simulateMatch(options: {
         awayNames,
         away,
         home,
-        homeTactics,
+        homeLiveTactics,
         homeNames,
         minute,
         awayDirect,
@@ -769,7 +996,7 @@ export function simulateMatch(options: {
       playerName: "",
       kind: "full",
       text: "Full-time.",
-      credits: [...minuteCredits(homeSheet, options.homeId), ...minuteCredits(awaySheet, options.awayId)],
+      credits: flushMinutes(62),
     });
   }
 
@@ -821,6 +1048,12 @@ export function simulateMatch(options: {
     gameSeed: options.gameSeed,
     climate,
     shots,
+    matchInjuries: matchInjuries.map((item) => ({
+      name: item.name,
+      teamId: item.event.teamId,
+      minute: item.minute,
+      injury: item.injury,
+    })),
   };
 }
 

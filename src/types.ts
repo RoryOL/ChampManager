@@ -385,6 +385,12 @@ export type SimulatedMatch = {
   gameSeed?: number;
   climate: MatchClimate;
   shots: ShotAttempt[];
+  matchInjuries?: {
+    name: string;
+    teamId: string;
+    minute: number;
+    injury: PlayerInjury;
+  }[];
 };
 
 export type TeamSheet = {

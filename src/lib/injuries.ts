@@ -231,7 +231,7 @@ export function injuredNamesFromEvents(events: MatchEvent[], clubId: string): st
   ];
 }
 
-function injuryText(name: string, ailment: string, weeks: number, maxWeeks: number): string {
+export function injuryText(name: string, ailment: string, weeks: number, maxWeeks: number): string {
   if (weeks >= Math.max(8, maxWeeks - 1)) {
     return `${name} is down — looks like a ${ailment}. That could be him for the year.`;
   }
