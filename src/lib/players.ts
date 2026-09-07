@@ -396,7 +396,7 @@ export type SideProfile = {
   aerial: number;
   running: number;
   hooking: number;
-  deadBall: number;
+  strength: number;
   halfBackHands: number;
   puckout: number;
   pressure: number;
@@ -473,7 +473,7 @@ export function sideProfile(
 
   let attack =
     average([
-      ...forwards.map((i) => scaled(i, ["shooting", "strikingDistance", "offTheBall", "composure", "firstTouch", "frees"])),
+      ...forwards.map((i) => scaled(i, ["shooting", "strikingDistance", "offTheBall", "composure", "firstTouch"])),
       ...mids.map((i) => scaled(i, ["strikingDistance", "vision", "passing", "workrate", "teamwork"])),
     ]) || 12;
   let defence =
@@ -487,7 +487,8 @@ export function sideProfile(
         scaled(i, ["speed", "acceleration", "firstTouch", "passing", "vision", "offTheBall", "teamwork"]),
       ),
     ) || 12;
-  let hooking = average(backs.map((i) => scaled(i, ["hooking", "strength", "workrate"]))) || 12;
+  let hooking = average(backs.map((i) => scaled(i, ["hooking", "workrate"]))) || 12;
+  let strength = average([...backs, ...mids].map((i) => scaled(i, ["strength"]))) || 12;
   let halfBackHands =
     average(halfBacks.map((i) => scaled(i, ["firstTouch", "passing", "vision", "underPressure"]))) || 12;
   const keeper = xv[0];
@@ -498,13 +499,6 @@ export function sideProfile(
   const longFreeTaker = pickNamedOrSpecialist(xv, tactics.longFreeTaker, "frees", condition);
   const shortFreeTaker = pickNamedOrSpecialist(xv, tactics.shortFreeTaker, "frees", condition);
   const sidelineTaker = pickNamedOrSpecialist(xv, tactics.sidelineTaker, "sidelines", condition);
-  const deadBallTaker = longFreeTaker ?? shortFreeTaker;
-  const deadBall = deadBallTaker
-    ? (matchStat(deadBallTaker.ratings.frees, conditionFor(deadBallTaker.name, condition), "frees") * 1.2 +
-        matchStat(deadBallTaker.ratings.composure, conditionFor(deadBallTaker.name, condition), "composure") +
-        matchStat(deadBallTaker.ratings.underPressure, conditionFor(deadBallTaker.name, condition), "underPressure")) /
-      3.2
-    : 12;
   const pressure =
     average(xv.map((player) => matchStat(player.ratings.underPressure, conditionFor(player.name, condition), "underPressure"))) ||
     12;
@@ -529,6 +523,7 @@ export function sideProfile(
   const physical = clampDial(tactics.aggression ?? 46) / 100;
   const press = clampDial(tactics.pressure ?? 48) / 100;
   hooking += physical * 2.4 + press * 0.9;
+  strength += physical * 1.1;
   defence += physical * 0.9 + press * 0.35;
 
   if (climate?.sky === "wet") {
@@ -550,7 +545,7 @@ export function sideProfile(
     aerial,
     running,
     hooking,
-    deadBall,
+    strength,
     halfBackHands,
     puckout,
     pressure,
