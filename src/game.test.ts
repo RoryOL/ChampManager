@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import { seedChampionship } from "./data/championship";
 import { ageResponse, GRADE_LABEL, profileFor } from "./data/playerProfiles";
 import { buildCoachReport } from "./lib/coach";
+import { applyMatchForm, formValue } from "./lib/form";
 import { migrateSave } from "./lib/gameStorage";
 import { seasonStatsFor, lastMatchRating } from "./lib/matchStats";
-import { applyMatchMood } from "./lib/mood";
 import { openPlayConversion } from "./lib/shooting";
 import { crossWind, parallelWind, passCompleteChance, rollClimate, withWindFor } from "./lib/weather";
 import {
@@ -954,7 +954,7 @@ describe("save migration", () => {
       matches: [],
       inbox: [],
     });
-    expect(migrated?.version).toBe(8);
+    expect(migrated?.version).toBe(9);
     expect(migrated?.reports).toEqual({});
     expect(migrated?.tactics.mentality).toBe("attacking");
     expect(migrated?.tactics.build).toBeGreaterThan(60);
@@ -1191,13 +1191,14 @@ describe("match intel", () => {
     expect(notes.join(" ")).toMatch(/teamwork/i);
   });
 
-  it("drops mood for players left on the bench after a loss", () => {
+  it("moves hidden form from the display, not from sitting on the bench", () => {
     const squad = ratedSquad("ballyea");
     const sheet = defaultSheet("ballyea");
-    const starter = squad.find((player) => sheet.starters.includes(player.name)) ?? squad[0];
-    const bench = squad.find((player) => !sheet.starters.includes(player.name)) ?? squad.at(-1);
-    const condition = Object.fromEntries(squad.map((player) => [player.name, defaultCondition()]));
-    const next = applyMatchMood(
+    const starter = squad.find((player) => sheet.starters.includes(player.name)) ?? squad[0]!;
+    const bench = squad.find((player) => !sheet.starters.includes(player.name)) ?? squad.at(-1)!;
+    const start = 52;
+    const condition = Object.fromEntries(squad.map((player) => [player.name, { ...defaultCondition(), form: start }]));
+    const next = applyMatchForm(
       condition,
       squad,
       sheet,
@@ -1223,14 +1224,16 @@ describe("match intel", () => {
           fitness: 60,
           overall: 16,
           rating: 8.2,
-          mood: 58,
+          mood: 52,
         },
       ],
       "loss",
+      7,
+      "form-display",
     );
     expect(bench).toBeTruthy();
-    expect(next[bench!.name]?.mood ?? 58).toBeLessThan(defaultCondition().mood ?? 58);
-    expect(next[starter.name]?.mood ?? 58).toBeLessThan(70);
+    expect(formValue(next[starter.name])).not.toBe(start);
+    expect(Math.abs(formValue(next[bench.name]) - start)).toBeLessThanOrEqual(10);
   });
 
   it("rolls season totals from stored match reports", () => {

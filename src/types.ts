@@ -170,6 +170,9 @@ export type PlayerInjury = {
 export type PlayerCondition = {
   fatigue: number;
   sharpness: number;
+  /** Hidden match form, 8–92. Not shown on the squad card. */
+  form?: number;
+  /** @deprecated Migrated into form. */
   mood?: number;
   moodNote?: string;
   /** Small training lifts on 1–20 profile stats. Natural ability is the unboosted baseline. */
@@ -393,7 +396,7 @@ export type TeamSheet = {
 };
 
 export type GameSave = {
-  version: 8;
+  version: 9;
   clubId: string;
   seed: number;
   tactics: Tactics;

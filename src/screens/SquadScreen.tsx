@@ -1,15 +1,22 @@
 import { useEffect, useRef } from "react";
 import type { GameSave, PlayerCondition, PlayerMatchStats, PlayerPlan, RatedPlayer, Team, TrainingIntensity } from "../types";
-import { GRADE_LABEL } from "../data/playerProfiles";
 import { ClubBadge } from "../components/ClubBadge";
 import { TrainingMixEditor } from "../components/TrainingMixEditor";
-import { ATTRIBUTE_GROUPS, ATTRIBUTE_KEYS, ATTRIBUTE_LABELS, LINE_LABELS, MENTAL_KEYS, POSITION_LINES, type AttributeKey } from "../lib/attributes";
+import {
+  ATTRIBUTE_GROUPS,
+  ATTRIBUTE_KEYS,
+  ATTRIBUTE_LABELS,
+  ATTRIBUTE_SHORT,
+  LINE_LABELS,
+  MENTAL_KEYS,
+  POSITION_LINES,
+  type AttributeKey,
+} from "../lib/attributes";
 import { compactName } from "../lib/display";
 import { formatPair, seasonStatsFor } from "../lib/matchStats";
-import { moodLabel, moodValue } from "../lib/mood";
-import { defaultSheet, designatedRoles, ratedSquad, sheetPlayers } from "../lib/players";
+import { defaultSheet, matchOrderIndex, matchShirtNumber, ratedSquad } from "../lib/players";
 import { FORMATION_ROWS } from "../lib/squads";
-import { conditionFor, fitnessOf, isOvertrained, matchRatings, planFor, trainedRatings, trainingDelta, visibleBoostTotal } from "../lib/training";
+import { conditionFor, fitnessOf, isOvertrained, matchRatings, planFor, trainedRatings, trainingDelta } from "../lib/training";
 import { injuryLine, isInjured } from "../lib/injuries";
 
 type Props = {
@@ -22,15 +29,6 @@ type Props = {
   onSetPlan?: (name: string, plan: PlayerPlan) => void;
   onOpenTraining?: () => void;
 };
-
-function roleTags(player: RatedPlayer, roles: ReturnType<typeof designatedRoles>, inXv: boolean): string[] {
-  const tags: string[] = [];
-  if (inXv && roles.longFreeTaker === player.name) tags.push("Long frees");
-  if (inXv && roles.shortFreeTaker === player.name && roles.longFreeTaker !== player.name) tags.push("Short frees");
-  if (inXv && roles.sidelineTaker === player.name) tags.push("Sidelines");
-  if (inXv && roles.puckoutKeeper === player.name) tags.push("Puck-outs");
-  return tags;
-}
 
 function deltaClass(delta: number): string {
   if (delta > 0) return "delta is-up";
@@ -77,7 +75,7 @@ function PlayerDetail({
         <div>
           <h3>{player.name}</h3>
           <p>
-            {LINE_LABELS[player.position]} · {player.age} · {GRADE_LABEL[player.grade]} · {match.overall}
+            {LINE_LABELS[player.position]} · {player.age} · {match.overall}
             {overallDelta !== 0 ? ` (${formatDelta(overallDelta)} banked from training)` : ""}
             {showCondition && condition ? ` · fitness ${fitnessOf(condition)}` : ""}
           </p>
@@ -103,18 +101,6 @@ function PlayerDetail({
             <em>{condition.sharpness}</em>
             <span className="delta" />
           </div>
-          <div className="attr-row">
-            <span>Mood</span>
-            <div className="attr-bar">
-              <i style={{ width: `${moodValue(condition)}%` }} />
-            </div>
-            <em>{moodValue(condition)}</em>
-            <span className="delta" />
-          </div>
-          <p className="hint hint--tight">
-            {moodLabel(moodValue(condition))}
-            {condition.moodNote ? ` — ${condition.moodNote}` : ". Wins, losses, the bench, substitutions and playing out of position all move this, and it feeds into match ratings."}
-          </p>
           {trainingLifts.length > 0 ? <p className="form-line">Profile stats: {trainingLifts.join(" · ")}</p> : null}
           {isOvertrained(condition) ? (
             <p className="warn">Overtrained — match fitness is too low, so profile stats are down until you recover.</p>
@@ -205,11 +191,8 @@ export function SquadScreen({ save, teams, viewTeamId, onViewTeam, picked, onTap
   const starters = sheet.starters
     .map((name) => byName.get(name))
     .filter((player): player is RatedPlayer => Boolean(player));
-  const rest = squad.filter((player) => !sheet.starters.includes(player.name));
-  const xv = sheetPlayers(viewTeamId, sheet, save.seed);
-  const roles = designatedRoles(xv, ownTeam ? save.tactics : undefined);
   const selected = picked ? byName.get(picked) : undefined;
-  const detailRef = useRef<HTMLLIElement | null>(null);
+  const detailRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!picked) return;
@@ -223,14 +206,24 @@ export function SquadScreen({ save, teams, viewTeamId, onViewTeam, picked, onTap
     return { value: match.overall, delta: match.overall - player.ratings.overall };
   };
 
+  const ratingsFor = (player: RatedPlayer) => {
+    if (!ownTeam) return player.ratings;
+    return matchRatings(player, conditionFor(player.name, save.condition));
+  };
+
+  const ordered = [...squad].sort((a, b) => {
+    const order = matchOrderIndex(sheet, a.name) - matchOrderIndex(sheet, b.name);
+    return order !== 0 ? order : a.name.localeCompare(b.name);
+  });
+
   const viewed = teams.find((team) => team.id === viewTeamId);
 
   return (
     <div className="screen">
       <p className="hint">
         {ownTeam
-          ? "Pitch numbers are current profile stats. Train, then tap a name — those bars move a little. Younger players react better to training. Tap a second name to swap."
-          : "Scouting view — inspect any championship panel. Grades come from Clare senior and underage history. Swap is only for your own club."}
+          ? "Numbers are today's fifteen (1–15) and bench, not squad jerseys. Tap a row for the full card — match fitness and sharpness sit there. Training lifts show as small green or red deltas."
+          : "Scouting view — inspect any championship panel. Numbers follow that club's likely fifteen. Swap is only for your own club."}
       </p>
       <div className="club-strip">
         {teams.map((team) => (
@@ -294,53 +287,69 @@ export function SquadScreen({ save, teams, viewTeamId, onViewTeam, picked, onTap
         ))}
       </div>
       <h3 className="list-title">{ownTeam ? "Your squad" : "Squad"}</h3>
-      <ul className="player-list">
-        {[...starters, ...rest].map((player) =>
-          player ? (
-            <li key={player.name} ref={picked === player.name ? detailRef : undefined}>
-              <button
-                type="button"
-                className={picked === player.name ? "is-picked" : ""}
-                onClick={() => onTapPlayer(player.name)}
-              >
-                <b>{player.number}</b>
-                <span>
-                  <strong>{player.name}</strong>
-                  <em>
-                    {player.position} · {player.age} · {GRADE_LABEL[player.grade]}
-                    {sheet.starters.includes(player.name) ? " · XV" : " · Bench"}
-                    {roleTags(player, roles, sheet.starters.includes(player.name)).map((tag) => ` · ${tag}`)}
-                    {ownTeam && isInjured(conditionFor(player.name, save.condition))
-                      ? ` · Out · ${injuryLine(conditionFor(player.name, save.condition).injury!)}`
-                      : ""}
-                    {ownTeam && isOvertrained(conditionFor(player.name, save.condition)) ? " · Tired" : ""}
-                    {ownTeam && visibleBoostTotal(conditionFor(player.name, save.condition)) > 0 ? " · In form" : ""}
-                  </em>
-                </span>
-                {(() => {
-                  const shown = displayOverall(player);
-                  return (
-                    <i className={shown.delta > 0 ? "is-up" : shown.delta < 0 ? "is-down" : ""}>
-                      {shown.value}
-                    </i>
-                  );
-                })()}
-              </button>
-              {selected?.name === player.name ? (
-                <PlayerDetail
-                  player={selected}
-                  condition={ownTeam ? conditionFor(selected.name, save.condition) : undefined}
-                  showCondition={ownTeam}
-                  season={seasonStatsFor(save.reports, viewTeamId, selected.name)}
-                  plan={ownTeam ? planFor(selected.name, save.plans, selected.position) : undefined}
-                  squadIntensity={save.intensity}
-                  onSetPlan={ownTeam && onSetPlan ? (plan) => onSetPlan(selected.name, plan) : undefined}
-                />
-              ) : null}
-            </li>
-          ) : null,
-        )}
-      </ul>
+      <div className="squad-table-wrap">
+        <table className="squad-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Player</th>
+              <th>Pos</th>
+              <th>Age</th>
+              <th>Ovr</th>
+              {ATTRIBUTE_KEYS.map((key) => (
+                <th key={key} title={ATTRIBUTE_LABELS[key]}>
+                  {ATTRIBUTE_SHORT[key]}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {ordered.map((player) => {
+              const shown = displayOverall(player);
+              const ratings = ratingsFor(player);
+              const number = matchShirtNumber(sheet, player.name);
+              const condition = ownTeam ? conditionFor(player.name, save.condition) : undefined;
+              const injured = Boolean(condition && isInjured(condition));
+              const tired = Boolean(condition && isOvertrained(condition));
+              return (
+                <tr
+                  key={player.name}
+                  className={picked === player.name ? "is-picked" : ""}
+                  onClick={() => onTapPlayer(player.name)}
+                >
+                  <td className="num">{number ?? "—"}</td>
+                  <td className="name">
+                    <strong>{player.name}</strong>
+                    {injured && condition?.injury ? <em>Out · {injuryLine(condition.injury)}</em> : null}
+                    {tired ? <em>Tired</em> : null}
+                  </td>
+                  <td>{player.position}</td>
+                  <td>{player.age}</td>
+                  <td className={shown.delta > 0 ? "is-up" : shown.delta < 0 ? "is-down" : ""}>
+                    {shown.value}
+                  </td>
+                  {ATTRIBUTE_KEYS.map((key) => (
+                    <td key={key}>{ratings[key]}</td>
+                  ))}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      {selected ? (
+        <div ref={detailRef}>
+          <PlayerDetail
+            player={selected}
+            condition={ownTeam ? conditionFor(selected.name, save.condition) : undefined}
+            showCondition={ownTeam}
+            season={seasonStatsFor(save.reports, viewTeamId, selected.name)}
+            plan={ownTeam ? planFor(selected.name, save.plans, selected.position) : undefined}
+            squadIntensity={save.intensity}
+            onSetPlan={ownTeam && onSetPlan ? (plan) => onSetPlan(selected.name, plan) : undefined}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }

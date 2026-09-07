@@ -12,6 +12,7 @@ import type {
 } from "../types";
 import { clampDial } from "./attributes";
 import { buildCoachReport, liveCoachTip } from "./coach";
+import { applyFormChance, formValue, fumbleChance } from "./form";
 import { mergeCredits, passChain, deliverTo, statsFromEvents } from "./matchStats";
 import { clubTactics, defaultSheet, sheetPlayers, sideProfile, sideTeamwork, type SideProfile } from "./players";
 import {
@@ -22,6 +23,7 @@ import {
   setPieceConversion,
   shotDistanceM,
 } from "./shooting";
+import { conditionFor } from "./training";
 import { climateOf, passCompleteChance, puckoutWindAdjust, rollClimate, withWindFor } from "./weather";
 
 const POINT_KINDS: ReadonlySet<MatchEventKind> = new Set(["point", "free", "sixtyFive", "sideline"]);
@@ -222,6 +224,12 @@ export function simulateMatch(options: {
   const awayTeamwork = sideTeamwork(options.awayId, awaySheet, options.awayCondition, options.gameSeed);
   const playerOf = (teamId: string, name: string) =>
     (teamId === options.homeId ? homeXv : awayXv).find((player) => player.name === name);
+  const conditionOf = (teamId: string, name: string) =>
+    conditionFor(
+      name,
+      teamId === options.homeId ? (options.homeCondition ?? {}) : (options.awayCondition ?? {}),
+    );
+  const formOf = (teamId: string, name: string) => formValue(conditionOf(teamId, name));
   const periodMinutes = period === "first" ? 32 : period === "second" ? 30 : 62;
 
   const push = (event: Omit<MatchEvent, "momentum">) => {
@@ -283,7 +291,7 @@ export function simulateMatch(options: {
     const distanceM =
       eventKind === "sixtyFive" ? 65 : resolved === "longFree" ? 52 : resolved === "sideline" ? 46 : 28;
     const wind = conversionContext(climate, teamId, options.homeId, period);
-    const chance = setPieceConversion(rawChance, distanceM, wind.withWind, wind.crossWind);
+    const chance = applyFormChance(setPieceConversion(rawChance, distanceM, wind.withWind, wind.crossWind), formOf(teamId, playerName));
 
     const gain: StatCredit = { name: playerName, teamId, possessions: 1, sequences: newSequence ? 1 : 0 };
     const scored = random() < chance;
@@ -419,11 +427,15 @@ export function simulateMatch(options: {
         pendingCredits.push(...winCredits);
       }
     } else if (random() < 0.12 + (1 - longPuck) * 0.28) {
-      const safe = Math.min(
-        0.82,
-        Math.max(0.35, 0.42 + (profile.halfBackHands - 12) * 0.04 - (opp.strength - 12) * 0.018),
-      );
       const halfBack = pickName(names.slice(4, 7), random);
+      const safe = applyFormChance(
+        Math.min(
+          0.82,
+          Math.max(0.35, 0.42 + (profile.halfBackHands - 12) * 0.04 - (opp.strength - 12) * 0.018),
+        ),
+        formOf(teamId, halfBack),
+        0.3,
+      );
       if (random() > safe) {
         const thief = pickName(oppNames.slice(0, 9), statRng);
         push({
@@ -509,13 +521,16 @@ export function simulateMatch(options: {
     const tactics = tacticsFor(teamId);
     const shooting = clampDial(tactics.shooting ?? 50);
     const hops = 1 + Math.floor((1 - direct) * 2) + (shooting > 62 ? 1 : 0);
+    const teamwork = teamId === options.homeId ? homeTeamwork : awayTeamwork;
+    const baseComplete = passCompleteChance(climate, direct, teamwork);
     const moved = passChain(
       names.slice(6, 15),
       teamId,
       statRng,
       hops,
       carrier,
-      passCompleteChance(climate, direct, teamId === options.homeId ? homeTeamwork : awayTeamwork),
+      (name) => applyFormChance(baseComplete, formOf(teamId, name), 0.28),
+      (name) => fumbleChance(playerOf(teamId, name)?.ratings.firstTouch ?? 12, formOf(teamId, name)),
     );
     if (!moved.retained) {
       push({
@@ -524,9 +539,10 @@ export function simulateMatch(options: {
         playerName: moved.carrier,
         kind: "turnover",
         text:
-          climate.sky === "wet"
+          moved.copy ??
+          (climate.sky === "wet"
             ? `Slippery striking — pass goes astray from ${moved.carrier}.`
-            : `Pass goes astray from ${moved.carrier}.`,
+            : `Pass goes astray from ${moved.carrier}.`),
         credits: mergeCredits([...pendingCredits.splice(0, pendingCredits.length), ...moved.credits]),
       });
       if (random() < 0.18) attemptSetPiece(defendingId, "sideline", opp, minute);
@@ -548,16 +564,19 @@ export function simulateMatch(options: {
     const intoShooter = deliverTo(teamId, moved.carrier, playerName);
     const sweeperCut = oppTactics.shape === "sweeper" ? 0.62 : 1;
     const wind = conversionContext(climate, teamId, options.homeId, period);
-    const convert = openPlayConversion({
-      strikingDistance: striking,
-      composure,
-      shooting,
-      finishing,
-      distanceM,
-      withWind: wind.withWind,
-      crossWind: wind.crossWind,
-      wet: wind.wet,
-    });
+    const convert = applyFormChance(
+      openPlayConversion({
+        strikingDistance: striking,
+        composure,
+        shooting,
+        finishing,
+        distanceM,
+        withWind: wind.withWind,
+        crossWind: wind.crossWind,
+        wet: wind.wet,
+      }),
+      formOf(teamId, playerName),
+    );
     const goalChance =
       goalChanceFromDistance(distanceM, sweeperCut) * (direct > 0.6 ? 1.2 : 1) +
       (direct > 0.62 && distanceM < 22 ? 0.05 : 0);
@@ -580,8 +599,9 @@ export function simulateMatch(options: {
     };
 
     if (random() < goalChance) {
-      if (random() < 0.16 + opp.defence * 0.006) {
-        const keeper = opp.keeper?.name ?? "the goalkeeper";
+      const keeper = opp.keeper?.name ?? "the goalkeeper";
+      const saveChance = applyFormChance(0.16 + opp.defence * 0.006, opp.keeper ? formOf(defendingId, opp.keeper.name) : 50);
+      if (random() < saveChance) {
         push({
           minute,
           teamId,
@@ -801,6 +821,13 @@ export function simulateMatch(options: {
     climate,
     homeTeamwork,
     awayTeamwork,
+    condition: options.clubId
+      ? options.clubId === options.homeId
+        ? options.homeCondition
+        : options.clubId === options.awayId
+          ? options.awayCondition
+          : options.homeCondition
+      : options.homeCondition,
   });
 
   return {

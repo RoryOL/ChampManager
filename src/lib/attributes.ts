@@ -88,6 +88,30 @@ export const MENTAL_KEYS: AttributeKey[] = ["workrate", "underPressure", "compos
 
 export const ATTRIBUTE_KEYS: AttributeKey[] = ATTRIBUTE_GROUPS.flatMap((group) => group.keys);
 
+export const ATTRIBUTE_SHORT: Record<AttributeKey, string> = {
+  speed: "Spd",
+  aerialReach: "Aer",
+  stamina: "Sta",
+  strength: "Str",
+  acceleration: "Acc",
+  firstTouch: "1st",
+  highFielding: "Fld",
+  strikingDistance: "Dst",
+  shooting: "Sht",
+  vision: "Vis",
+  hooking: "Hk",
+  passing: "Pas",
+  offTheBall: "Off",
+  manMarking: "Mrk",
+  workrate: "WR",
+  underPressure: "Prs",
+  composure: "Cmp",
+  teamwork: "Tmw",
+  frees: "Fr",
+  sidelines: "Sid",
+  puckoutReach: "Pk",
+};
+
 export const ATTRIBUTE_LABELS: Record<AttributeKey, string> = {
   speed: "Speed",
   aerialReach: "Aerial reach",

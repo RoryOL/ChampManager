@@ -16,6 +16,7 @@ import type {
 } from "../types";
 import { ageResponse } from "../data/playerProfiles";
 import { ATTRIBUTE_KEYS, ATTRIBUTE_LABELS, MENTAL_KEYS, clampDial, type AttributeKey } from "./attributes";
+import { formCoachNotes } from "./form";
 import {
   applyInjury,
   isInjured,
@@ -24,7 +25,6 @@ import {
   tickInjuries,
   type RolledInjury,
 } from "./injuries";
-import { moodAdjust } from "./mood";
 import { clampStat, computeOverall, ratedSquad } from "./players";
 
 export const PRESEASON_WEEKS = 6;
@@ -356,11 +356,11 @@ export function dominantType(mix: TrainingMix): TrainingType | null {
 }
 
 export function defaultCondition(): PlayerCondition {
-  return { fatigue: 0, sharpness: 38, mood: 58 };
+  return { fatigue: 0, sharpness: 38 };
 }
 
 export function midSeasonCondition(): PlayerCondition {
-  return { fatigue: 28, sharpness: 58, mood: 60 };
+  return { fatigue: 28, sharpness: 58 };
 }
 
 export function clampCondition(value: number): number {
@@ -385,8 +385,8 @@ function cloneCondition(current: PlayerCondition): PlayerCondition {
   return {
     fatigue: current.fatigue,
     sharpness: current.sharpness,
+    form: current.form,
     mood: current.mood,
-    moodNote: current.moodNote,
     boosts: current.boosts ? { ...current.boosts } : undefined,
     injury: current.injury ? { ...current.injury } : undefined,
   };
@@ -427,7 +427,6 @@ export function conditionAdjust(condition: PlayerCondition): number {
   else if (fitness <= 50) adjust -= 1;
   if (condition.sharpness >= 80) adjust += 1;
   else if (condition.sharpness < 28) adjust -= 1;
-  adjust += moodAdjust(condition);
   if (condition.injury && condition.injury.weeksLeft > 0) adjust -= 5;
   return adjust;
 }
@@ -604,6 +603,7 @@ export function weekCoachCopy(
   squad: RatedPlayer[],
   weekDeltas: Record<string, AttributeBoosts>,
   label: string,
+  condition?: Record<string, PlayerCondition>,
 ): { title: string; body: string; tone: "positive" | "negative" | "neutral" } {
   const ranked = squad
     .map((player) => ({ name: player.name, net: netNonMental(weekDeltas[player.name]) }))
@@ -628,6 +628,7 @@ export function weekCoachCopy(
   } else if (standouts.length === 0) {
     parts.push("The panel was even enough; nobody stood out and nobody fell away much.");
   }
+  parts.push(...formCoachNotes(condition));
   parts.push("Small lifts stack over sessions even when the profile numbers have not ticked yet.");
 
   const tone =
@@ -715,9 +716,9 @@ export function applyTraining(
     next[player.name] = {
       fatigue,
       sharpness,
-      boosts,
+      form: current.form,
       mood: current.mood,
-      moodNote: current.moodNote,
+      boosts,
       injury: current.injury,
     };
     const playerDelta = boostDeltas(before, boosts);
@@ -924,9 +925,9 @@ export function applyMatchFatigue(
     next[name] = {
       fatigue: clampCondition(current.fatigue + add - recover),
       sharpness: clampCondition(current.sharpness + (started ? 3 : 1)),
-      boosts: current.boosts,
+      form: current.form,
       mood: current.mood,
-      moodNote: current.moodNote,
+      boosts: current.boosts,
       injury: current.injury,
     };
   };

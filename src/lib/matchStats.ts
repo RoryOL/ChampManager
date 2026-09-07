@@ -11,6 +11,7 @@ import type {
 } from "../types";
 import { XV_SLOTS, type AttributeKey } from "./attributes";
 import { buildCoachReport } from "./coach";
+import { formValue } from "./form";
 import { ratedSquad, sideTeamwork } from "./players";
 import { conditionFor, fitnessOf, matchFatigueDelta, matchRatings } from "./training";
 
@@ -136,14 +137,25 @@ export function passChain(
   random: () => number,
   hops: number,
   carrier: string,
-  completeChance = 0.72,
-): { credits: StatCredit[]; carrier: string; retained: boolean } {
+  completeChance: number | ((name: string) => number) = 0.72,
+  fumbleFor?: (name: string) => number,
+): { credits: StatCredit[]; carrier: string; retained: boolean; copy?: string } {
   const credits: StatCredit[] = [];
   let onBall = carrier;
   const pool = names.length > 0 ? names : [carrier];
+  const completeOf = (name: string) => (typeof completeChance === "function" ? completeChance(name) : completeChance);
   for (let i = 0; i < hops; i += 1) {
+    const fumble = fumbleFor?.(onBall) ?? 0;
+    if (fumble > 0 && random() < fumble) {
+      return {
+        credits,
+        carrier: onBall,
+        retained: false,
+        copy: `${onBall} miscontrols the ball.`,
+      };
+    }
     const target = pool[Math.floor(random() * pool.length)] ?? onBall;
-    const completed = random() < completeChance;
+    const completed = random() < completeOf(onBall);
     credits.push({
       name: onBall,
       teamId,
@@ -282,7 +294,7 @@ export function statsFromEvents(
       fitness: Math.max(0, Math.min(100, 100 - fatigue)),
       overall,
       rating: matchRating({ ...row, minutes }),
-      mood: condition.mood ?? 58,
+      mood: formValue(condition),
     };
   });
 
@@ -383,14 +395,23 @@ export function formatPair(made: number, attempted: number): string {
 export function combineHalves(
   first: SimulatedMatch,
   second: SimulatedMatch,
-  names: { homeName: string; awayName: string; clubId?: string },
+  names: {
+    homeName: string;
+    awayName: string;
+    clubId?: string;
+    condition?: Record<string, PlayerCondition>;
+  },
 ): SimulatedMatch {
   const events = [...first.events, ...second.events];
+  const homeCondition = names.clubId === second.homeId ? names.condition : undefined;
+  const awayCondition = names.clubId === second.awayId ? names.condition : undefined;
   const tallied = statsFromEvents(events, {
     homeId: second.homeId,
     awayId: second.awayId,
     homeSheet: second.homeSheet,
     awaySheet: second.awaySheet,
+    homeCondition,
+    awayCondition,
     homeTactics: second.homeTactics,
     awayTactics: second.awayTactics,
     gameSeed: first.gameSeed ?? second.gameSeed,
@@ -410,8 +431,9 @@ export function combineHalves(
     players: tallied.players,
     events,
     climate: first.climate,
-    homeTeamwork: sideTeamwork(second.homeId, second.homeSheet, {}, first.gameSeed ?? second.gameSeed),
-    awayTeamwork: sideTeamwork(second.awayId, second.awaySheet, {}, first.gameSeed ?? second.gameSeed),
+    homeTeamwork: sideTeamwork(second.homeId, second.homeSheet, homeCondition ?? {}, first.gameSeed ?? second.gameSeed),
+    awayTeamwork: sideTeamwork(second.awayId, second.awaySheet, awayCondition ?? {}, first.gameSeed ?? second.gameSeed),
+    condition: names.condition,
   });
   return {
     ...second,

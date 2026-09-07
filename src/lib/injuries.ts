@@ -9,6 +9,7 @@ import type {
   WeekSession,
 } from "../types";
 import { ADJACENT_LINES, XV_SLOTS } from "./attributes";
+import { clampForm, formValue } from "./form";
 import { pickOne, createRng, seedFrom } from "./rng";
 
 function fitnessOf(condition: PlayerCondition): number {
@@ -111,14 +112,13 @@ export function applyInjury(
   name: string,
   injury: PlayerInjury,
 ): Record<string, PlayerCondition> {
-  const current = condition[name] ?? { fatigue: 0, sharpness: 38, mood: 58 };
+  const current = condition[name] ?? { fatigue: 0, sharpness: 38 };
   return {
     ...condition,
     [name]: {
       ...current,
       injury,
-      mood: Math.max(0, (current.mood ?? 58) - 10),
-      moodNote: `Sideline with a ${injury.ailment}.`,
+      form: clampForm(formValue(current) - 4),
     },
   };
 }
@@ -138,7 +138,6 @@ export function tickInjuries(
       const { injury: _dropped, ...rest } = current;
       next[player.name] = {
         ...rest,
-        moodNote: `Back from a ${injury.ailment}.`,
       };
       recovered.push(player.name);
     } else {

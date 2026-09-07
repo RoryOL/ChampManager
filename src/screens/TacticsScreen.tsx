@@ -4,7 +4,6 @@ import { SwapConfirmBar, nextSwapPick } from "../components/SwapConfirmBar";
 import { TacticControls } from "../components/TacticControls";
 import { isInjured } from "../lib/injuries";
 import { formatMatchRating, lastMatchRating, seasonStatsFor } from "../lib/matchStats";
-import { moodLabel, moodValue } from "../lib/mood";
 import { matchShirtNumber, matchSlot, ratedSquad, sheetPlayers } from "../lib/players";
 import { conditionFor, fitnessOf } from "../lib/training";
 
@@ -43,8 +42,8 @@ export function TacticsScreen({ save, onChange, onSwap }: Props) {
   return (
     <div className="screen">
       <p className="hint">
-        Match numbers follow today&apos;s fifteen, not squad jerseys. Fitness, average match rating, slot and form sit
-        on each row. Tap two names, then Swap, to change a position or bring a sub on — it will not move until you
+        Match numbers follow today&apos;s fifteen, not squad jerseys. Fitness, average match rating and slot sit on
+        each row. Tap two names, then Swap, to change a position or bring a sub on — it will not move until you
         confirm.
       </p>
       <h3 className="list-title">Fifteen and bench</h3>
@@ -68,7 +67,6 @@ export function TacticsScreen({ save, onChange, onSwap }: Props) {
           const slot = matchSlot(save.sheet, name);
           const number = matchShirtNumber(save.sheet, name);
           const onField = save.sheet.starters.includes(name);
-          const form = `${moodLabel(moodValue(condition))}${last !== undefined ? ` · last ${formatMatchRating(last)}` : ""}`;
           const picked = name === first || name === second;
           return (
             <li key={name}>
@@ -78,7 +76,8 @@ export function TacticsScreen({ save, onChange, onSwap }: Props) {
                   <strong>{player.name}</strong>
                   <em>
                     {onField ? slot : "Bench"} · Fit {fitnessOf(condition)} · Avg{" "}
-                    {formatMatchRating(season.minutes > 0 ? season.rating : undefined)} · {form}
+                    {formatMatchRating(season.minutes > 0 ? season.rating : undefined)}
+                    {last !== undefined ? ` · last ${formatMatchRating(last)}` : ""}
                     {isInjured(condition) ? " · Out" : ""}
                   </em>
                 </span>

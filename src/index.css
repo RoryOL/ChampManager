@@ -1075,6 +1075,86 @@ html.native-app .device {
   background: var(--you);
 }
 
+.squad-table-wrap {
+  overflow-x: auto;
+  margin: 8px 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.squad-table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.squad-table th,
+.squad-table td {
+  padding: 6px 7px;
+  text-align: center;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--line);
+  font-variant-numeric: tabular-nums;
+}
+
+.squad-table th {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 10px;
+  letter-spacing: 0.02em;
+}
+
+.squad-table td.num {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.squad-table td.name {
+  text-align: left;
+  position: sticky;
+  left: 0;
+  background: var(--surface);
+  min-width: 132px;
+}
+
+.squad-table td.name strong {
+  display: block;
+  font-size: 12px;
+}
+
+.squad-table td.name em {
+  display: block;
+  color: var(--muted);
+  font-style: normal;
+  font-size: 10px;
+}
+
+.squad-table tbody tr {
+  cursor: pointer;
+}
+
+.squad-table tbody tr:hover td,
+.squad-table tbody tr:hover td.name {
+  background: var(--surface-2);
+}
+
+.squad-table tr.is-picked td,
+.squad-table tr.is-picked td.name {
+  background: var(--you);
+}
+
+.squad-table td.is-up {
+  color: #7dce8a;
+  font-weight: 700;
+}
+
+.squad-table td.is-down {
+  color: #f0a3a3;
+  font-weight: 700;
+}
+
 .club-banner--overview .btn {
   margin-left: auto;
   flex-shrink: 0;

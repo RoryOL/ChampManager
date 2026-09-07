@@ -3,7 +3,7 @@ import { seedChampionship } from "../data/championship";
 import { compactName } from "../lib/display";
 import { momentumAt, simulateMatch } from "../lib/matchEngine";
 import { combineHalves, reportFromSim } from "../lib/matchStats";
-import { applyMatchMood, applyNewsMood } from "../lib/mood";
+import { applyMatchForm } from "../lib/form";
 import {
   addSeat,
   championshipOf,
@@ -585,13 +585,15 @@ export function useGame() {
       const squad = ratedSquad(base.clubId, base.seed);
       next = {
         ...next,
-        condition: applyMatchMood(
+        condition: applyMatchForm(
           next.condition,
           squad,
           current.openingSheet,
           sheet,
           current.user.players,
           result,
+          base.seed,
+          current.user.matchId,
         ),
       };
       const teamworked = applyTeamwork(next.condition, sheet, base.lastSheet, "competitive");
@@ -646,17 +648,6 @@ export function useGame() {
             played: next.matches.filter((match) => match.homeScore && match.awayScore).length,
           });
           items.push(press);
-          if (press.tone === "negative") {
-            next = {
-              ...next,
-              condition: applyNewsMood(
-                next.condition,
-                squad.map((player) => player.name),
-                -7,
-                "The local paper went after the team.",
-              ),
-            };
-          }
         }
       }
       for (const rolled of current.injuries) {
@@ -766,6 +757,7 @@ export function useGame() {
         clubId: save.clubId,
         homeName: homeTeam ? compactName(homeTeam) : "Home",
         awayName: awayTeam ? compactName(awayTeam) : "Away",
+        condition: save.condition,
       });
       const injuries = [...live.injuries, ...decorated.injuries];
       if (skipPlayback) {
@@ -948,7 +940,7 @@ export function useGame() {
               }),
             );
           }
-          const coach = weekCoachCopy(squad, result.weekDeltas, `Preseason week ${save.preseasonWeek}`);
+          const coach = weekCoachCopy(squad, result.weekDeltas, `Preseason week ${save.preseasonWeek}`, result.condition);
           items.push(
             newsItem({
               id: `${save.seed}-coach-${save.preseasonWeek}`,
@@ -980,7 +972,7 @@ export function useGame() {
             body: result.summary,
           }),
         );
-        const coach = weekCoachCopy(squad, result.weekDeltas, "Midweek");
+        const coach = weekCoachCopy(squad, result.weekDeltas, "Midweek", result.condition);
         items.push(
           newsItem({
             id: `${save.seed}-coach-midweek-${date}`,
