@@ -26,6 +26,7 @@ import {
   sixtyFiveChance,
   tackleChance,
   targetedPuckoutWinChance,
+  pressOutnumbered,
   yellowOnFoulChance,
 } from "./lib/matchEngine";
 import { clubTactics, DEFAULT_TACTICS, defaultSheet, matchOrderIndex, matchShirtNumber, matchSlot, pickPuckoutTarget, playerAge, ratePlayer, ratedSquad, sheetPlayers, sideStrength } from "./lib/players";
@@ -419,8 +420,19 @@ describe("match engine", () => {
     const field = reshapeTo625(sheet.starters, [sent]);
     expect(field).toHaveLength(14);
     expect(field).not.toContain(sent);
+    expect(new Set(field).size).toBe(field.length);
     const minutes = result.players.find((row) => row.name === sent && row.teamId === "ballyea")?.minutes ?? 62;
     expect(minutes).toBeLessThan(50);
+  });
+
+  it("keeps fourteen unique names after a send-off from any line", () => {
+    const sheet = defaultSheet("ballyea");
+    for (const sent of sheet.starters) {
+      const field = reshapeTo625(sheet.starters, [sent]);
+      expect(field).toHaveLength(14);
+      expect(new Set(field).size).toBe(14);
+      expect(field).not.toContain(sent);
+    }
   });
 
   it("replaces an injured starter immediately and stops his minutes", () => {
@@ -586,6 +598,136 @@ describe("match engine", () => {
 
   it("lets strength win more tackles than a lighter panel", () => {
     expect(tackleChance(12, 46, 48, 18)).toBeGreaterThan(tackleChance(12, 46, 48, 8));
+  });
+
+  it("makes attacker tackling less successful than backs or midfield, and worse when outnumbered", () => {
+    expect(tackleChance(12, 46, 48, 12, "forward")).toBeLessThan(tackleChance(12, 46, 48, 12, "back"));
+    expect(tackleChance(12, 46, 48, 12, "forward")).toBeLessThan(tackleChance(12, 46, 48, 12, "mid"));
+    expect(tackleChance(12, 46, 48, 12, "forward", true)).toBeLessThan(tackleChance(12, 46, 48, 12, "forward"));
+    const traditional: Tactics = { ...DEFAULT_TACTICS, shape: "traditional" };
+    const sweeper: Tactics = { ...DEFAULT_TACTICS, shape: "sweeper" };
+    expect(pressOutnumbered(15, traditional, 15, traditional)).toBe(false);
+    expect(pressOutnumbered(15, sweeper, 15, traditional)).toBe(true);
+    expect(pressOutnumbered(14, traditional, 15, traditional)).toBe(true);
+    expect(pressOutnumbered(15, traditional, 15, sweeper)).toBe(true);
+  });
+
+  it("gives forwards tackle attempts when pressing short puck-outs", () => {
+    const homeSheet = defaultSheet("ballyea");
+    const homeForwards = new Set(homeSheet.starters.slice(9));
+    const homeBacks = new Set(homeSheet.starters.slice(1, 9));
+    let forwardAttempts = 0;
+    let forwardWon = 0;
+    let backAttempts = 0;
+    let backWon = 0;
+    let hunts = 0;
+    for (let seed = 1; seed <= 16; seed += 1) {
+      const result = simulateMatch({
+        matchId: "g1-r1-a",
+        homeId: "ballyea",
+        awayId: "inagh-kilnamona",
+        homeTactics: { ...DEFAULT_TACTICS, pressure: 90, puckout: 22 },
+        awayTactics: { ...DEFAULT_TACTICS, puckout: 10 },
+        climate: { sky: "sunny", windStrength: 8, windAngle: 12 },
+        seed,
+      });
+      hunts += result.events.filter((event) => {
+        const forwardInvolved =
+          homeForwards.has(event.playerName) ||
+          [...homeForwards].some((name) => event.text.includes(name));
+        return (
+          forwardInvolved &&
+          /hunts down|turns .+ over in their own half|recycle it past|work it back to the keeper/i.test(event.text)
+        );
+      }).length;
+      for (const player of result.players) {
+        if (player.teamId !== "ballyea") continue;
+        if (homeForwards.has(player.name)) {
+          forwardAttempts += player.tacklesAttempted;
+          forwardWon += player.tacklesWon;
+        }
+        if (homeBacks.has(player.name)) {
+          backAttempts += player.tacklesAttempted;
+          backWon += player.tacklesWon;
+        }
+      }
+    }
+    expect(forwardAttempts).toBeGreaterThan(30);
+    expect(backAttempts).toBeGreaterThan(30);
+    expect(hunts).toBeGreaterThan(8);
+    expect(forwardWon / forwardAttempts).toBeLessThan(backWon / backAttempts);
+  });
+
+  it("converts opposition-half turnovers at a higher goal rate than ordinary attacks", () => {
+    let pressGoals = 0;
+    let pressShots = 0;
+    let openGoals = 0;
+    let openShots = 0;
+    for (let seed = 1; seed <= 28; seed += 1) {
+      const result = simulateMatch({
+        matchId: "g1-r1-a",
+        homeId: "ballyea",
+        awayId: "inagh-kilnamona",
+        homeTactics: { ...DEFAULT_TACTICS, pressure: 88, puckout: 18 },
+        awayTactics: { ...DEFAULT_TACTICS, puckout: 8 },
+        climate: { sky: "sunny", windStrength: 8, windAngle: 12 },
+        seed,
+      });
+      for (const event of result.events) {
+        const fromTurnover = /turnover/i.test(event.text);
+        if (event.kind === "goal" && fromTurnover) pressGoals += 1;
+        if ((event.kind === "goal" || event.kind === "point" || event.kind === "wide" || event.kind === "save") && fromTurnover) {
+          pressShots += 1;
+        }
+        if (event.kind === "goal" && !fromTurnover) openGoals += 1;
+        if (
+          (event.kind === "goal" || event.kind === "point" || event.kind === "wide" || event.kind === "save") &&
+          !fromTurnover &&
+          !/free|65|sideline/i.test(event.text)
+        ) {
+          openShots += 1;
+        }
+      }
+    }
+    expect(pressShots).toBeGreaterThan(4);
+    expect(openShots).toBeGreaterThan(pressShots);
+    if (pressShots >= 8 && openShots >= 20) {
+      expect(pressGoals / pressShots).toBeGreaterThan(openGoals / openShots);
+    }
+  });
+
+  it("makes a five-forward press win fewer tackles against six defenders", () => {
+    const homeSheet = defaultSheet("ballyea");
+    const homeForwards = new Set(homeSheet.starters.slice(9));
+    const tally = (shape: Tactics["shape"], sentOff: boolean) => {
+      let attempted = 0;
+      let won = 0;
+      for (let seed = 1; seed <= 18; seed += 1) {
+        const result = simulateMatch({
+          matchId: "g1-r1-a",
+          homeId: "ballyea",
+          awayId: "inagh-kilnamona",
+          homeTactics: { ...DEFAULT_TACTICS, pressure: 86, puckout: 20, shape },
+          awayTactics: { ...DEFAULT_TACTICS, puckout: 12, shape: "traditional" },
+          climate: { sky: "sunny", windStrength: 8, windAngle: 12 },
+          seed,
+          forcedRemovals: sentOff
+            ? [{ minute: 8, teamId: "ballyea", name: homeSheet.starters[14]!, kind: "red" as const }]
+            : undefined,
+        });
+        for (const player of result.players) {
+          if (player.teamId !== "ballyea" || !homeForwards.has(player.name)) continue;
+          attempted += player.tacklesAttempted;
+          won += player.tacklesWon;
+        }
+      }
+      return attempted > 0 ? won / attempted : 0;
+    };
+    const traditional = tally("traditional", false);
+    const sweeper = tally("sweeper", false);
+    const downAMan = tally("traditional", true);
+    expect(traditional).toBeGreaterThan(sweeper);
+    expect(traditional).toBeGreaterThan(downAMan);
   });
 
   it("uses the named long-free, short-free and sideline takers", () => {

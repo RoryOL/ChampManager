@@ -132,13 +132,45 @@ export function targetedPuckoutWinChance(
   return Math.min(0.78, Math.max(0.22, 0.5 + (attack - marker * 1.05) * 0.032 + spill + wind));
 }
 
-export function tackleChance(hooking: number, aggression: number, pressure = 48, strength = 12): number {
+export type TackleRole = "back" | "mid" | "forward";
+
+export function tackleRoleAt(index: number): TackleRole {
+  if (index <= 6) return "back";
+  if (index <= 8) return "mid";
+  return "forward";
+}
+
+/** Sweeper or a send-off leaves five forwards hunting six (or seven) defenders. */
+export function fiveForwardShape(namesLength: number, tactics: Tactics): boolean {
+  return namesLength < 15 || tactics.shape === "sweeper";
+}
+
+export function pressOutnumbered(
+  pressingLength: number,
+  pressingTactics: Tactics,
+  coveringLength: number,
+  coveringTactics: Tactics,
+): boolean {
+  return fiveForwardShape(pressingLength, pressingTactics) || (coveringTactics.shape === "sweeper" && coveringLength >= 15);
+}
+
+export function tackleChance(
+  hooking: number,
+  aggression: number,
+  pressure = 48,
+  strength = 12,
+  role: TackleRole = "back",
+  outnumbered = false,
+): number {
   const physical = clampDial(aggression) / 100;
   const press = clampDial(pressure) / 100;
-  return Math.min(
+  const base = Math.min(
     0.32,
     Math.max(0.08, 0.08 + hooking * 0.0035 + strength * 0.0045 + physical * 0.07 + press * 0.06),
   );
+  const roleMul = role === "forward" ? 0.56 : role === "mid" ? 0.94 : 1;
+  const numbersMul = outnumbered && role === "forward" ? 0.6 : 1;
+  return base * roleMul * numbersMul;
 }
 
 function composureCardMul(composure: number): number {
@@ -173,6 +205,7 @@ export function reshapeTo625(original: string[], out: Iterable<string>): string[
     const rest = indexed.filter((row) => !used.has(row.name));
     for (const row of [...prefer, ...rest]) {
       if (picked.length >= count) break;
+      if (used.has(row.name)) continue;
       picked.push(row.name);
       used.add(row.name);
     }
@@ -278,6 +311,51 @@ function pickForward(names: string[], random: () => number): string {
 
 function pickName(names: string[], random: () => number): string {
   return names[Math.floor(random() * Math.max(names.length, 1))] ?? "a substitute";
+}
+
+function indicesWhere(names: string[], want: (index: number) => boolean): number[] {
+  return names.map((_, index) => index).filter((index) => want(index) && names[index]);
+}
+
+function pickIndexed(
+  names: string[],
+  indices: number[],
+  random: () => number,
+  weight?: (index: number) => number,
+): { name: string; index: number } {
+  const pool = indices.filter((index) => names[index]);
+  if (pool.length === 0) {
+    const fallback = Math.max(0, names.length - 1);
+    return { name: names[fallback] ?? "a substitute", index: fallback };
+  }
+  if (!weight) {
+    const index = pool[Math.floor(random() * pool.length)] ?? pool[0]!;
+    return { name: names[index]!, index };
+  }
+  const weights = pool.map((index) => Math.max(0.08, weight(index)));
+  const total = weights.reduce((sum, value) => sum + value, 0);
+  let roll = random() * total;
+  for (let i = 0; i < pool.length; i += 1) {
+    roll -= weights[i]!;
+    if (roll <= 0) {
+      const index = pool[i]!;
+      return { name: names[index]!, index };
+    }
+  }
+  const index = pool[pool.length - 1]!;
+  return { name: names[index]!, index };
+}
+
+function forwardIndices(names: string[]): number[] {
+  return indicesWhere(names, (index) => index >= 9);
+}
+
+function backAndMidIndices(names: string[]): number[] {
+  return indicesWhere(names, (index) => index >= 1 && index <= 8);
+}
+
+function outFromBackIndices(names: string[]): number[] {
+  return indicesWhere(names, (index) => index >= 1 && index <= 6);
 }
 
 export function simulateMatch(options: {
@@ -497,6 +575,11 @@ export function simulateMatch(options: {
   };
 
   const tacticsFor = (teamId: string) => (teamId === options.homeId ? homeLiveTactics : awayLiveTactics);
+  const pressWeightOf = (sideId: string, sideNames: string[], index: number) => {
+    const player = playerOf(sideId, sideNames[index] ?? "");
+    const lineBoost = index <= 11 ? 1.35 : 0.85;
+    return ((player?.ratings.workrate ?? 12) * 0.55 + (player?.ratings.hooking ?? 11) * 0.45) * lineBoost;
+  };
 
   const flushMinutes = (minute: number): StatCredit[] => {
     for (const name of [...homeNames]) endStint(options.homeId, name, minute);
@@ -620,12 +703,20 @@ export function simulateMatch(options: {
     minute: number,
     direct: number,
     longPuck: number,
+    origin: "open" | "press" = "open",
+    startCarrier?: string,
   ) => {
     const pendingCredits: StatCredit[] = [];
     let carrier = names[Math.max(0, names.length - 6)] ?? names[0] ?? "a substitute";
     const defendingId = teamId === options.homeId ? options.awayId : options.homeId;
     const withWind = withWindFor(climate, teamId, options.homeId, period);
-    if (random() < 0.16 + longPuck * 0.28) {
+    const coveringTactics = tacticsFor(teamId);
+    if (origin === "press") {
+      carrier =
+        startCarrier && names.includes(startCarrier)
+          ? startCarrier
+          : pickIndexed(names, forwardIndices(names), random, (index) => pressWeightOf(teamId, names, index)).name;
+    } else if (random() < 0.16 + longPuck * 0.28) {
       const receivers = names.slice(7, 12);
       const oppReceivers = oppNames.slice(4, 9);
       const liveXv = names
@@ -742,26 +833,41 @@ export function simulateMatch(options: {
       }
     } else if (random() < 0.12 + (1 - longPuck) * 0.28) {
       const halfBack = pickName(names.slice(4, 7), random);
-      const safe = applyFormChance(
-        Math.min(
-          0.82,
-          Math.max(0.35, 0.42 + (profile.halfBackHands - 12) * 0.04 - (opp.strength - 12) * 0.018),
-        ),
-        formOf(teamId, halfBack),
-        0.3,
-      );
-      if (random() > safe) {
-        const thief = pickName(oppNames.slice(0, 9), statRng);
+      const pressDial = clampDial(oppTactics.pressure ?? 48) / 100;
+      const hunt =
+        forwardIndices(oppNames).length > 0 && random() < Math.min(0.92, 0.4 + pressDial * 0.52);
+      const thiefPick = hunt
+        ? pickIndexed(oppNames, forwardIndices(oppNames), random, (index) =>
+            pressWeightOf(defendingId, oppNames, index),
+          )
+        : undefined;
+      const thiefPlayer = thiefPick ? playerOf(defendingId, thiefPick.name) : undefined;
+      const outnumbered = pressOutnumbered(oppNames.length, oppTactics, names.length, coveringTactics);
+      const hands = Math.min(1.12, Math.max(0.55, 0.88 - (profile.halfBackHands - 12) * 0.04));
+      const winChance = thiefPick
+        ? tackleChance(
+            thiefPlayer?.ratings.hooking ?? Math.max(8, opp.hooking * 0.72),
+            oppTactics.aggression ?? 46,
+            oppTactics.pressure ?? 48,
+            thiefPlayer?.ratings.strength ?? 11,
+            "forward",
+            outnumbered,
+          ) *
+            1.85 *
+            hands +
+          pressDial * 0.05
+        : 0;
+      if (hunt && thiefPick && random() < Math.min(0.46, winChance)) {
         push({
           minute,
           teamId,
           playerName: halfBack,
           kind: "puckout",
-          text: `Short puck-out turned over on ${halfBack}.`,
+          text: `Short puck-out turned over — ${thiefPick.name} hunts down ${halfBack}.`,
           credits: mergeCredits([
             { name: halfBack, teamId, passesAttempted: 1 },
             {
-              name: thief,
+              name: thiefPick.name,
               teamId: defendingId,
               tacklesAttempted: 1,
               tacklesWon: 1,
@@ -770,7 +876,30 @@ export function simulateMatch(options: {
             },
           ]),
         });
+        tryScore(
+          defendingId,
+          oppNames,
+          opp,
+          profile,
+          coveringTactics,
+          names,
+          minute,
+          clampDial(oppTactics.build) / 100,
+          clampDial(oppTactics.puckout) / 100,
+          "press",
+          thiefPick.name,
+        );
         return;
+      }
+      if (hunt && thiefPick) {
+        push({
+          minute,
+          teamId: defendingId,
+          playerName: thiefPick.name,
+          kind: "hook",
+          text: `${halfBack} has the space to work it back to the keeper under pressure from ${thiefPick.name}.`,
+          credits: [{ name: thiefPick.name, teamId: defendingId, tacklesAttempted: 1 }],
+        });
       }
       carrier = halfBack;
       pendingCredits.push({ name: halfBack, teamId, possessions: 1, sequences: 1, puckoutsWon: 1 });
@@ -780,67 +909,81 @@ export function simulateMatch(options: {
       pendingCredits.push({ name: starter, teamId, possessions: 1, sequences: 1 });
     }
 
-    if (random() < tackleChance(opp.hooking, oppTactics.aggression ?? 46, oppTactics.pressure ?? 48, opp.strength)) {
-      const defender = pickName(oppNames.slice(0, 7), random);
-      push({
-        minute,
-        teamId,
-        playerName: defender,
-        kind: "hook",
-        text: `Hooked and blocked — ${defender} kills the attack.`,
-        credits: mergeCredits([
-          ...pendingCredits.splice(0, pendingCredits.length),
-          {
-            name: defender,
-            teamId: defendingId,
-            tacklesAttempted: 1,
-            tacklesWon: 1,
-            possessions: 1,
-            sequences: 1,
-          },
-        ]),
-      });
-      const out = random();
-      if (out < 0.24) attemptSetPiece(teamId, "sixtyFive", profile, minute);
-      else if (out < 0.4) attemptSetPiece(teamId, "sideline", profile, minute);
-      return;
-    }
-
-    if (random() < mistimedFoulChance(oppTactics.aggression ?? 46, wet)) {
-      const defender = pickName(oppNames.slice(0, 7), random);
-      const agg = oppTactics.aggression ?? 46;
-      const composure = playerOf(defendingId, defender)?.ratings.composure ?? 12;
-      if (random() < yellowOnFoulChance(agg, composure, wet)) {
-        const red = random() < redOnFoulChance(agg, composure, wet);
+    if (origin !== "press") {
+      if (random() < tackleChance(opp.hooking, oppTactics.aggression ?? 46, oppTactics.pressure ?? 48, opp.strength)) {
+        const tackler = pickIndexed(oppNames, backAndMidIndices(oppNames), random);
+        const defender = tackler.name;
         push({
           minute,
-          teamId: defendingId,
+          teamId,
           playerName: defender,
-          kind: red ? "red" : "booking",
-          text: red
-            ? `RED CARD — ${defender} is sent off. They'll play the rest 6-2-5.`
-            : `Yellow card — ${defender} overcooks the challenge.`,
-          credits: [{ name: defender, teamId: defendingId, tacklesAttempted: 1, freesConceded: 1 }],
+          kind: "hook",
+          text: `Hooked and blocked — ${defender} kills the attack.`,
+          credits: mergeCredits([
+            ...pendingCredits.splice(0, pendingCredits.length),
+            {
+              name: defender,
+              teamId: defendingId,
+              tacklesAttempted: 1,
+              tacklesWon: 1,
+              possessions: 1,
+              sequences: 1,
+            },
+          ]),
         });
-        if (red) dismiss(defendingId, defender, minute);
-      } else {
-        pendingCredits.push({ name: defender, teamId: defendingId, tacklesAttempted: 1, freesConceded: 1 });
+        const out = random();
+        if (out < 0.24) attemptSetPiece(teamId, "sixtyFive", profile, minute);
+        else if (out < 0.4) attemptSetPiece(teamId, "sideline", profile, minute);
+        return;
       }
-      const longFree = statRng() < 0.38;
-      attemptSetPiece(teamId, longFree ? "longFree" : "shortFree", profile, minute, false);
-      const last = events.at(-1);
-      if (last) last.credits = mergeCredits([...(last.credits ?? []), ...pendingCredits.splice(0, pendingCredits.length)]);
-      return;
+
+      if (random() < mistimedFoulChance(oppTactics.aggression ?? 46, wet)) {
+        const tackler = pickIndexed(oppNames, backAndMidIndices(oppNames), random);
+        const defender = tackler.name;
+        const agg = oppTactics.aggression ?? 46;
+        const composure = playerOf(defendingId, defender)?.ratings.composure ?? 12;
+        if (random() < yellowOnFoulChance(agg, composure, wet)) {
+          const red = random() < redOnFoulChance(agg, composure, wet);
+          push({
+            minute,
+            teamId: defendingId,
+            playerName: defender,
+            kind: red ? "red" : "booking",
+            text: red
+              ? `RED CARD — ${defender} is sent off. They'll play the rest 6-2-5.`
+              : `Yellow card — ${defender} overcooks the challenge.`,
+            credits: [{ name: defender, teamId: defendingId, tacklesAttempted: 1, freesConceded: 1 }],
+          });
+          if (red) dismiss(defendingId, defender, minute);
+        } else {
+          pendingCredits.push({ name: defender, teamId: defendingId, tacklesAttempted: 1, freesConceded: 1 });
+        }
+        const longFree = statRng() < 0.38;
+        attemptSetPiece(teamId, longFree ? "longFree" : "shortFree", profile, minute, false);
+        const last = events.at(-1);
+        if (last) last.credits = mergeCredits([...(last.credits ?? []), ...pendingCredits.splice(0, pendingCredits.length)]);
+        return;
+      }
     }
 
-    const playerName = pickForward(names, random);
+    const playerName =
+      origin === "press"
+        ? random() < 0.58 && names.includes(carrier)
+          ? carrier
+          : pickIndexed(
+              names,
+              forwardIndices(names).length > 0 ? forwardIndices(names) : names.map((_, index) => index),
+              random,
+            ).name
+        : pickForward(names, random);
     const tactics = tacticsFor(teamId);
     const shooting = clampDial(tactics.shooting ?? 50);
-    const hops = 1 + Math.floor((1 - direct) * 2) + (shooting > 62 ? 1 : 0);
+    const hops = origin === "press" ? 1 : 1 + Math.floor((1 - direct) * 2) + (shooting > 62 ? 1 : 0);
     const teamwork = teamId === options.homeId ? homeTeamwork : awayTeamwork;
     const baseComplete = passCompleteChance(climate, direct, teamwork);
+    const chainPool = origin === "press" && names.length > 9 ? names.slice(9) : names.slice(6, 15);
     const moved = passChain(
-      names.slice(6, 15),
+      chainPool,
       teamId,
       statRng,
       hops,
@@ -868,9 +1011,11 @@ export function simulateMatch(options: {
     const striking = shooter?.ratings.strikingDistance ?? 12;
     const composure = shooter?.ratings.composure ?? 12;
     const finishing = shooter?.ratings.shooting ?? striking;
-    const distanceM0 = shotDistanceM(shooting, striking, random);
+    const distanceM0 = origin === "press"
+      ? Math.max(10, Math.min(36, 15 + random() * 18 - (finishing - 12) * 0.35))
+      : shotDistanceM(shooting, striking, random);
     let distanceM = distanceM0;
-    if (direct > 0.62 && random() < 0.18 + (profile.aerial - 12) * 0.012) {
+    if (origin !== "press" && direct > 0.62 && random() < 0.18 + (profile.aerial - 12) * 0.012) {
       distanceM = 10 + random() * 14;
     }
     if (shooting >= 78 && distanceM > 42 && random() < 0.28) {
@@ -878,7 +1023,8 @@ export function simulateMatch(options: {
       return;
     }
     const intoShooter = deliverTo(teamId, moved.carrier, playerName);
-    const sweeperCut = oppNames.length >= 15 && oppTactics.shape === "sweeper" ? 0.32 : 1;
+    const sweeperCut =
+      oppNames.length >= 15 && oppTactics.shape === "sweeper" ? (origin === "press" ? 0.55 : 0.32) : 1;
     const fiveForwardCut = names.length < 15 || tactics.shape === "sweeper" ? 0.82 : 1;
     const wind = conversionContext(climate, teamId, options.homeId, period);
     const convert = chaoticConvert(
@@ -901,8 +1047,10 @@ export function simulateMatch(options: {
     const goalChance =
       goalChanceFromDistance(distanceM, sweeperCut) *
         fiveForwardCut *
-        (direct > 0.6 ? 1.2 : 1) +
-      (direct > 0.62 && distanceM < 22 ? 0.05 : 0);
+        (direct > 0.6 ? 1.2 : 1) *
+        (origin === "press" ? 1.65 : 1) +
+      (direct > 0.62 && distanceM < 22 ? 0.05 : 0) +
+      (origin === "press" && distanceM < 24 ? 0.06 : 0);
     const flush = (extra: StatCredit[]) =>
       mergeCredits([...pendingCredits.splice(0, pendingCredits.length), ...moved.credits, ...intoShooter, ...extra]);
     const record = (kind: ShotAttempt["kind"], scored: boolean) => {
@@ -948,7 +1096,7 @@ export function simulateMatch(options: {
         teamId,
         playerName,
         kind: "goal",
-        text: `GOAL! ${playerName} finds the net.`,
+        text: origin === "press" ? `GOAL! ${playerName} punishes the turnover.` : `GOAL! ${playerName} finds the net.`,
         credits: flush([{ name: playerName, teamId, shots: 1, scores: 1 }]),
       });
       record("goal", true);
@@ -973,9 +1121,11 @@ export function simulateMatch(options: {
 
     credit(teamId, "point");
     const fromPlay =
-      distanceM >= 50
-        ? `${playerName} points from distance.`
-        : `${playerName} points from play, worked through midfield.`;
+      origin === "press"
+        ? `${playerName} points from the turnover.`
+        : distanceM >= 50
+          ? `${playerName} points from distance.`
+          : `${playerName} points from play, worked through midfield.`;
     push({
       minute,
       teamId,
@@ -991,54 +1141,107 @@ export function simulateMatch(options: {
     const homeOnBall = random() < 0.5 + (momentum - 50) / 220;
     const defendingId = homeOnBall ? options.awayId : options.homeId;
     const attackingId = homeOnBall ? options.homeId : options.awayId;
-    const defTactics = homeOnBall ? awayTactics : homeTactics;
+    const defTactics = homeOnBall ? awayLiveTactics : homeLiveTactics;
+    const attTactics = homeOnBall ? homeLiveTactics : awayLiveTactics;
     const defProfile = homeOnBall ? away : home;
     const attProfile = homeOnBall ? home : away;
     const defNames = homeOnBall ? awayNames : homeNames;
     const attNames = homeOnBall ? homeNames : awayNames;
-    const defender = pickName(defNames.slice(0, 9), random);
-    const carrier = pickName(attNames.slice(4, 15), random);
-    const win =
-      random() <
-      Math.min(
-        0.78,
-        0.48 +
+    const pressDial = clampDial(defTactics.pressure ?? 48) / 100;
+    const attShort = 1 - clampDial(attTactics.puckout ?? 58) / 100;
+    const pressShare = 0.16 + pressDial * 0.32 + attShort * 0.18;
+    const isPress = random() < pressShare && forwardIndices(defNames).length > 0;
+    const tackler = isPress
+      ? pickIndexed(defNames, forwardIndices(defNames), random, (index) => pressWeightOf(defendingId, defNames, index))
+      : pickIndexed(defNames, backAndMidIndices(defNames), random);
+    const carrier = isPress
+      ? pickIndexed(attNames, outFromBackIndices(attNames), random)
+      : pickIndexed(
+          attNames,
+          indicesWhere(attNames, (index) => index >= 4),
+          random,
+        );
+    const role = isPress ? "forward" : tackleRoleAt(tackler.index);
+    const outnumbered = isPress
+      ? pressOutnumbered(defNames.length, defTactics, attNames.length, attTactics)
+      : false;
+    const tacklerPlayer = playerOf(defendingId, tackler.name);
+    const hooking =
+      tacklerPlayer?.ratings.hooking ?? (role === "forward" ? Math.max(8, defProfile.hooking * 0.72) : defProfile.hooking);
+    const strength = tacklerPlayer?.ratings.strength ?? defProfile.strength;
+    const winChance = isPress
+      ? Math.min(
+          0.42,
           tackleChance(
-            defProfile.hooking,
+            hooking,
             defTactics.aggression ?? 46,
             defTactics.pressure ?? 48,
-            defProfile.strength,
-          ) * 1.15,
-      );
+            strength,
+            role,
+            outnumbered,
+          ) * 1.35,
+        )
+      : Math.min(
+          0.78,
+          0.48 +
+            tackleChance(
+              hooking,
+              defTactics.aggression ?? 46,
+              defTactics.pressure ?? 48,
+              strength,
+              role,
+            ) * 1.15,
+        );
+    const win = random() < winChance;
     if (win) {
       push({
         minute,
         teamId: defendingId,
-        playerName: defender,
+        playerName: tackler.name,
         kind: "hook",
-        text: `${defender} wins the tackle on ${carrier}.`,
+        text: isPress
+          ? `${tackler.name} turns ${carrier.name} over in their own half.`
+          : `${tackler.name} wins the tackle on ${carrier.name}.`,
         credits: mergeCredits([
           {
-            name: defender,
+            name: tackler.name,
             teamId: defendingId,
             tacklesAttempted: 1,
             tacklesWon: 1,
+            ...(isPress ? { possessions: 1, sequences: 1 } : {}),
           },
         ]),
       });
-      const carrierIndex = attNames.indexOf(carrier);
+      if (isPress && random() < 0.16) {
+        tryScore(
+          defendingId,
+          defNames,
+          defProfile,
+          attProfile,
+          attTactics,
+          attNames,
+          minute,
+          clampDial(defTactics.build) / 100,
+          clampDial(defTactics.puckout) / 100,
+          "press",
+          tackler.name,
+        );
+      }
+      const carrierIndex = carrier.index;
       const out = random();
-      if (carrierIndex >= 9 && out < 0.2) attemptSetPiece(attackingId, "sixtyFive", attProfile, minute);
-      else if (out < 0.14) attemptSetPiece(attackingId, "sideline", attProfile, minute);
+      if (!isPress && carrierIndex >= 9 && out < 0.2) attemptSetPiece(attackingId, "sixtyFive", attProfile, minute);
+      else if (!isPress && out < 0.14) attemptSetPiece(attackingId, "sideline", attProfile, minute);
       return;
     }
     push({
       minute,
       teamId: defendingId,
-      playerName: defender,
+      playerName: tackler.name,
       kind: "hook",
-      text: `${defender} hooks ${carrier} but the ball stays in play.`,
-      credits: [{ name: defender, teamId: defendingId, tacklesAttempted: 1 }],
+      text: isPress
+        ? `${carrier.name} has the space to recycle it past ${tackler.name}.`
+        : `${tackler.name} hooks ${carrier.name} but the ball stays in play.`,
+      credits: [{ name: tackler.name, teamId: defendingId, tacklesAttempted: 1 }],
     });
   };
 
