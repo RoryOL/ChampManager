@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { seedChampionship } from "./data/championship";
 import { applyInjury, bestBenchForSlot, injuryChance, insertInjuryEvents, rollInjuryWeeks, sitInjuredPlayers, tickInjuries } from "./lib/injuries";
-import { applyNewsMood } from "./lib/mood";
 import {
   ambitionFor,
   chairmanWelcome,
@@ -181,15 +180,6 @@ describe("match and press news", () => {
     });
     expect(press.kind).toBe("press");
     expect(press.tone).toBe("negative");
-    const squad = ratedSquad("broadford");
-    const start = Object.fromEntries(squad.map((player) => [player.name, defaultCondition()]));
-    const next = applyNewsMood(
-      start,
-      squad.map((player) => player.name),
-      -7,
-      "The local paper went after the team.",
-    );
-    expect(next[squad[0]!.name]?.mood ?? 58).toBeLessThan(start[squad[0]!.name]?.mood ?? 58);
   });
 });
 
@@ -204,7 +194,7 @@ describe("save news migration", () => {
       matches: [],
       inbox: [{ id: "old", title: "Welcome to Ballyea", body: "Preseason is underway.", date: "2026-06-12" }],
     });
-    expect(migrated?.version).toBe(8);
+    expect(migrated?.version).toBe(9);
     expect(migrated?.ambition).toBe(ambitionFor("ballyea").target);
     expect(migrated?.inbox[0]?.kind).toBe("training");
     expect(newSave("ballyea").ambition).toBe(ambitionFor("ballyea").target);

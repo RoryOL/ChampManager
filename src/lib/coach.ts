@@ -1,5 +1,6 @@
-import type { MatchClimate, MatchEvent, PlayerMatchStats, Tactics, TeamMatchStats } from "../types";
+import type { MatchClimate, MatchEvent, PlayerCondition, PlayerMatchStats, Tactics, TeamMatchStats } from "../types";
 import { aggressionLabel, buildLabel, pressureLabel, puckoutLabel } from "./attributes";
+import { formCoachNotes } from "./form";
 import { shootingLabel } from "./shooting";
 import { climateSummary } from "./weather";
 
@@ -20,6 +21,7 @@ type CoachInput = {
   climate?: MatchClimate;
   homeTeamwork?: number;
   awayTeamwork?: number;
+  condition?: Record<string, PlayerCondition>;
 };
 
 function total(score: { goals: number; points: number }): number {
@@ -166,6 +168,11 @@ export function buildCoachReport(input: CoachInput): string[] {
     notes.push(`${standout.name} carried it (${standout.rating}). Keep him on the ball.`);
   }
 
+  const featured = input.players
+    .filter((player) => player.teamId === us.teamId && player.minutes >= 12)
+    .map((player) => player.name);
+  notes.push(...formCoachNotes(input.condition, featured));
+
   const ourTeamwork = focused ? (usIsHome ? input.homeTeamwork : input.awayTeamwork) : input.homeTeamwork;
   if (typeof ourTeamwork === "number") {
     if (ourTeamwork >= 16 && us.passesCompleted >= them.passesCompleted) {
@@ -181,5 +188,5 @@ export function buildCoachReport(input: CoachInput): string[] {
     }
   }
 
-  return notes.slice(0, 7);
+  return notes.slice(0, 8);
 }

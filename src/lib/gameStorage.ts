@@ -2,6 +2,7 @@ import { seedChampionship } from "../data/championship";
 import { DEFAULT_TACTICS, defaultSheet } from "./players";
 import { ATTRIBUTE_KEYS, clampDial } from "./attributes";
 import { ambitionFor, migrateNewsItem } from "./news";
+import { withStartingForm } from "./form";
 import {
   clampBoost,
   defaultCondition,
@@ -151,11 +152,13 @@ export function migrateSave(raw: unknown): GameSave | null {
     parsed.version !== 5 &&
     parsed.version !== 6 &&
     parsed.version !== 7 &&
-    parsed.version !== 8
+    parsed.version !== 8 &&
+    parsed.version !== 9
   ) {
     return null;
   }
-  const names = squadNames(parsed.clubId);
+  const seed = typeof parsed.seed === "number" ? parsed.seed : 1;
+  const names = squadNames(parsed.clubId, seed);
   const returning = parsed.version === 1 || parsed.version === 2;
   const inbox = Array.isArray(parsed.inbox)
     ? parsed.inbox.map(migrateNewsItem).filter((item): item is NewsItem => Boolean(item))
@@ -177,9 +180,9 @@ export function migrateSave(raw: unknown): GameSave | null {
       ? (parsed.weekDeltas as Record<string, AttributeBoosts>)
       : {};
   return {
-    version: 8,
+    version: 9,
     clubId: parsed.clubId,
-    seed: typeof parsed.seed === "number" ? parsed.seed : 1,
+    seed,
     tactics: migrateTactics(parsed.tactics),
     sheet: parsed.sheet,
     matches: parsed.matches,
@@ -191,12 +194,16 @@ export function migrateSave(raw: unknown): GameSave | null {
         : returning
           ? 7
           : 1,
-    condition: clampConditionBoosts(
-      ensureCondition(
-        names,
-        parsed.condition ?? {},
-        returning ? { fatigue: 28, sharpness: 58, mood: 60 } : defaultCondition(),
+    condition: withStartingForm(
+      clampConditionBoosts(
+        ensureCondition(
+          names,
+          parsed.condition ?? {},
+          returning ? { fatigue: 28, sharpness: 58 } : defaultCondition(),
+        ),
       ),
+      names,
+      seed,
     ),
     trainingDue: typeof parsed.trainingDue === "boolean" ? parsed.trainingDue : !returning,
     reports: parsed.reports ?? {},
@@ -230,10 +237,12 @@ function clampConditionBoosts(condition: Record<string, PlayerCondition>): Recor
 
 export function newSave(clubId: string): GameSave {
   const championship = structuredClone(seedChampionship);
+  const seed = Math.floor(Math.random() * 1_000_000_000);
+  const names = squadNames(clubId, seed);
   return {
-    version: 8,
+    version: 9,
     clubId,
-    seed: Math.floor(Math.random() * 1_000_000_000),
+    seed,
     tactics: DEFAULT_TACTICS,
     sheet: defaultSheet(clubId),
     matches: championship.matches.map((match) => ({
@@ -244,7 +253,7 @@ export function newSave(clubId: string): GameSave {
     inbox: [],
     phase: "preseason",
     preseasonWeek: 1,
-    condition: ensureCondition(squadNames(clubId), {}, defaultCondition()),
+    condition: withStartingForm(ensureCondition(names, {}, defaultCondition()), names, seed),
     trainingDue: true,
     reports: {},
     ambition: ambitionFor(clubId).target,
