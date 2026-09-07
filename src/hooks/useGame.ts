@@ -392,6 +392,19 @@ export function useGame() {
     [activeSeat, campaign, commitCampaign, commitSolo, save],
   );
 
+  const setSheet = useCallback(
+    (sheet: TeamSheet) => {
+      if (!save) return;
+      if (campaign && activeSeat) {
+        commitCampaign(withClubSheet(campaign, activeSeat.clubId, sheet));
+      } else {
+        commitSolo(withSheet(save, sheet));
+      }
+      setPicked(null);
+    },
+    [activeSeat, campaign, commitCampaign, commitSolo, save],
+  );
+
   const tapPlayer = useCallback(
     (name: string) => {
       const editingOwnTeam = !viewTeamId || viewTeamId === save?.clubId;
@@ -1099,6 +1112,7 @@ export function useGame() {
     leaveCampaign,
     resign,
     setTactics,
+    setSheet,
     setPlans,
     setIntensity,
     setWeekShape,

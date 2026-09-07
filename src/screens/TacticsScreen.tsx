@@ -1,19 +1,25 @@
 import { useMemo, useState } from "react";
-import type { GameSave, Tactics } from "../types";
+import type { GameSave, Tactics, TeamSheet } from "../types";
 import { SwapConfirmBar, nextSwapPick } from "../components/SwapConfirmBar";
 import { TacticControls } from "../components/TacticControls";
+import {
+  ATTRIBUTE_KEYS,
+  ATTRIBUTE_LABELS,
+  ATTRIBUTE_SHORT,
+} from "../lib/attributes";
 import { isInjured } from "../lib/injuries";
 import { formatMatchRating, lastMatchRating, seasonStatsFor } from "../lib/matchStats";
-import { matchShirtNumber, matchSlot, ratedSquad, sheetPlayers } from "../lib/players";
-import { conditionFor, fitnessOf } from "../lib/training";
+import { coachPickSheet, matchShirtNumber, matchSlot, ratedSquad, sheetPlayers } from "../lib/players";
+import { conditionFor, fitnessOf, matchRatings } from "../lib/training";
 
 type Props = {
   save: GameSave;
   onChange: (tactics: Tactics) => void;
   onSwap: (first: string, second: string) => void;
+  onSetSheet: (sheet: TeamSheet) => void;
 };
 
-export function TacticsScreen({ save, onChange, onSwap }: Props) {
+export function TacticsScreen({ save, onChange, onSwap, onSetSheet }: Props) {
   const xv = sheetPlayers(save.clubId, save.sheet, save.seed);
   const squad = useMemo(() => ratedSquad(save.clubId, save.seed), [save.clubId, save.seed]);
   const byName = useMemo(() => new Map(squad.map((player) => [player.name, player])), [squad]);
@@ -39,12 +45,17 @@ export function TacticsScreen({ save, onChange, onSwap }: Props) {
     setSecond(null);
   };
 
+  const askCoach = () => {
+    onSetSheet(coachPickSheet(squad, save.condition));
+    setFirst(null);
+    setSecond(null);
+  };
+
   return (
     <div className="screen">
       <p className="hint">
-        Match numbers follow today&apos;s fifteen, not squad jerseys. Fitness, average match rating and slot sit on
-        each row. Tap two names, then Swap, to change a position or bring a sub on — it will not move until you
-        confirm.
+        Match numbers follow today&apos;s fifteen, not squad jerseys. Scroll the table right for every attribute.
+        Tap two names, then Swap, to change a position or bring a sub on — it will not move until you confirm.
       </p>
       <h3 className="list-title">Fifteen and bench</h3>
       <SwapConfirmBar
@@ -57,36 +68,70 @@ export function TacticsScreen({ save, onChange, onSwap }: Props) {
         }}
         hint="Pick two names, then tap Swap. A second tap on the same name drops him from the pair."
       />
-      <ul className="player-list">
-        {names.map((name) => {
-          const player = byName.get(name);
-          if (!player) return null;
-          const condition = conditionFor(name, save.condition);
-          const season = seasonStatsFor(save.reports, save.clubId, name);
-          const last = lastMatchRating(save.reports, save.clubId, name, matchIds);
-          const slot = matchSlot(save.sheet, name);
-          const number = matchShirtNumber(save.sheet, name);
-          const onField = save.sheet.starters.includes(name);
-          const picked = name === first || name === second;
-          return (
-            <li key={name}>
-              <button type="button" className={picked ? "is-picked" : ""} onClick={() => tap(name)}>
-                <b>{number}</b>
-                <span>
-                  <strong>{player.name}</strong>
-                  <em>
-                    {onField ? slot : "Bench"} · Fit {fitnessOf(condition)} · Avg{" "}
-                    {formatMatchRating(season.minutes > 0 ? season.rating : undefined)}
-                    {last !== undefined ? ` · last ${formatMatchRating(last)}` : ""}
-                    {isInjured(condition) ? " · Out" : ""}
-                  </em>
-                </span>
-                <i>{formatMatchRating(season.minutes > 0 ? season.rating : undefined)}</i>
-              </button>
-            </li>
-          );
-        })}
-      </ul>
+      <div className="row-actions">
+        <button type="button" className="btn" onClick={askCoach}>
+          Ask the coach to pick the team
+        </button>
+      </div>
+      <div className="squad-table-wrap tactics-table-wrap">
+        <table className="squad-table tactics-table">
+          <thead>
+            <tr>
+              <th className="num">#</th>
+              <th className="name">Player</th>
+              <th>Slot</th>
+              <th>Fit</th>
+              <th>Avg</th>
+              <th>Last</th>
+              <th>Pos</th>
+              <th>Age</th>
+              <th>Ovr</th>
+              {ATTRIBUTE_KEYS.map((key) => (
+                <th key={key} title={ATTRIBUTE_LABELS[key]}>
+                  {ATTRIBUTE_SHORT[key]}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {names.map((name) => {
+              const player = byName.get(name);
+              if (!player) return null;
+              const condition = conditionFor(name, save.condition);
+              const ratings = matchRatings(player, condition);
+              const season = seasonStatsFor(save.reports, save.clubId, name);
+              const last = lastMatchRating(save.reports, save.clubId, name, matchIds);
+              const slot = matchSlot(save.sheet, name);
+              const number = matchShirtNumber(save.sheet, name);
+              const onField = save.sheet.starters.includes(name);
+              const picked = name === first || name === second;
+              return (
+                <tr
+                  key={name}
+                  className={picked ? "is-picked" : ""}
+                  onClick={() => tap(name)}
+                >
+                  <td className="num">{number}</td>
+                  <td className="name">
+                    <strong>{player.name}</strong>
+                    {isInjured(condition) ? <em>Out</em> : null}
+                  </td>
+                  <td>{onField ? slot : "Bench"}</td>
+                  <td>{fitnessOf(condition)}</td>
+                  <td>{formatMatchRating(season.minutes > 0 ? season.rating : undefined)}</td>
+                  <td>{formatMatchRating(last)}</td>
+                  <td>{player.position}</td>
+                  <td>{player.age}</td>
+                  <td>{ratings.overall}</td>
+                  {ATTRIBUTE_KEYS.map((key) => (
+                    <td key={key}>{ratings[key]}</td>
+                  ))}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
       <TacticControls tactics={save.tactics} onChange={onChange} xv={xv} />
     </div>
   );
