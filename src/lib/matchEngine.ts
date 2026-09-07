@@ -284,6 +284,12 @@ export function simulateMatch(options: {
 
     const gain: StatCredit = { name: playerName, teamId, possessions: 1, sequences: newSequence ? 1 : 0 };
     const scored = random() < chance;
+    const setPiece =
+      eventKind === "free"
+        ? { freesAttempted: 1, freesScored: scored ? 1 : 0 }
+        : eventKind === "sixtyFive"
+          ? { sixtyFivesAttempted: 1, sixtyFivesScored: scored ? 1 : 0 }
+          : {};
     if (scored) {
       credit(teamId, "point");
       const text =
@@ -300,7 +306,7 @@ export function simulateMatch(options: {
         playerName,
         kind: eventKind,
         text,
-        credits: [{ ...gain, shots: 1, scores: 1 }],
+        credits: [{ ...gain, ...setPiece, shots: 1, scores: 1 }],
       });
     } else {
       push({
@@ -314,7 +320,7 @@ export function simulateMatch(options: {
             : eventKind === "sixtyFive"
               ? `${playerName}'s 65 drops short.`
               : `${playerName}'s sideline drifts wide.`,
-        credits: [{ ...gain, shots: 1 }],
+        credits: [{ ...gain, ...setPiece, shots: 1 }],
       });
     }
     shots.push(
@@ -484,10 +490,10 @@ export function simulateMatch(options: {
           text: red
             ? `RED CARD — ${defender} is sent off.`
             : `Yellow card — ${defender} overcooks the challenge.`,
-          credits: [{ name: defender, teamId: defendingId, tacklesAttempted: 1 }],
+          credits: [{ name: defender, teamId: defendingId, tacklesAttempted: 1, freesConceded: 1 }],
         });
       } else {
-        pendingCredits.push({ name: defender, teamId: defendingId, tacklesAttempted: 1 });
+        pendingCredits.push({ name: defender, teamId: defendingId, tacklesAttempted: 1, freesConceded: 1 });
       }
       const longFree = statRng() < 0.38;
       attemptSetPiece(teamId, longFree ? "longFree" : "shortFree", profile, minute, false);

@@ -832,6 +832,44 @@ describe("match intel", () => {
     }
   });
 
+  it("records frees conceded, frees taken and 65s per player", () => {
+    let sawFrees = false;
+    let sawSixtyFives = false;
+    for (let seed = 1; seed <= 28; seed += 1) {
+      const result = simulateMatch({
+        matchId: "g1-r1-a",
+        homeId: "ballyea",
+        awayId: "inagh-kilnamona",
+        homeTactics: { ...DEFAULT_TACTICS, aggression: 92 },
+        awayTactics: { ...DEFAULT_TACTICS, aggression: 88 },
+        climate: { sky: "sunny", windStrength: 8, windAngle: 12 },
+        seed,
+      });
+      const sum = (pick: (row: (typeof result.players)[number]) => number) =>
+        result.players.reduce((total, row) => total + pick(row), 0);
+      const freesAttempted = sum((row) => row.freesAttempted ?? 0);
+      const freesScored = sum((row) => row.freesScored ?? 0);
+      const freesConceded = sum((row) => row.freesConceded ?? 0);
+      const sixtyAttempted = sum((row) => row.sixtyFivesAttempted ?? 0);
+      const sixtyScored = sum((row) => row.sixtyFivesScored ?? 0);
+      const freeHits = result.events.filter((event) => event.kind === "free").length;
+      const freeWides = result.events.filter((event) => event.kind === "wide" && /free/i.test(event.text)).length;
+      const sixtyHits = result.events.filter((event) => event.kind === "sixtyFive").length;
+      const sixtyWides = result.events.filter((event) => event.kind === "wide" && /65/i.test(event.text)).length;
+      expect(freesAttempted).toBe(freeHits + freeWides);
+      expect(freesScored).toBe(freeHits);
+      expect(freesConceded).toBe(freesAttempted);
+      expect(sixtyAttempted).toBe(sixtyHits + sixtyWides);
+      expect(sixtyScored).toBe(sixtyHits);
+      expect((result.homeStats.freesAttempted ?? 0) + (result.awayStats.freesAttempted ?? 0)).toBe(freesAttempted);
+      expect((result.homeStats.freesConceded ?? 0) + (result.awayStats.freesConceded ?? 0)).toBe(freesConceded);
+      if (freesAttempted > 0) sawFrees = true;
+      if (sixtyAttempted > 0) sawSixtyFives = true;
+    }
+    expect(sawFrees).toBe(true);
+    expect(sawSixtyFives).toBe(true);
+  });
+
   it("flags a long-ball plan that lost the aerials", () => {
     const notes = buildCoachReport({
       clubId: "ballyea",
@@ -1066,6 +1104,9 @@ describe("match intel", () => {
     expect(rolled.minutes).toBe(62);
     expect(rolled.scores).toBe(3);
     expect(rolled.rating).toBe(8.4);
+    expect(rolled.freesConceded).toBe(0);
+    expect(rolled.freesAttempted).toBe(0);
+    expect(rolled.sixtyFivesAttempted).toBe(0);
   });
 });
 

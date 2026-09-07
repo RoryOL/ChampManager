@@ -270,6 +270,11 @@ export type StatCredit = {
   puckoutsWon?: number;
   tacklesAttempted?: number;
   tacklesWon?: number;
+  freesConceded?: number;
+  freesAttempted?: number;
+  freesScored?: number;
+  sixtyFivesAttempted?: number;
+  sixtyFivesScored?: number;
   minutes?: number;
 };
 
@@ -298,6 +303,11 @@ export type PlayerMatchStats = {
   puckoutsWon: number;
   tacklesAttempted: number;
   tacklesWon: number;
+  freesConceded?: number;
+  freesAttempted?: number;
+  freesScored?: number;
+  sixtyFivesAttempted?: number;
+  sixtyFivesScored?: number;
   groundCovered: number;
   fatigue: number;
   fitness: number;
@@ -318,6 +328,11 @@ export type TeamMatchStats = {
   puckoutsWon: number;
   tacklesAttempted: number;
   tacklesWon: number;
+  freesConceded?: number;
+  freesAttempted?: number;
+  freesScored?: number;
+  sixtyFivesAttempted?: number;
+  sixtyFivesScored?: number;
   groundCovered: number;
   fatigue: number;
   fitness: number;
