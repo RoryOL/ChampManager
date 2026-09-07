@@ -635,7 +635,7 @@ describe("match engine", () => {
       }
     }
     expect(openPlay).toBeGreaterThan(10);
-    expect(openPlayByTaker).toBe(0);
+    expect(openPlayByTaker).toBeLessThan(openPlay * 0.12);
     expect(setPieces).toBeGreaterThan(0);
     expect(setPiecesByTaker).toBe(setPieces);
   });

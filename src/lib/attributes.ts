@@ -239,7 +239,7 @@ export const POSITION_ATTRIBUTE_WEIGHTS: Record<PositionLine, Partial<Record<Att
 };
 
 /** Attributes at or above this weight drive overall for that line. */
-export const OVERALL_WEIGHT_MIN = 0.72;
+export const OVERALL_WEIGHT_MIN = 0.86;
 
 export function positionWeight(line: PositionLine, key: AttributeKey): number {
   return POSITION_ATTRIBUTE_WEIGHTS[line][key] ?? 0.5;
