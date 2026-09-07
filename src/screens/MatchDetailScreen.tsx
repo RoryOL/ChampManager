@@ -140,6 +140,7 @@ export function MatchDetailScreen({ championship, save, match, report, onBack, o
               tactics: save.tactics,
               sheet: save.sheet,
               condition: save.condition,
+              seed: save.seed,
             }).notes.map((note) => (
               <p key={note} className="tactic-copy">
                 {note}

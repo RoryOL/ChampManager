@@ -47,7 +47,7 @@ function deltaClass(value: number): string {
 }
 
 export function TrainingScreen({ save, onBack, onTrain, onSetPlans, onSetIntensity, onSetWeekShape }: Props) {
-  const squad = ratedSquad(save.clubId);
+  const squad = ratedSquad(save.clubId, save.seed);
   const [selected, setSelected] = useState<string[]>([]);
   const [templateId, setTemplateId] = useState<SquadTemplateId>("position");
   const [session, setSession] = useState<WeekSession>("mixed");

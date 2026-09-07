@@ -208,6 +208,7 @@ export function HomeScreen({
               tactics: save.tactics,
               sheet: save.sheet,
               condition: save.condition,
+              seed: save.seed,
             }).notes.map((note) => (
               <p key={note} className="hint hint--tight">
                 {note}

@@ -17,8 +17,8 @@ import { aggressionLabel, buildLabel, pressureLabel } from "./attributes";
 import { shootingLabel } from "./shooting";
 import { conditionFor, matchStat } from "./training";
 
-function threatLine(teamId: string, sheet: TeamSheet): string {
-  const xv = sheetPlayers(teamId, sheet);
+function threatLine(teamId: string, sheet: TeamSheet, gameSeed?: number): string {
+  const xv = sheetPlayers(teamId, sheet, gameSeed);
   const scored = [...xv].sort((a, b) => b.ratings.overall - a.ratings.overall);
   const star = scored[0];
   const shooter = [...xv].sort((a, b) => b.ratings.shooting + b.ratings.strikingDistance - (a.ratings.shooting + a.ratings.strikingDistance))[0];
@@ -41,6 +41,7 @@ export function buildPreMatchBriefing(options: {
   tactics: Tactics;
   sheet: TeamSheet;
   condition: Record<string, PlayerCondition>;
+  seed?: number;
 }): { title: string; notes: string[] } {
   const { homeId, awayId } = resolveMatchSides(options.championship, options.match);
   const usHome = homeId === options.clubId;
@@ -51,9 +52,9 @@ export function buildPreMatchBriefing(options: {
   const theirTactics = opponentId ? clubTactics(opponentId) : options.tactics;
   const theirSheet = opponentId ? defaultSheet(opponentId) : options.sheet;
   const theirProfile = opponentId
-    ? sideProfile(opponentId, theirSheet, theirTactics)
-    : sideProfile(options.clubId, options.sheet, options.tactics);
-  const ourProfile = sideProfile(options.clubId, options.sheet, options.tactics, options.condition);
+    ? sideProfile(opponentId, theirSheet, theirTactics, {}, options.seed)
+    : sideProfile(options.clubId, options.sheet, options.tactics, {}, options.seed);
+  const ourProfile = sideProfile(options.clubId, options.sheet, options.tactics, options.condition, options.seed);
   const notes: string[] = [];
   const themName = them ? compactName(them) : "the opposition";
   notes.push(
@@ -66,7 +67,7 @@ export function buildPreMatchBriefing(options: {
   );
 
   if (opponentId) {
-    notes.push(`Threats: ${threatLine(opponentId, theirSheet)}`);
+    notes.push(`Threats: ${threatLine(opponentId, theirSheet, options.seed)}`);
   }
 
   if (theirProfile.attack > ourProfile.defence + 0.8) {
@@ -109,7 +110,7 @@ export function buildPreMatchBriefing(options: {
     );
   }
 
-  const xv = sheetPlayers(options.clubId, options.sheet);
+  const xv = sheetPlayers(options.clubId, options.sheet, options.seed);
   const teamwork =
     xv.reduce((sum, player) => sum + matchStat(player.ratings.teamwork, conditionFor(player.name, options.condition), "teamwork"), 0) /
     Math.max(1, xv.length);
