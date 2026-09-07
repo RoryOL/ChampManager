@@ -25,7 +25,7 @@ import { clubTactics, DEFAULT_TACTICS, defaultSheet, matchOrderIndex, matchShirt
 import { nextBatch } from "./lib/schedule";
 import { matchPlayed } from "./lib/scoring";
 import { ATTRIBUTE_KEYS } from "./lib/attributes";
-import { applyMatchFatigue, applyTeamwork, applyTraining, applyWeekSession, averageMatchOverall, boostTotal, defaultCondition, fitnessOf, isOvertrained, matchStat, trainedStat, trainingDelta, weekCoachCopy } from "./lib/training";
+import { applyMatchFatigue, applyTeamwork, applyTraining, applyWeekSession, averageMatchOverall, bankedLift, boostTotal, defaultCondition, fitnessOf, formatBoostDelta, isOvertrained, matchStat, sessionForSlot, tableLift, trainedStat, trainingDelta, weekCoachCopy } from "./lib/training";
 import { buildPreMatchBriefing } from "./lib/briefing";
 import type { PlayerMatchStats, Tactics } from "./types";
 import { nextSwapPick } from "./components/SwapConfirmBar";
@@ -791,6 +791,33 @@ describe("training", () => {
     expect(matchStat(player.ratings.composure, form, "composure")).toBe(player.ratings.composure);
     expect(afterSkills.summary).toMatch(/first touch/i);
     expect(afterSkills.summary).toMatch(/player profile/i);
+  });
+
+  it("formats small banked lifts for the training table instead of hiding them", () => {
+    expect(formatBoostDelta(0)).toBe("");
+    expect(formatBoostDelta(0.057)).toBe("+0.06");
+    expect(formatBoostDelta(0.147)).toBe("+0.15");
+    expect(formatBoostDelta(-0.12)).toBe("-0.12");
+    expect(formatBoostDelta(1)).toBe("+1");
+    expect(formatBoostDelta(1.2)).toBe("+1.2");
+    expect(tableLift(0.06, 0)).toBe(0.06);
+    expect(tableLift(0, 0.04)).toBe(0.04);
+    const squad = ratedSquad("ballyea").slice(0, 1);
+    const player = squad[0]!;
+    const start = { [player.name]: defaultCondition() };
+    const after = applyTraining(squad, start, "mixed", { [player.name]: tacticsPlan });
+    const form = after.condition[player.name] ?? defaultCondition();
+    expect(formatBoostDelta(bankedLift(form, "passing"))).not.toBe("");
+    expect(formatBoostDelta(after.deltas[player.name]?.passing ?? 0)).not.toBe("");
+    expect(Math.round(after.deltas[player.name]?.passing ?? 0)).toBe(0);
+  });
+
+  it("uses mixed sessions for a three-session week and a challenge only on the third slot of a challenge week", () => {
+    expect(sessionForSlot("preseason", "triple", 0)).toBe("mixed");
+    expect(sessionForSlot("preseason", "triple", 2)).toBe("mixed");
+    expect(sessionForSlot("preseason", "challenge", 1)).toBe("mixed");
+    expect(sessionForSlot("preseason", "challenge", 2)).toBe("challenge");
+    expect(sessionForSlot("season", "challenge", 0, "mixed")).toBe("mixed");
   });
 
   it("does not let training move mental attributes", () => {

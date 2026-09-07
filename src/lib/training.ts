@@ -445,6 +445,25 @@ export function trainingDelta(condition: PlayerCondition, key: AttributeKey): nu
   return value === 0 ? 0 : value;
 }
 
+export function bankedLift(condition: PlayerCondition, key: AttributeKey): number {
+  return snapBoost(condition.boosts?.[key] ?? 0);
+}
+
+/** Signed lift for the training table: banked total, or last session if nothing is banked yet. */
+export function tableLift(banked: number, lastSession = 0): number {
+  return snapBoost(banked !== 0 ? banked : lastSession);
+}
+
+export function formatBoostDelta(value: number): string {
+  const snapped = snapBoost(value);
+  if (snapped === 0) return "";
+  const abs = Math.abs(snapped);
+  const shown = abs >= 1 ? Math.round(snapped * 10) / 10 : Math.round(snapped * 100) / 100;
+  if (shown === 0) return "";
+  const body = Number.isInteger(shown) ? String(Math.abs(shown)) : Math.abs(shown).toFixed(abs >= 1 ? 1 : 2).replace(/0$/, "");
+  return shown < 0 ? `-${body}` : `+${body}`;
+}
+
 export function matchRatings(player: RatedPlayer, condition: PlayerCondition): RatedPlayer["ratings"] {
   const ratings = {} as Record<AttributeKey, number>;
   for (const key of ATTRIBUTE_KEYS) {
