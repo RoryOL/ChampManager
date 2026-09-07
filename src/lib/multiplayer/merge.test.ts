@@ -22,6 +22,19 @@ function lobby() {
   return started.campaign;
 }
 
+function trainFullWeek(
+  campaign: ReturnType<typeof lobby>,
+  clubId: string,
+  session: "mixed" | "fitness" | "skills" | "setpieces" | "recovery" | "challenge",
+  now: number,
+) {
+  let next = campaign;
+  for (let index = 0; index < 3; index += 1) {
+    next = trainClub(next, clubId, session, now + index);
+  }
+  return next;
+}
+
 describe("campaign merge", () => {
   it("keeps both managers when one copy only has the host", () => {
     const full = lobby();
@@ -41,8 +54,8 @@ describe("campaign merge", () => {
 
   it("keeps each club's own training when two phones train apart", () => {
     const base = lobby();
-    const hostCopy = trainClub(base, "ballyea", "skills", NOW + 10);
-    const guestCopy = trainClub(base, "inagh-kilnamona", "fitness", NOW + 11);
+    const hostCopy = trainFullWeek(base, "ballyea", "skills", NOW + 10);
+    const guestCopy = trainFullWeek(base, "inagh-kilnamona", "fitness", NOW + 11);
     const merged = mergeCampaigns(hostCopy, guestCopy);
     expect(merged.clubs.ballyea.trainingDue).toBe(false);
     expect(merged.clubs["inagh-kilnamona"].trainingDue).toBe(false);
@@ -54,7 +67,11 @@ describe("campaign merge", () => {
     let season = lobby();
     for (let week = 1; week <= PRESEASON_WEEKS; week += 1) {
       season = trainClub(season, "ballyea", "skills", NOW + week);
+      season = trainClub(season, "ballyea", "skills", NOW + week + 1);
+      season = trainClub(season, "ballyea", "skills", NOW + week + 2);
       season = trainClub(season, "inagh-kilnamona", "fitness", NOW + week + 10);
+      season = trainClub(season, "inagh-kilnamona", "fitness", NOW + week + 11);
+      season = trainClub(season, "inagh-kilnamona", "fitness", NOW + week + 12);
     }
     const hostReady = readyClub(season, "ballyea", NOW + 100);
     const guestReady = readyClub(season, "inagh-kilnamona", NOW + 101);
@@ -65,8 +82,8 @@ describe("campaign merge", () => {
 
   it("is stable if you merge the same pair twice", () => {
     const base = lobby();
-    const hostCopy = trainClub(base, "ballyea", "skills", NOW + 10);
-    const guestCopy = trainClub(base, "inagh-kilnamona", "fitness", NOW + 11);
+    const hostCopy = trainFullWeek(base, "ballyea", "skills", NOW + 10);
+    const guestCopy = trainFullWeek(base, "inagh-kilnamona", "fitness", NOW + 11);
     const once = mergeCampaigns(hostCopy, guestCopy);
     const twice = mergeCampaigns(once, guestCopy);
     expect(twice.clubs.ballyea.trainingDue).toBe(false);

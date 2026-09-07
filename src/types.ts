@@ -99,7 +99,7 @@ export type StandingRow = TeamStats & {
   status: "quarter-final" | "safe" | "relegation" | "pending";
 };
 
-export type PageId = "home" | "squad" | "tactics" | "fixtures" | "table";
+export type PageId = "home" | "squad" | "tactics" | "fixtures" | "table" | "training";
 
 export type PositionLine = "GK" | "FB" | "HB" | "MF" | "HF" | "FF";
 
@@ -191,6 +191,11 @@ export type TrainingPlans = Record<string, PlayerPlan>;
 /** Week session: individual mixes, a challenge match, or a full recovery week. */
 export type WeekSession = "mixed" | "challenge" | "recovery";
 
+export type TrainingIntensity = "intense" | "balanced" | "light";
+
+/** Preseason week: two mixed sessions plus a challenge, or three mixed sessions. */
+export type WeekShape = "challenge" | "triple";
+
 /** @deprecated Use WeekSession. Kept so older saves/tests still type-check during migration. */
 export type TrainingFocus = WeekSession | "fitness" | "skills" | "setpieces";
 
@@ -253,6 +258,7 @@ export type MatchEventKind =
   | "turnover"
   | "coach"
   | "injury"
+  | "sub"
   | "half"
   | "full";
 
@@ -383,7 +389,7 @@ export type TeamSheet = {
 };
 
 export type GameSave = {
-  version: 6;
+  version: 7;
   clubId: string;
   seed: number;
   tactics: Tactics;
@@ -398,6 +404,10 @@ export type GameSave = {
   ambition: AmbitionTarget;
   plans: TrainingPlans;
   lastSheet?: TeamSheet;
+  intensity: TrainingIntensity;
+  weekShape: WeekShape;
+  sessionsDone: number;
+  trainingDeltas: Record<string, AttributeBoosts>;
 };
 
 export type LivePhase = "first" | "half-time" | "half-wait" | "second" | "finished";
@@ -418,6 +428,10 @@ export type ClubRuntime = {
   trainingDue: boolean;
   plans: TrainingPlans;
   lastSheet?: TeamSheet;
+  intensity: TrainingIntensity;
+  weekShape: WeekShape;
+  sessionsDone: number;
+  trainingDeltas: Record<string, AttributeBoosts>;
 };
 
 export type HalfPlan = {
