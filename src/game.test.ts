@@ -9,9 +9,15 @@ import { openPlayConversion } from "./lib/shooting";
 import { crossWind, parallelWind, passCompleteChance, rollClimate, withWindFor } from "./lib/weather";
 import {
   commentaryFeed,
+  attackLookChance,
+  chaoticConvert,
+  defensiveSit,
   freeConversionChance,
+  luckyLookChance,
+  matchChaos,
   mistimedFoulChance,
   momentumAt,
+  puckoutFindTargetChance,
   scoreFromEvents,
   redOnFoulChance,
   reshapeTo625,
@@ -19,11 +25,12 @@ import {
   simulateMatch,
   sixtyFiveChance,
   tackleChance,
+  targetedPuckoutWinChance,
   yellowOnFoulChance,
 } from "./lib/matchEngine";
-import { clubTactics, DEFAULT_TACTICS, defaultSheet, matchOrderIndex, matchShirtNumber, matchSlot, playerAge, ratePlayer, ratedSquad, sideStrength } from "./lib/players";
+import { clubTactics, DEFAULT_TACTICS, defaultSheet, matchOrderIndex, matchShirtNumber, matchSlot, pickPuckoutTarget, playerAge, ratePlayer, ratedSquad, sheetPlayers, sideStrength } from "./lib/players";
 import { nextBatch } from "./lib/schedule";
-import { matchPlayed } from "./lib/scoring";
+import { matchPlayed, scoreTotal } from "./lib/scoring";
 import { ATTRIBUTE_KEYS } from "./lib/attributes";
 import { applyMatchFatigue, applyTeamwork, applyTraining, applyWeekSession, averageMatchOverall, bankedLift, boostTotal, defaultCondition, fitnessOf, formatBoostDelta, isOvertrained, matchStat, sessionForSlot, tableLift, trainedStat, trainingDelta, weekCoachCopy } from "./lib/training";
 import { buildPreMatchBriefing } from "./lib/briefing";
@@ -270,6 +277,51 @@ describe("match engine", () => {
     expect(kinds.has("puckout")).toBe(true);
   });
 
+  it("finds the intended man more often when the keeper can pass and strike long", () => {
+    expect(puckoutFindTargetChance(18, 17)).toBeGreaterThan(puckoutFindTargetChance(9, 8) + 0.22);
+  });
+
+  it("uses the target's aerials when the puck-out finds him, and the rest of the line when it does not", () => {
+    expect(targetedPuckoutWinChance(18, 12, 10, true)).toBeGreaterThan(targetedPuckoutWinChance(18, 12, 10, false));
+    expect(targetedPuckoutWinChance(9, 12, 18, false)).toBeGreaterThan(targetedPuckoutWinChance(9, 12, 18, true));
+  });
+
+  it("only picks a puck-out target from midfield or the half-forward line", () => {
+    const sheet = defaultSheet("ballyea");
+    const xv = sheetPlayers("ballyea", sheet);
+    const fullBack = sheet.starters[2];
+    const picked = pickPuckoutTarget(xv, fullBack);
+    expect(picked).toBeTruthy();
+    expect(sheet.starters.slice(7, 12)).toContain(picked!.name);
+  });
+
+  it("aims attacking puck-outs at the named midfielder or half-forward", () => {
+    const sheet = defaultSheet("eire-og");
+    const target = sheet.starters[9] ?? sheet.starters[7];
+    const pool = new Set(sheet.starters.slice(7, 12));
+    let aimed = 0;
+    let long = 0;
+    for (let seed = 1; seed <= 36; seed += 1) {
+      const result = simulateMatch({
+        matchId: "g2-r1-a",
+        homeId: "eire-og",
+        awayId: "crusheen",
+        homeTactics: { ...DEFAULT_TACTICS, puckout: 92, puckoutTarget: target },
+        climate: { sky: "sunny", windStrength: 6, windAngle: 90 },
+        seed,
+      });
+      for (const event of result.events) {
+        if (event.teamId !== "eire-og" || event.kind !== "puckout") continue;
+        if (/turned over/i.test(event.text)) continue;
+        if (!pool.has(event.playerName)) continue;
+        long += 1;
+        if (event.playerName === target) aimed += 1;
+      }
+    }
+    expect(long).toBeGreaterThan(20);
+    expect(aimed / long).toBeGreaterThan(0.45);
+  });
+
   it("lets a sweeper cut the goals conceded compared with a 6-2-6", () => {
     const traditional: Tactics = { ...DEFAULT_TACTICS, shape: "traditional", mentality: "attacking" };
     const sweeper: Tactics = { ...DEFAULT_TACTICS, shape: "sweeper", mentality: "contain" };
@@ -296,6 +348,56 @@ describe("match engine", () => {
       }).awayScore.goals;
     }
     expect(sweeperGoals).toBeLessThan(traditionalGoals);
+  });
+
+  it("makes cagey tactics pull attacks toward a bounce of the ball", () => {
+    const attacking: Tactics = { ...DEFAULT_TACTICS, mentality: "attacking", shape: "traditional", pressure: 72 };
+    const sitting: Tactics = { ...DEFAULT_TACTICS, mentality: "contain", shape: "sweeper", pressure: 18 };
+    expect(defensiveSit(sitting)).toBeGreaterThan(defensiveSit(attacking) + 0.6);
+    expect(matchChaos(sitting, attacking)).toBeGreaterThan(matchChaos(attacking, attacking) + 0.4);
+    const quality = attackLookChance(16, 10, 0, 0, 0);
+    const cagey = attackLookChance(16, 10, 0, 0.7, 0.8);
+    expect(quality).toBeGreaterThan(cagey);
+    expect(Math.abs(cagey - 0.5)).toBeGreaterThan(0);
+    expect(luckyLookChance(0.7)).toBeGreaterThan(luckyLookChance(0));
+    const steady = chaoticConvert(0.72, 0, () => 0.5);
+    const wild = chaoticConvert(0.72, 0.8, () => 0.1);
+    expect(Math.abs(wild - 0.5)).toBeLessThan(Math.abs(steady - 0.5));
+  });
+
+  it("lets a dominant side win more often by attacking than by sitting in", () => {
+    const attacking: Tactics = { ...DEFAULT_TACTICS, mentality: "attacking", shape: "traditional", pressure: 70 };
+    const sitting: Tactics = { ...DEFAULT_TACTICS, mentality: "contain", shape: "sweeper", pressure: 22 };
+    let attackWins = 0;
+    let sitWins = 0;
+    let attackTotal = 0;
+    let sitTotal = 0;
+    for (let seed = 1; seed <= 56; seed += 1) {
+      const open = simulateMatch({
+        matchId: "g2-r1-a",
+        homeId: "eire-og",
+        awayId: "scariff",
+        homeTactics: attacking,
+        awayTactics: DEFAULT_TACTICS,
+        climate: { sky: "sunny", windStrength: 8, windAngle: 90 },
+        seed,
+      });
+      const cagey = simulateMatch({
+        matchId: "g2-r1-a",
+        homeId: "eire-og",
+        awayId: "scariff",
+        homeTactics: sitting,
+        awayTactics: DEFAULT_TACTICS,
+        climate: { sky: "sunny", windStrength: 8, windAngle: 90 },
+        seed,
+      });
+      if (scoreTotal(open.homeScore) > scoreTotal(open.awayScore)) attackWins += 1;
+      if (scoreTotal(cagey.homeScore) > scoreTotal(cagey.awayScore)) sitWins += 1;
+      attackTotal += scoreTotal(open.homeScore) + scoreTotal(open.awayScore);
+      sitTotal += scoreTotal(cagey.homeScore) + scoreTotal(cagey.awayScore);
+    }
+    expect(attackWins).toBeGreaterThan(sitWins);
+    expect(sitTotal).toBeLessThan(attackTotal);
   });
 
   it("takes a sent-off player off the field and plays 6-2-5", () => {
@@ -558,7 +660,9 @@ describe("match engine", () => {
         climate: { sky: "sunny", windStrength: 8, windAngle: 12 },
         seed,
       });
+      let takerOff = false;
       for (const event of result.events) {
+        if (event.playerName === taker && (event.kind === "red" || event.kind === "injury")) takerOff = true;
         if (event.teamId !== "ballyea") continue;
         if (event.kind === "point" || event.kind === "goal") {
           openPlay += 1;
@@ -570,13 +674,14 @@ describe("match engine", () => {
         if (event.kind === "free" || event.kind === "sixtyFive" || event.kind === "sideline") {
           setPieces += 1;
           if (event.playerName === taker) setPiecesByTaker += 1;
+          else expect(takerOff).toBe(true);
         }
       }
     }
     expect(openPlay).toBeGreaterThan(10);
     expect(openPlayByTaker).toBe(0);
     expect(setPieces).toBeGreaterThan(0);
-    expect(setPiecesByTaker).toBe(setPieces);
+    expect(setPiecesByTaker).toBeGreaterThan(0);
   });
 
   it("plays at championship tempo: tackles, possessions and scoring", () => {

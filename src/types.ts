@@ -109,7 +109,7 @@ export type Tactics = {
   mentality: "contain" | "balanced" | "attacking";
   /** 0 = short passing / running game, 100 = direct long ball */
   build: number;
-  /** 0 = short puck-outs to half-backs, 100 = long contest in midfield */
+  /** 0 = short puck-outs to half-backs, 100 = long to a midfielder or half-forward */
   puckout: number;
   /** 0 = light tackling, 100 = aggressive — more hooks, more frees and bookings given away */
   aggression: number;
@@ -121,6 +121,8 @@ export type Tactics = {
   longFreeTaker?: string;
   shortFreeTaker?: string;
   sidelineTaker?: string;
+  /** Named midfielder or half-forward to hit on attacking puck-outs. */
+  puckoutTarget?: string;
 };
 
 export type PlayerRatings = {
