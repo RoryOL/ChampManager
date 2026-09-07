@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { seedChampionship } from "../data/championship";
 import { compactName } from "../lib/display";
-import { momentumAt, simulateMatch } from "../lib/matchEngine";
+import { momentumAt, sentOffNamesFromEvents, simulateMatch } from "../lib/matchEngine";
 import { combineHalves, reportFromSim } from "../lib/matchStats";
 import { applyMatchForm } from "../lib/form";
 import {
@@ -49,8 +49,6 @@ import { formatScore, matchPlayed, scoreTotal, stageLabel } from "../lib/scoring
 import {
   applyInjury,
   injuredNamesFromEvents,
-  insertInjuryEvents,
-  rollMatchInjuries,
   sitInjuredPlayers,
   type RolledInjury,
 } from "../lib/injuries";
@@ -123,29 +121,25 @@ export type LiveMatch = {
 function decorateUserMatch(
   sim: SimulatedMatch,
   save: GameSave,
-  championship: Championship,
-  period: "first" | "second" | "full",
-  sheet?: TeamSheet,
 ): { sim: SimulatedMatch; injuries: RolledInjury[] } {
   if (sim.homeId !== save.clubId && sim.awayId !== save.clubId) {
     return { sim, injuries: [] };
   }
-  const squad = ratedSquad(save.clubId, save.seed);
-  const injuries = rollMatchInjuries({
-    clubId: save.clubId,
-    squad,
-    condition: save.condition,
-    seed: save.seed,
-    matchId: sim.matchId,
-    period,
-    remainingWeeks: remainingWeeks(save, championship, save.clubId),
-    teamId: save.clubId,
-    played: sim.players
-      .filter((row) => row.teamId === save.clubId)
-      .map((row) => ({ name: row.name, minutes: row.minutes, started: row.started })),
-  });
-  const usedSheet = sheet ?? (sim.homeId === save.clubId ? sim.homeSheet : sim.awaySheet);
-  return { sim: insertInjuryEvents(sim, injuries, { clubId: save.clubId, squad, sheet: usedSheet }), injuries };
+  const injuries = (sim.matchInjuries ?? [])
+    .filter((item) => item.teamId === save.clubId)
+    .map((item) => ({
+      name: item.name,
+      minute: item.minute,
+      injury: item.injury,
+      event: {
+        minute: item.minute,
+        teamId: item.teamId,
+        playerName: item.name,
+        kind: "injury" as const,
+        text: `${item.name} is in trouble with a ${item.injury.ailment}. He's going off.`,
+      },
+    }));
+  return { sim, injuries };
 }
 
 function localSeatsFor(campaign: Campaign, selfId: string): Seat[] {
@@ -459,6 +453,9 @@ export function useGame() {
             awayTactics: awayId === save.clubId ? save.tactics : clubTactics(awayId),
             homeCondition: homeId === save.clubId ? save.condition : undefined,
             awayCondition: awayId === save.clubId ? save.condition : undefined,
+            homeSquad: ratedSquad(homeId, save.seed),
+            awaySquad: ratedSquad(awayId, save.seed),
+            remainingWeeks: remainingWeeks(save, championship, save.clubId),
             clubId: save.clubId,
             homeName: homeTeam ? compactName(homeTeam) : homeId,
             awayName: awayTeam ? compactName(awayTeam) : awayId,
@@ -467,7 +464,7 @@ export function useGame() {
             gameSeed: save.seed,
           });
           if (!isUser) return sim;
-          const decorated = decorateUserMatch(sim, save, championship, mode === "first" ? "first" : "full", userSheet);
+          const decorated = decorateUserMatch(sim, save);
           injuries = decorated.injuries;
           return decorated.sim;
         })
@@ -567,6 +564,7 @@ export function useGame() {
           sheet.subs,
           extras?.base?.tactics ?? base.tactics,
           ratedSquad(base.clubId, base.seed),
+          current.user.events.some((event) => event.kind === "red" && event.teamId === base.clubId),
         ),
         trainingDue: true,
       };
@@ -741,6 +739,10 @@ export function useGame() {
         awayTactics: awayId === save.clubId ? tactics : clubTactics(awayId),
         homeCondition: homeId === save.clubId ? save.condition : undefined,
         awayCondition: awayId === save.clubId ? save.condition : undefined,
+        homeSquad: ratedSquad(homeId, save.seed),
+        awaySquad: ratedSquad(awayId, save.seed),
+        remainingWeeks: remainingWeeks(save, championship, save.clubId),
+        sentOff: sentOffNamesFromEvents(first.events),
         clubId: save.clubId,
         homeName: homeTeam ? compactName(homeTeam) : homeId,
         awayName: awayTeam ? compactName(awayTeam) : awayId,
@@ -752,7 +754,7 @@ export function useGame() {
         gameSeed: save.seed,
         climate: first.climate,
       });
-      const decorated = decorateUserMatch(second, save, championship, "second", workingSheet);
+      const decorated = decorateUserMatch(second, save);
       const combined = combineHalves(first, decorated.sim, {
         clubId: save.clubId,
         homeName: homeTeam ? compactName(homeTeam) : "Home",

@@ -180,7 +180,10 @@ export function TacticControls({ tactics, onChange, compact = false, xv = [] }: 
           ))}
         </div>
         {tactics.shape === "sweeper" ? (
-          <p className="tactic-copy">Five forwards cover more ground — their match fitness drops faster.</p>
+          <p className="tactic-copy">
+            The extra defender makes a goal a rare look. Five forwards cover more ground — their match fitness drops
+            faster. A send-off drops you to 6-2-5 and you lose the sweeper.
+          </p>
         ) : null}
       </section>
       {xv.length > 0 ? (

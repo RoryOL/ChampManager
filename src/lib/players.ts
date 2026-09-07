@@ -468,7 +468,7 @@ export function sideProfile(
     return mean * usedInSlot(player, index);
   };
 
-  const forwards = [9, 10, 11, 12, 13, 14];
+  const forwards = xv.length < 15 ? [9, 10, 11, 12, 13] : [9, 10, 11, 12, 13, 14];
   const backs = [0, 1, 2, 3, 4, 5, 6];
   const mids = [7, 8];
   const halfBacks = [4, 5, 6];
@@ -519,9 +519,13 @@ export function sideProfile(
   attack += direct * (0.4 + (aerial - 12) * 0.12) + (1 - direct) * (0.28 + (running - 12) * 0.14);
   attack += longPuck * (puckout + aerial - 24) * 0.08 + (1 - longPuck) * (halfBackHands - 12) * 0.12;
   defence += (1 - longPuck) * 0.22;
-  if (tactics.shape === "sweeper") {
+  if (tactics.shape === "sweeper" && xv.length >= 15) {
     defence += 1.6;
     attack -= 0.7;
+  }
+  if (xv.length < 15) {
+    attack -= 0.85;
+    defence -= 0.35;
   }
   const physical = clampDial(tactics.aggression ?? 46) / 100;
   const press = clampDial(tactics.pressure ?? 48) / 100;

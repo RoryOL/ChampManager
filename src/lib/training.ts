@@ -883,6 +883,7 @@ export function matchFatigueDelta(
   position: PositionLine,
   started: boolean,
   age = 27,
+  shortForwards = false,
 ): number {
   if (minutes <= 0) return 0;
   const share = Math.min(1, minutes / 62);
@@ -900,7 +901,7 @@ export function matchFatigueDelta(
   let gain = (started ? 16 : 7) * share;
   gain += pressure * 14 * share;
   gain += aggression * 10 * share;
-  if (plan.shape === "sweeper" && (position === "HF" || position === "FF")) {
+  if ((plan.shape === "sweeper" || shortForwards) && (position === "HF" || position === "FF")) {
     gain += 9 * share;
   }
   gain *= ageResponse(age).fatigue;
@@ -913,6 +914,7 @@ export function applyMatchFatigue(
   subs: string[],
   tactics: Tactics | undefined = undefined,
   squad: RatedPlayer[] = [],
+  shortForwards = false,
 ): Record<string, PlayerCondition> {
   const next = { ...condition };
   const byName = new Map(squad.map((player) => [player.name, player]));
@@ -920,7 +922,7 @@ export function applyMatchFatigue(
     const current = cloneCondition(next[name] ?? defaultCondition());
     const position = byName.get(name)?.position ?? "MF";
     const age = byName.get(name)?.age ?? 27;
-    const add = matchFatigueDelta(62, tactics, position, started, age);
+    const add = matchFatigueDelta(62, tactics, position, started, age, shortForwards);
     const recover = 4 * ageResponse(age).recover;
     next[name] = {
       fatigue: clampCondition(current.fatigue + add - recover),

@@ -20,12 +20,10 @@ import type {
 import { compactName } from "../display";
 import { briefingNews } from "../briefing";
 import { championshipFromSave } from "../gameStorage";
-import { momentumAt, simulateMatch } from "../matchEngine";
+import { momentumAt, sentOffNamesFromEvents, simulateMatch } from "../matchEngine";
 import {
   applyInjury,
   injuredNamesFromEvents,
-  insertInjuryEvents,
-  rollMatchInjuries,
   sitInjuredPlayers,
   type RolledInjury,
 } from "../injuries";
@@ -532,7 +530,7 @@ function lockMatchday(campaign: Campaign, now: number): Campaign {
     const humans = [homeId, awayId].filter((id) => isHumanClub(campaign, id));
     const period = humans.length > 0 ? "first" : "full";
     const sim = simulateSides(campaign, match, homeId, awayId, period);
-    const decorated = decorateHumanMatch(campaign, sim, period);
+    const decorated = decorateHumanMatch(campaign, sim);
     if (humans.length === 0) {
       matches = writeMatch(matches, decorated.sim);
       reports[decorated.sim.matchId] = reportFromSim(decorated.sim);
@@ -617,34 +615,27 @@ function mergeInjuryMaps(
 function decorateHumanMatch(
   campaign: Campaign,
   sim: SimulatedMatch,
-  period: "first" | "second" | "full",
 ): { sim: SimulatedMatch; injuries: Record<string, RolledInjury[]> } {
-  const championship = championshipOf(campaign);
   const injuries: Record<string, RolledInjury[]> = {};
-  let next = sim;
   for (const clubId of [sim.homeId, sim.awayId]) {
     if (!isHumanClub(campaign, clubId)) continue;
-    const club = campaign.clubs[clubId];
-    if (!club) continue;
-    const rolled = rollMatchInjuries({
-      clubId,
-      squad: ratedSquad(clubId, campaign.seed),
-      condition: club.condition,
-      seed: campaign.seed,
-      matchId: sim.matchId,
-      period,
-      remainingWeeks: remainingWeeks(saveFromCampaign(campaign, clubId), championship, clubId),
-      teamId: clubId,
-      played: sim.players
-        .filter((row) => row.teamId === clubId)
-        .map((row) => ({ name: row.name, minutes: row.minutes, started: row.started })),
-    });
-    if (rolled.length === 0) continue;
-    const sheet = clubId === next.homeId ? next.homeSheet : next.awaySheet;
-    next = insertInjuryEvents(next, rolled, { clubId, squad: ratedSquad(clubId, campaign.seed), sheet });
-    injuries[clubId] = rolled;
+    const rolled = (sim.matchInjuries ?? [])
+      .filter((item) => item.teamId === clubId)
+      .map((item) => ({
+        name: item.name,
+        minute: item.minute,
+        injury: item.injury,
+        event: {
+          minute: item.minute,
+          teamId: item.teamId,
+          playerName: item.name,
+          kind: "injury" as const,
+          text: `${item.name} is in trouble with a ${item.injury.ailment}. He's going off.`,
+        },
+      }));
+    if (rolled.length > 0) injuries[clubId] = rolled;
   }
-  return { sim: next, injuries };
+  return { sim, injuries };
 }
 
 function simulateSides(
@@ -679,6 +670,10 @@ function simulateSides(
     awayTactics: extras?.awayTactics ?? awayClub?.tactics ?? clubTactics(awayId),
     homeCondition: homeClub?.condition,
     awayCondition: awayClub?.condition,
+    homeSquad: ratedSquad(homeId, campaign.seed),
+    awaySquad: ratedSquad(awayId, campaign.seed),
+    remainingWeeks: remainingWeeks(saveFromCampaign(campaign, homeClub ? homeId : awayId), championship, homeClub ? homeId : awayId),
+    sentOff: first ? sentOffNamesFromEvents(first.events) : undefined,
     clubId: homeClub ? homeId : awayClub ? awayId : homeId,
     homeName: homeTeam ? compactName(homeTeam) : homeId,
     awayName: awayTeam ? compactName(awayTeam) : awayId,
@@ -728,7 +723,14 @@ function finishSim(
     const tactics = ours ? sim.homeTactics : sim.awayTactics;
     const squad = ratedSquad(seat.clubId, campaign.seed);
     const rolled = injuriesByClub[seat.clubId] ?? [];
-    let condition = applyMatchFatigue(club.condition, closing.starters, closing.subs, tactics, squad);
+    let condition = applyMatchFatigue(
+      club.condition,
+      closing.starters,
+      closing.subs,
+      tactics,
+      squad,
+      sim.events.some((event) => event.kind === "red" && event.teamId === seat.clubId),
+    );
     condition = applyMatchForm(condition, squad, opening, closing, sim.players, result, campaign.seed, sim.matchId);
     const teamworked = applyTeamwork(condition, closing, club.lastSheet, "competitive");
     condition = teamworked.condition;
@@ -837,7 +839,7 @@ function tryCompleteLive(campaign: Campaign, matchId: string): Campaign {
     awaySheet: awayPlan.sheet,
     start: live.first,
   });
-  const decorated = decorateHumanMatch(campaign, second, "second");
+  const decorated = decorateHumanMatch(campaign, second);
   const homeTeam = teamById(championship, live.first.homeId);
   const awayTeam = teamById(championship, live.first.awayId);
   const combined = combineHalves(live.first, decorated.sim, {

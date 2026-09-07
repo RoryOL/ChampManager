@@ -13,6 +13,9 @@ import {
   mistimedFoulChance,
   momentumAt,
   scoreFromEvents,
+  redOnFoulChance,
+  reshapeTo625,
+  sentOffNamesFromEvents,
   simulateMatch,
   sixtyFiveChance,
   tackleChance,
@@ -293,6 +296,54 @@ describe("match engine", () => {
       }).awayScore.goals;
     }
     expect(sweeperGoals).toBeLessThan(traditionalGoals);
+  });
+
+  it("takes a sent-off player off the field and plays 6-2-5", () => {
+    const sheet = defaultSheet("ballyea");
+    const sent = sheet.starters[4]!;
+    const result = simulateMatch({
+      matchId: "g1-r1-a",
+      homeId: "ballyea",
+      awayId: "inagh-kilnamona",
+      homeTactics: { ...DEFAULT_TACTICS, shape: "sweeper" },
+      climate: { sky: "sunny", windStrength: 8, windAngle: 12 },
+      seed: 4,
+      forcedRemovals: [{ minute: 10, teamId: "ballyea", name: sent, kind: "red" }],
+    });
+    expect(result.events.some((event) => event.kind === "red" && event.playerName === sent)).toBe(true);
+    const after = result.events.filter((event) => event.minute > 10);
+    expect(after.some((event) => event.playerName === sent && event.kind !== "red")).toBe(false);
+    expect(sentOffNamesFromEvents(result.events, "ballyea")).toContain(sent);
+    const field = reshapeTo625(sheet.starters, [sent]);
+    expect(field).toHaveLength(14);
+    expect(field).not.toContain(sent);
+    const minutes = result.players.find((row) => row.name === sent && row.teamId === "ballyea")?.minutes ?? 62;
+    expect(minutes).toBeLessThan(50);
+  });
+
+  it("replaces an injured starter immediately and stops his minutes", () => {
+    const sheet = defaultSheet("ballyea");
+    const hurt = sheet.starters[11]!;
+    const result = simulateMatch({
+      matchId: "g1-r1-a",
+      homeId: "ballyea",
+      awayId: "inagh-kilnamona",
+      seed: 5,
+      forcedRemovals: [{ minute: 12, teamId: "ballyea", name: hurt, kind: "injury" }],
+    });
+    expect(result.events.some((event) => event.kind === "injury" && event.playerName === hurt)).toBe(true);
+    expect(result.events.some((event) => event.kind === "sub" && event.text.includes(hurt))).toBe(true);
+    const after = result.events.filter((event) => event.minute > 12);
+    expect(after.some((event) => event.playerName === hurt && event.kind !== "injury")).toBe(false);
+    const minutes = result.players.find((row) => row.name === hurt && row.teamId === "ballyea")?.minutes ?? 62;
+    expect(minutes).toBeLessThan(40);
+  });
+
+  it("books low-composure players more readily, and wet weather adds a few more cards", () => {
+    expect(yellowOnFoulChance(70, 6)).toBeGreaterThan(yellowOnFoulChance(70, 18));
+    expect(redOnFoulChance(70, 6)).toBeGreaterThan(redOnFoulChance(70, 18));
+    expect(mistimedFoulChance(70, true)).toBeGreaterThan(mistimedFoulChance(70, false));
+    expect(yellowOnFoulChance(70, 12, true)).toBeGreaterThan(yellowOnFoulChance(70, 12, false));
   });
 
   it("leans on goals more from a direct long-ball game than a running game", () => {
