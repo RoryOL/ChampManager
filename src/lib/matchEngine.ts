@@ -21,7 +21,7 @@ import {
   subEventFor,
   type RolledInjury,
 } from "./injuries";
-import { clubTactics, defaultSheet, sheetPlayers, sideProfile, sideTeamwork, type SideProfile } from "./players";
+import { clubTactics, defaultSheet, pickPuckoutTarget, sheetPlayers, sideProfile, sideTeamwork, aerialContestRating, type SideProfile } from "./players";
 import {
   conversionContext,
   goalChanceFromDistance,
@@ -30,7 +30,7 @@ import {
   setPieceConversion,
   shotDistanceM,
 } from "./shooting";
-import { conditionFor } from "./training";
+import { conditionFor, matchStat } from "./training";
 import { climateOf, passCompleteChance, puckoutWindAdjust, rollClimate, withWindFor } from "./weather";
 
 const POINT_KINDS: ReadonlySet<MatchEventKind> = new Set(["point", "free", "sixtyFive", "sideline"]);
@@ -73,6 +73,63 @@ export function sixtyFiveChance(frees: number, strikingDistance: number, composu
 
 export function sidelineChance(sidelines: number, strikingDistance: number): number {
   return Math.min(0.72, Math.max(0.1, 0.06 + sidelines * 0.028 + strikingDistance * 0.008));
+}
+
+/** How much a side is sitting in: contain, sweeper and sitting off the press. */
+export function defensiveSit(tactics: Tactics): number {
+  const mentality = tactics.mentality === "contain" ? 0.52 : tactics.mentality === "attacking" ? 0 : 0.12;
+  const sweeper = tactics.shape === "sweeper" ? 0.32 : 0;
+  const sitOff = (Math.max(0, 48 - clampDial(tactics.pressure ?? 48)) / 48) * 0.1;
+  return Math.min(1, mentality + sweeper + sitOff);
+}
+
+/** Cagey, low-scoring games pull results toward a bounce of the ball. */
+export function matchChaos(home: Tactics, away: Tactics): number {
+  const a = defensiveSit(home);
+  const b = defensiveSit(away);
+  return Math.min(1, (a + b) * 0.48 + Math.max(a, b) * 0.28);
+}
+
+export function attackLookChance(
+  attack: number,
+  defence: number,
+  toward: number,
+  chaos = 0,
+  ownSit = 0,
+): number {
+  const quality = 0.7 + (attack - defence) * 0.02 + toward * 0.05;
+  const mixed = quality * (1 - chaos * 0.55) + 0.5 * chaos * 0.55;
+  const tempo = 1 - chaos * 0.18 - ownSit * 0.18;
+  const floor = 0.58 - chaos * 0.22;
+  const ceil = 0.86 - chaos * 0.08;
+  return Math.min(ceil, Math.max(floor, mixed * tempo));
+}
+
+export function luckyLookChance(chaos: number): number {
+  return 0.08 + chaos * 0.09;
+}
+
+export function chaoticConvert(convert: number, chaos: number, random: () => number): number {
+  const mixed = convert * (1 - chaos * 0.32) + 0.5 * chaos * 0.32;
+  const jitter = (random() - 0.5) * 2 * chaos * 0.16;
+  return Math.min(0.9, Math.max(0.16, mixed + jitter));
+}
+
+export function puckoutFindTargetChance(puckoutReach: number, passing: number): number {
+  return Math.min(0.9, Math.max(0.16, 0.12 + puckoutReach * 0.02 + passing * 0.018));
+}
+
+export function targetedPuckoutWinChance(
+  fielder: number,
+  marker: number,
+  support: number,
+  foundTarget: boolean,
+  wind = 0,
+): number {
+  const weight = foundTarget ? 0.82 : 0.55;
+  const attack = fielder * weight + support * (1 - weight);
+  const spill = foundTarget ? 0 : -0.05;
+  return Math.min(0.78, Math.max(0.22, 0.5 + (attack - marker * 1.05) * 0.032 + spill + wind));
 }
 
 export function tackleChance(hooking: number, aggression: number, pressure = 48, strength = 12): number {
@@ -454,9 +511,6 @@ export function simulateMatch(options: {
     else awayScore = addScore(awayScore, kind);
   };
 
-  const attackChance = (attack: number, defence: number, toward: number) =>
-    Math.min(0.86, Math.max(0.58, 0.7 + (attack - defence) * 0.02 + toward * 0.05));
-
   const attemptSetPiece = (
     teamId: string,
     kind: "free" | "sixtyFive" | "sideline" | "longFree" | "shortFree",
@@ -572,28 +626,78 @@ export function simulateMatch(options: {
     const defendingId = teamId === options.homeId ? options.awayId : options.homeId;
     const withWind = withWindFor(climate, teamId, options.homeId, period);
     if (random() < 0.16 + longPuck * 0.28) {
+      const receivers = names.slice(7, 12);
+      const oppReceivers = oppNames.slice(4, 9);
+      const liveXv = names
+        .map((name) => playerOf(teamId, name))
+        .filter((player): player is RatedPlayer => Boolean(player));
+      const condition =
+        teamId === options.homeId ? (options.homeCondition ?? {}) : (options.awayCondition ?? {});
+      const target = pickPuckoutTarget(liveXv, tacticsFor(teamId).puckoutTarget, condition);
+      const keeper = profile.keeper;
+      const keeperForm = keeper ? conditionOf(teamId, keeper.name) : undefined;
+      const findChance = applyFormChance(
+        puckoutFindTargetChance(
+          keeper && keeperForm
+            ? matchStat(keeper.ratings.puckoutReach, keeperForm, "puckoutReach")
+            : 12,
+          keeper && keeperForm ? matchStat(keeper.ratings.passing, keeperForm, "passing") : 11,
+        ) + puckoutWindAdjust(climate, withWind) * 0.35,
+        keeper ? formOf(teamId, keeper.name) : 50,
+      );
+      const foundTarget = Boolean(target && receivers.includes(target.name) && random() < findChance);
+      const others = receivers.filter((name) => name !== target?.name);
+      const fielder =
+        foundTarget && target
+          ? target.name
+          : pickName(others.length > 0 ? others : receivers.length > 0 ? receivers : names.slice(4, 9), random);
+      const oppFielder = pickName(oppReceivers.length > 0 ? oppReceivers : oppNames.slice(0, 9), random);
+      const aerialOf = (sideId: string, name: string) => {
+        const player = playerOf(sideId, name);
+        if (!player) return 12;
+        const form = conditionOf(sideId, name);
+        return aerialContestRating(
+          matchStat(player.ratings.highFielding, form, "highFielding"),
+          matchStat(player.ratings.aerialReach, form, "aerialReach"),
+          matchStat(player.ratings.strength, form, "strength"),
+        );
+      };
+      const fielderAerial = aerialOf(teamId, fielder);
+      const supportAerial =
+        receivers
+          .filter((name) => name !== fielder)
+          .map((name) => aerialOf(teamId, name))
+          .reduce((sum, value, _, list) => sum + value / Math.max(list.length, 1), 0) || fielderAerial;
+      const markerAerial = aerialOf(defendingId, oppFielder);
       const win =
         random() <
-        Math.min(
-          0.78,
-          Math.max(
-            0.22,
-            0.5 +
-              (profile.puckout + profile.aerial - opp.aerial * 1.05 - 12) * 0.03 +
-              (profile.strength - opp.strength) * 0.012 +
-              puckoutWindAdjust(climate, withWind),
-          ),
+        targetedPuckoutWinChance(
+          fielderAerial,
+          markerAerial,
+          supportAerial,
+          foundTarget,
+          puckoutWindAdjust(climate, withWind),
         );
-      const fielder = pickName(names.slice(4, 9), random);
-      const oppFielder = pickName(oppNames.slice(4, 9), random);
+      const keeperCredit = keeper
+        ? {
+            name: keeper.name,
+            teamId,
+            passesAttempted: 1,
+            passesCompleted: foundTarget ? 1 : 0,
+            possessions: 1,
+          }
+        : undefined;
       if (!win) {
         push({
           minute,
           teamId,
           playerName: fielder,
           kind: "puckout",
-          text: `Puck-out broken — ${fielder} loses the aerial contest.`,
+          text: foundTarget
+            ? `Puck-out broken — ${fielder} loses the aerial contest.`
+            : `Puck-out broken — meant for ${target?.name ?? "the target"}, ${fielder} loses the break.`,
           credits: mergeCredits([
+            ...(keeperCredit ? [keeperCredit] : []),
             { name: fielder, teamId, highFieldingAttempted: 1 },
             {
               name: oppFielder,
@@ -610,6 +714,7 @@ export function simulateMatch(options: {
       }
       carrier = fielder;
       const winCredits: StatCredit[] = [
+        ...(keeperCredit ? [keeperCredit] : []),
         {
           name: fielder,
           teamId,
@@ -627,7 +732,9 @@ export function simulateMatch(options: {
           teamId,
           playerName: fielder,
           kind: "puckout",
-          text: `${fielder} fields the puck-out around midfield.`,
+          text: foundTarget
+            ? `${fielder} fields the puck-out aimed at him.`
+            : `Puck-out off target — ${fielder} fields the puck-out around midfield.`,
           credits: mergeCredits(winCredits),
         });
       } else {
@@ -774,18 +881,22 @@ export function simulateMatch(options: {
     const sweeperCut = oppNames.length >= 15 && oppTactics.shape === "sweeper" ? 0.32 : 1;
     const fiveForwardCut = names.length < 15 || tactics.shape === "sweeper" ? 0.82 : 1;
     const wind = conversionContext(climate, teamId, options.homeId, period);
-    const convert = applyFormChance(
-      openPlayConversion({
-        strikingDistance: striking,
-        composure,
-        shooting,
-        finishing,
-        distanceM,
-        withWind: wind.withWind,
-        crossWind: wind.crossWind,
-        wet: wind.wet,
-      }),
-      formOf(teamId, playerName),
+    const convert = chaoticConvert(
+      applyFormChance(
+        openPlayConversion({
+          strikingDistance: striking,
+          composure,
+          shooting,
+          finishing,
+          distanceM,
+          withWind: wind.withWind,
+          crossWind: wind.crossWind,
+          wet: wind.wet,
+        }),
+        formOf(teamId, playerName),
+      ),
+      matchChaos(tacticsFor(options.homeId), tacticsFor(options.awayId)),
+      random,
     );
     const goalChance =
       goalChanceFromDistance(distanceM, sweeperCut) *
@@ -965,8 +1076,10 @@ export function simulateMatch(options: {
     playGroundContest(minute);
     if (random() < 0.55) playGroundContest(minute);
     const tilt = (momentum - 50) / 50;
+    const chaos = matchChaos(homeLiveTactics, awayLiveTactics);
     const homeLooks =
-      (random() < attackChance(home.attack, away.defence, tilt) ? 1 : 0) + (random() < 0.08 ? 1 : 0);
+      (random() < attackLookChance(home.attack, away.defence, tilt, chaos, defensiveSit(homeLiveTactics)) ? 1 : 0) +
+      (random() < luckyLookChance(chaos) ? 1 : 0);
     for (let look = 0; look < homeLooks; look += 1) {
       tryScore(
         options.homeId,
@@ -981,7 +1094,8 @@ export function simulateMatch(options: {
       );
     }
     const awayLooks =
-      (random() < attackChance(away.attack, home.defence, -tilt) ? 1 : 0) + (random() < 0.08 ? 1 : 0);
+      (random() < attackLookChance(away.attack, home.defence, -tilt, chaos, defensiveSit(awayLiveTactics)) ? 1 : 0) +
+      (random() < luckyLookChance(chaos) ? 1 : 0);
     for (let look = 0; look < awayLooks; look += 1) {
       tryScore(
         options.awayId,
