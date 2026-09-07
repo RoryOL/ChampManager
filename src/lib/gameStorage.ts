@@ -1,8 +1,15 @@
 import { seedChampionship } from "../data/championship";
 import { DEFAULT_TACTICS, defaultSheet } from "./players";
-import { clampDial } from "./attributes";
+import { ATTRIBUTE_KEYS, clampDial } from "./attributes";
 import { ambitionFor, migrateNewsItem } from "./news";
-import { defaultCondition, DEFAULT_INTENSITY, DEFAULT_WEEK_SHAPE, ensureCondition, squadNames } from "./training";
+import {
+  clampBoost,
+  defaultCondition,
+  DEFAULT_INTENSITY,
+  DEFAULT_WEEK_SHAPE,
+  ensureCondition,
+  squadNames,
+} from "./training";
 import type {
   AmbitionTarget,
   AttributeBoosts,
@@ -133,6 +140,7 @@ export function migrateSave(raw: unknown): GameSave | null {
     weekShape?: unknown;
     sessionsDone?: unknown;
     trainingDeltas?: unknown;
+    weekDeltas?: unknown;
   };
   if (!parsed.clubId || !parsed.sheet || !Array.isArray(parsed.matches)) return null;
   if (
@@ -142,7 +150,8 @@ export function migrateSave(raw: unknown): GameSave | null {
     parsed.version !== 4 &&
     parsed.version !== 5 &&
     parsed.version !== 6 &&
-    parsed.version !== 7
+    parsed.version !== 7 &&
+    parsed.version !== 8
   ) {
     return null;
   }
@@ -163,8 +172,12 @@ export function migrateSave(raw: unknown): GameSave | null {
     parsed.trainingDeltas && typeof parsed.trainingDeltas === "object"
       ? (parsed.trainingDeltas as Record<string, AttributeBoosts>)
       : {};
+  const weekDeltas =
+    parsed.weekDeltas && typeof parsed.weekDeltas === "object"
+      ? (parsed.weekDeltas as Record<string, AttributeBoosts>)
+      : {};
   return {
-    version: 7,
+    version: 8,
     clubId: parsed.clubId,
     seed: typeof parsed.seed === "number" ? parsed.seed : 1,
     tactics: migrateTactics(parsed.tactics),
@@ -178,7 +191,13 @@ export function migrateSave(raw: unknown): GameSave | null {
         : returning
           ? 7
           : 1,
-    condition: ensureCondition(names, parsed.condition ?? {}, returning ? { fatigue: 28, sharpness: 58, mood: 60 } : defaultCondition()),
+    condition: clampConditionBoosts(
+      ensureCondition(
+        names,
+        parsed.condition ?? {},
+        returning ? { fatigue: 28, sharpness: 58, mood: 60 } : defaultCondition(),
+      ),
+    ),
     trainingDue: typeof parsed.trainingDue === "boolean" ? parsed.trainingDue : !returning,
     reports: parsed.reports ?? {},
     ambition,
@@ -188,13 +207,31 @@ export function migrateSave(raw: unknown): GameSave | null {
     weekShape: migrateWeekShape(parsed.weekShape),
     sessionsDone: typeof parsed.sessionsDone === "number" ? Math.max(0, Math.min(3, Math.round(parsed.sessionsDone))) : 0,
     trainingDeltas,
+    weekDeltas,
   };
+}
+
+function clampConditionBoosts(condition: Record<string, PlayerCondition>): Record<string, PlayerCondition> {
+  const next: Record<string, PlayerCondition> = {};
+  for (const [name, current] of Object.entries(condition)) {
+    if (!current.boosts) {
+      next[name] = current;
+      continue;
+    }
+    const boosts: AttributeBoosts = {};
+    for (const key of ATTRIBUTE_KEYS) {
+      const value = current.boosts[key];
+      if (typeof value === "number" && value !== 0) boosts[key] = clampBoost(value);
+    }
+    next[name] = { ...current, boosts };
+  }
+  return next;
 }
 
 export function newSave(clubId: string): GameSave {
   const championship = structuredClone(seedChampionship);
   return {
-    version: 7,
+    version: 8,
     clubId,
     seed: Math.floor(Math.random() * 1_000_000_000),
     tactics: DEFAULT_TACTICS,
@@ -216,6 +253,7 @@ export function newSave(clubId: string): GameSave {
     weekShape: DEFAULT_WEEK_SHAPE,
     sessionsDone: 0,
     trainingDeltas: {},
+    weekDeltas: {},
   };
 }
 

@@ -14,12 +14,13 @@ import {
   conditionFor,
   defaultMixFor,
   fitnessOf,
-  matchStat,
   mixAbbrev,
   mixSummary,
   planFor,
   sessionForSlot,
   sessionsPerWeek,
+  trainedStat,
+  trainingDelta,
   type SquadTemplateId,
 } from "../lib/training";
 
@@ -104,8 +105,8 @@ export function TrainingScreen({ save, onBack, onTrain, onSetPlans, onSetIntensi
       <h2>Training</h2>
       <p className="hint hint--tight">
         {preseason
-          ? "Each preseason week has three slots: two mixed sessions and a challenge match, or three mixed sessions. Intensity is for the whole panel."
-          : "One session before the next championship day. Intensity still applies."}
+          ? "Each preseason week has three slots: two mixed sessions and a challenge match, or three mixed sessions. Intensity is for the whole panel. Gains are small and can take a few sessions to show on the card. Work one area hard and others can drift."
+          : "One session before the next championship day. Intensity still applies. Numbers move slowly, and neglected areas can rust a little."}
       </p>
 
       <section className="card card--compact">
@@ -233,8 +234,8 @@ export function TrainingScreen({ save, onBack, onTrain, onSetPlans, onSetIntensi
                 const checked = names.has(player.name);
                 const last = save.trainingDeltas?.[player.name] ?? {};
                 const lastBits = Object.entries(last)
-                  .filter(([, value]) => value)
-                  .map(([key, value]) => `${ATTRIBUTE_LABELS[key as keyof typeof ATTRIBUTE_LABELS]} ${formatDelta(value ?? 0)}`);
+                  .filter(([, value]) => Math.round(value ?? 0) !== 0)
+                  .map(([key, value]) => `${ATTRIBUTE_LABELS[key as keyof typeof ATTRIBUTE_LABELS]} ${formatDelta(Math.round(value ?? 0))}`);
                 return (
                   <tr key={player.name} className={checked ? "is-selected" : ""}>
                     <td>
@@ -250,8 +251,8 @@ export function TrainingScreen({ save, onBack, onTrain, onSetPlans, onSetIntensi
                     <td>{plan.recovery ? "Recovery" : mixAbbrev(plan.mix)}</td>
                     <td>{fitnessOf(condition)}</td>
                     {TABLE_KEYS.map((key) => {
-                      const value = matchStat(player.ratings[key], condition, key);
-                      const delta = value - player.ratings[key];
+                      const value = trainedStat(player.ratings[key], condition, key);
+                      const delta = trainingDelta(condition, key);
                       return (
                         <td key={key}>
                           {value}

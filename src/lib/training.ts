@@ -38,7 +38,15 @@ export const PRESEASON_DATES = [
   "2026-07-17",
 ];
 
-export const MAX_STAT_BOOST = 4;
+export const MAX_STAT_BOOST = 2;
+export const MIN_STAT_BOOST = -1;
+const BOOST_PIVOT = 0.18;
+const MIX_LIFT = 0.18;
+const MIX_DECAY = 0.12;
+const VISIBLE_LIFT = 0.01;
+const TEAMWORK_STARTER = 0.06;
+const TEAMWORK_SAME_SLOT = 0.12;
+const TEAMWORK_BENCH = 0.04;
 
 export const TRAINING_TYPES: TrainingType[] = ["defensive", "attacking", "tactics", "physical", "setpieces"];
 
@@ -90,7 +98,7 @@ export const INTENSITY_OPTIONS: { value: TrainingIntensity; title: string; copy:
   {
     value: "intense",
     title: "Intense",
-    copy: "Faster lifts, heavier legs, and a real chance of picking up a knock in training.",
+    copy: "Faster lifts, heavier legs, and a real chance of picking up a knock in training. Neglected areas rust a little quicker.",
   },
 ];
 
@@ -318,8 +326,18 @@ export function clampCondition(value: number): number {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
 
+export function snapBoost(value: number): number {
+  return Math.round(value * 1000) / 1000;
+}
+
 export function clampBoost(value: number): number {
-  return Math.max(-2, Math.min(MAX_STAT_BOOST, Math.round(value)));
+  return snapBoost(Math.max(MIN_STAT_BOOST, Math.min(MAX_STAT_BOOST, value)));
+}
+
+export function mixLiftFactor(intensity: TrainingIntensity): number {
+  if (intensity === "light") return 0.7;
+  if (intensity === "intense") return 1.28;
+  return 1;
 }
 
 function cloneCondition(current: PlayerCondition): PlayerCondition {
@@ -378,10 +396,31 @@ export function matchStat(base: number, condition: PlayerCondition, key: Attribu
   return clampStat(base + boost + conditionAdjust(condition));
 }
 
+export function trainedStat(base: number, condition: PlayerCondition, key: AttributeKey): number {
+  return clampStat(base + (condition.boosts?.[key] ?? 0));
+}
+
+export function trainingDelta(condition: PlayerCondition, key: AttributeKey): number {
+  const value = Math.round(condition.boosts?.[key] ?? 0);
+  return value === 0 ? 0 : value;
+}
+
 export function matchRatings(player: RatedPlayer, condition: PlayerCondition): RatedPlayer["ratings"] {
   const ratings = {} as Record<AttributeKey, number>;
   for (const key of ATTRIBUTE_KEYS) {
     ratings[key] = matchStat(player.ratings[key], condition, key);
+  }
+  return {
+    ...player.ratings,
+    ...ratings,
+    overall: computeOverall(ratings, player.ratings.familiarity, player.position),
+  };
+}
+
+export function trainedRatings(player: RatedPlayer, condition: PlayerCondition): RatedPlayer["ratings"] {
+  const ratings = {} as Record<AttributeKey, number>;
+  for (const key of ATTRIBUTE_KEYS) {
+    ratings[key] = trainedStat(player.ratings[key], condition, key);
   }
   return {
     ...player.ratings,
@@ -400,9 +439,14 @@ export function boostTotal(condition: PlayerCondition): number {
   return Object.values(condition.boosts).reduce((sum, value) => sum + (value ?? 0), 0);
 }
 
+export function visibleBoostTotal(condition: PlayerCondition): number {
+  if (!condition.boosts) return 0;
+  return Object.values(condition.boosts).reduce((sum, value) => sum + Math.round(value ?? 0), 0);
+}
+
 export const TRAINING_OPTIONS = SESSION_OPTIONS;
 
-function liftBoosts(current: AttributeBoosts | undefined, keys: AttributeKey[], amount = 1): AttributeBoosts {
+function liftBoosts(current: AttributeBoosts | undefined, keys: AttributeKey[], amount: number): AttributeBoosts {
   const next: AttributeBoosts = { ...(current ?? {}) };
   for (const key of keys) {
     if (MENTAL_KEYS.includes(key)) continue;
@@ -415,24 +459,20 @@ function liftFromMix(
   current: AttributeBoosts | undefined,
   mix: TrainingMix,
   intensity: TrainingIntensity = "balanced",
+  train = 1,
 ): AttributeBoosts {
-  let next = current;
-  const minShare = intensity === "light" ? 28 : intensity === "intense" ? 8 : 10;
-  const twoShare = intensity === "light" ? 55 : intensity === "intense" ? 18 : 25;
-  const allShare = intensity === "light" ? 80 : intensity === "intense" ? 38 : 50;
+  if (mixTotal(mix) <= 0) return current ?? {};
+  const next: AttributeBoosts = { ...(current ?? {}) };
+  const mul = mixLiftFactor(intensity);
   for (const type of TRAINING_TYPES) {
-    const share = mix[type] ?? 0;
-    if (share < minShare) continue;
-    const keys = TRAINING_TYPE_KEYS[type];
-    if (share >= allShare) {
-      next = liftBoosts(next, keys);
-    } else if (share >= twoShare) {
-      next = liftBoosts(next, keys.slice(0, Math.min(2, keys.length)));
-    } else {
-      next = liftBoosts(next, keys.slice(0, 1));
+    const share = (mix[type] ?? 0) / 100;
+    const offset = share - BOOST_PIVOT;
+    const amount = offset >= 0 ? offset * MIX_LIFT * mul * train : offset * MIX_DECAY * mul;
+    for (const key of TRAINING_TYPE_KEYS[type]) {
+      next[key] = clampBoost((next[key] ?? 0) + amount);
     }
   }
-  return next ?? {};
+  return next;
 }
 
 function sessionLoad(mix: TrainingMix, alreadyHeavy: boolean): { fatigue: number; sharpness: number } {
@@ -467,10 +507,95 @@ function joinLabels(keys: AttributeKey[]): string {
 function boostDeltas(before: AttributeBoosts | undefined, after: AttributeBoosts | undefined): AttributeBoosts {
   const deltas: AttributeBoosts = {};
   for (const key of ATTRIBUTE_KEYS) {
-    const change = (after?.[key] ?? 0) - (before?.[key] ?? 0);
+    const change = snapBoost((after?.[key] ?? 0) - (before?.[key] ?? 0));
     if (change !== 0) deltas[key] = change;
   }
   return deltas;
+}
+
+export function visibleBoostDeltas(
+  before: AttributeBoosts | undefined,
+  after: AttributeBoosts | undefined,
+): AttributeBoosts {
+  const deltas: AttributeBoosts = {};
+  for (const key of ATTRIBUTE_KEYS) {
+    const change = Math.round(after?.[key] ?? 0) - Math.round(before?.[key] ?? 0);
+    if (change !== 0) deltas[key] = change;
+  }
+  return deltas;
+}
+
+export function mergeBoostMaps(
+  base: Record<string, AttributeBoosts>,
+  extra: Record<string, AttributeBoosts>,
+): Record<string, AttributeBoosts> {
+  const next: Record<string, AttributeBoosts> = { ...base };
+  for (const [name, boosts] of Object.entries(extra)) {
+    const merged: AttributeBoosts = { ...(next[name] ?? {}) };
+    for (const key of ATTRIBUTE_KEYS) {
+      const value = snapBoost((merged[key] ?? 0) + (boosts[key] ?? 0));
+      if (value !== 0) merged[key] = value;
+      else delete merged[key];
+    }
+    next[name] = merged;
+  }
+  return next;
+}
+
+function netNonMental(boosts: AttributeBoosts | undefined): number {
+  if (!boosts) return 0;
+  let sum = 0;
+  for (const key of ATTRIBUTE_KEYS) {
+    if (MENTAL_KEYS.includes(key)) continue;
+    sum += boosts[key] ?? 0;
+  }
+  return snapBoost(sum);
+}
+
+function joinNames(names: string[]): string {
+  if (names.length === 0) return "";
+  if (names.length === 1) return names[0] ?? "";
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  return `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+}
+
+export function weekCoachCopy(
+  squad: RatedPlayer[],
+  weekDeltas: Record<string, AttributeBoosts>,
+  label: string,
+): { title: string; body: string; tone: "positive" | "negative" | "neutral" } {
+  const ranked = squad
+    .map((player) => ({ name: player.name, net: netNonMental(weekDeltas[player.name]) }))
+    .sort((a, b) => b.net - a.net);
+  const standouts = ranked.filter((item) => item.net >= 0.08).slice(0, 3);
+  const poor = [...ranked].reverse().filter((item) => item.net <= -0.02).slice(0, 3);
+  const quiet = [...ranked]
+    .reverse()
+    .filter((item) => item.net > -0.02 && item.net < 0.05 && !standouts.some((star) => star.name === item.name))
+    .slice(0, 3);
+
+  const parts: string[] = [`${label} is in the book.`];
+  if (standouts.length > 0) {
+    parts.push(`${joinNames(standouts.map((item) => item.name))} trained particularly well.`);
+  }
+  if (poor.length > 0) {
+    parts.push(
+      `${joinNames(poor.map((item) => item.name))} did not take the work as well — neglected areas drifted.`,
+    );
+  } else if (quiet.length > 0 && standouts.length > 0) {
+    parts.push(`${joinNames(quiet.map((item) => item.name))} barely moved.`);
+  } else if (standouts.length === 0) {
+    parts.push("The panel was even enough; nobody stood out and nobody fell away much.");
+  }
+  parts.push("Small lifts stack over sessions even when the profile numbers have not ticked yet.");
+
+  const tone =
+    standouts.length > 0 && poor.length === 0
+      ? "positive"
+      : poor.length > 0 && standouts.length === 0
+        ? "negative"
+        : "neutral";
+  return { title: "Coach training report", body: parts.join(" "), tone };
 }
 
 export function applyTraining(
@@ -487,12 +612,14 @@ export function applyTraining(
   summary: string;
   lastSheet?: TeamSheet;
   deltas: Record<string, AttributeBoosts>;
+  visibleDeltas: Record<string, AttributeBoosts>;
 } {
   const next = { ...condition };
   const overtrained: string[] = [];
   const lifted = new Set<AttributeKey>();
   const used = new Set([...(sheet?.starters ?? []), ...(sheet?.subs ?? [])]);
   const deltas: Record<string, AttributeBoosts> = {};
+  const visibleDeltas: Record<string, AttributeBoosts> = {};
   const loadMul = intensityLoad(intensity).fatigue;
 
   for (const player of squad) {
@@ -524,9 +651,9 @@ export function applyTraining(
       const load = sessionLoad(plan.mix, alreadyHeavy);
       fatigue += load.fatigue * response.fatigue * loadMul;
       sharpness += load.sharpness * response.train;
-      boosts = liftFromMix(boosts, plan.mix, intensity);
+      boosts = liftFromMix(boosts, plan.mix, intensity, response.train);
       for (const key of ATTRIBUTE_KEYS) {
-        if ((boosts[key] ?? 0) > (before?.[key] ?? 0)) lifted.add(key);
+        if ((boosts[key] ?? 0) > (before?.[key] ?? 0) + VISIBLE_LIFT) lifted.add(key);
       }
     }
 
@@ -546,6 +673,8 @@ export function applyTraining(
     };
     const playerDelta = boostDeltas(before, boosts);
     if (Object.keys(playerDelta).length > 0) deltas[player.name] = playerDelta;
+    const playerVisible = visibleBoostDeltas(before, boosts);
+    if (Object.keys(playerVisible).length > 0) visibleDeltas[player.name] = playerVisible;
   }
 
   let lastSheet = sheet;
@@ -555,6 +684,10 @@ export function applyTraining(
       const extra = boostDeltas(next[name]?.boosts, teamworked.condition[name]?.boosts);
       if (Object.keys(extra).length > 0) {
         deltas[name] = { ...(deltas[name] ?? {}), ...extra };
+      }
+      const extraVisible = visibleBoostDeltas(next[name]?.boosts, teamworked.condition[name]?.boosts);
+      if (Object.keys(extraVisible).length > 0) {
+        visibleDeltas[name] = { ...(visibleDeltas[name] ?? {}), ...extraVisible };
       }
     }
     Object.assign(next, teamworked.condition);
@@ -576,7 +709,7 @@ export function applyTraining(
             ? `${label} session is in the book. ${liftedText.charAt(0).toUpperCase()}${liftedText.slice(1)} are up on the player profiles — open the squad to see the numbers move. Workrate and composure stay as they are.${intensityNote}`
             : `${label} session is in the book. Open the squad to see who took a lift. Workrate and composure stay as they are.${intensityNote}`;
 
-  return { condition: next, overtrained, summary, lastSheet, deltas };
+  return { condition: next, overtrained, summary, lastSheet, deltas, visibleDeltas };
 }
 
 export function applyWeekSession(options: {
@@ -594,6 +727,7 @@ export function applyWeekSession(options: {
   seed: number;
   weekKey: string;
   remainingWeeks: number;
+  weekDeltas?: Record<string, AttributeBoosts>;
 }): {
   condition: Record<string, PlayerCondition>;
   sheet: TeamSheet;
@@ -604,6 +738,8 @@ export function applyWeekSession(options: {
   recovered: string[];
   freshInjuries: RolledInjury[];
   deltas: Record<string, AttributeBoosts>;
+  visibleDeltas: Record<string, AttributeBoosts>;
+  weekDeltas: Record<string, AttributeBoosts>;
   weekComplete: boolean;
   session: WeekSession;
 } {
@@ -642,6 +778,8 @@ export function applyWeekSession(options: {
   const sheet = sitInjuredPlayers(options.sheet, options.squad, condition);
   const nextDone = options.sessionsDone + 1;
   const weekComplete = nextDone >= sessionsPerWeek(options.phase);
+  const priorWeek = options.sessionsDone === 0 ? {} : (options.weekDeltas ?? {});
+  const weekDeltas = mergeBoostMaps(priorWeek, trained.deltas);
   return {
     condition,
     sheet,
@@ -652,6 +790,8 @@ export function applyWeekSession(options: {
     recovered,
     freshInjuries,
     deltas: trained.deltas,
+    visibleDeltas: trained.visibleDeltas,
+    weekDeltas,
     weekComplete,
     session,
   };
@@ -674,12 +814,11 @@ export function applyTeamwork(
   };
 
   sheet.starters.forEach((name, index) => {
-    let amount = 1;
-    if (previous?.starters[index] === name) amount += 1;
+    const amount = previous?.starters[index] === name ? TEAMWORK_SAME_SLOT : TEAMWORK_STARTER;
     bump(name, amount);
   });
   for (const name of sheet.subs) {
-    bump(name, kind === "competitive" && returning.has(name) ? 1 : 0);
+    bump(name, kind === "competitive" && returning.has(name) ? TEAMWORK_BENCH : 0);
   }
   return { condition: next, lastSheet: { starters: [...sheet.starters], subs: [...sheet.subs] } };
 }

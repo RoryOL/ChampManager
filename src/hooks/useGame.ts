@@ -75,6 +75,7 @@ import {
   PRESEASON_DATES,
   PRESEASON_WEEKS,
   sessionsPerWeek,
+  weekCoachCopy,
 } from "../lib/training";
 import { ensureMatchBriefing } from "../lib/briefing";
 import {
@@ -900,6 +901,7 @@ export function useGame() {
         seed: save.seed,
         weekKey: `${save.phase}-${save.preseasonWeek}-${date}-${sessionsDone}`,
         remainingWeeks: remainingWeeks(save, championship, save.clubId),
+        weekDeltas: save.weekDeltas ?? {},
       });
       let next: GameSave = {
         ...save,
@@ -908,7 +910,8 @@ export function useGame() {
         trainingDue: result.trainingDue,
         lastSheet: result.lastSheet ?? save.lastSheet,
         sessionsDone: result.sessionsDone,
-        trainingDeltas: result.deltas,
+        trainingDeltas: result.visibleDeltas,
+        weekDeltas: result.weekComplete ? {} : result.weekDeltas,
       };
       const items: NewsItem[] = result.recovered.map((name) => recoveryNews({ name, date, seed: save.seed }));
       const total = sessionsPerWeek(save.phase);
@@ -943,6 +946,17 @@ export function useGame() {
               }),
             );
           }
+          const coach = weekCoachCopy(squad, result.weekDeltas, `Preseason week ${save.preseasonWeek}`);
+          items.push(
+            newsItem({
+              id: `${save.seed}-coach-${save.preseasonWeek}`,
+              kind: "briefing",
+              date: week > PRESEASON_WEEKS ? "2026-07-23" : date,
+              title: coach.title,
+              body: coach.body,
+              tone: coach.tone,
+            }),
+          );
         } else {
           items.push(
             newsItem({
@@ -962,6 +976,17 @@ export function useGame() {
             date,
             title: "Midweek session",
             body: result.summary,
+          }),
+        );
+        const coach = weekCoachCopy(squad, result.weekDeltas, "Midweek");
+        items.push(
+          newsItem({
+            id: `${save.seed}-coach-midweek-${date}`,
+            kind: "briefing",
+            date,
+            title: coach.title,
+            body: coach.body,
+            tone: coach.tone,
           }),
         );
       }

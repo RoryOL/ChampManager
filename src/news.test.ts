@@ -204,7 +204,7 @@ describe("save news migration", () => {
       matches: [],
       inbox: [{ id: "old", title: "Welcome to Ballyea", body: "Preseason is underway.", date: "2026-06-12" }],
     });
-    expect(migrated?.version).toBe(7);
+    expect(migrated?.version).toBe(8);
     expect(migrated?.ambition).toBe(ambitionFor("ballyea").target);
     expect(migrated?.inbox[0]?.kind).toBe("training");
     expect(newSave("ballyea").ambition).toBe(ambitionFor("ballyea").target);
