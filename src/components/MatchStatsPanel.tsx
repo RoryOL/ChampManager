@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { PlayerCondition, PlayerMatchStats, RatedPlayer, TeamMatchStats } from "../types";
+import type { PlayerCondition, PlayerMatchStats, RatedPlayer, TeamMatchStats, TeamSheet } from "../types";
 import { formatPair } from "../lib/matchStats";
 import { PlayerMatchTable } from "./PlayerMatchTable";
 
@@ -15,6 +15,8 @@ type Props = {
   awaySquad: RatedPlayer[];
   homeCondition?: Record<string, PlayerCondition>;
   awayCondition?: Record<string, PlayerCondition>;
+  homeSheet?: TeamSheet;
+  awaySheet?: TeamSheet;
   compact?: boolean;
 };
 
@@ -48,6 +50,8 @@ export function MatchStatsPanel({
   awaySquad,
   homeCondition,
   awayCondition,
+  homeSheet,
+  awaySheet,
   compact = false,
 }: Props) {
   const [team, setTeam] = useState<"home" | "away">("home");
@@ -88,7 +92,7 @@ export function MatchStatsPanel({
           />
           <TeamRow label="Ground km" home={homeStats.groundCovered} away={awayStats.groundCovered} />
           <TeamRow label="Fitness" home={homeStats.fitness} away={awayStats.fitness} />
-          <TeamRow label="Overall" home={homeStats.overall} away={awayStats.overall} />
+          {compact ? null : <TeamRow label="Overall" home={homeStats.overall} away={awayStats.overall} />}
         </tbody>
       </table>
       <div className="speed-row pane-row">
@@ -103,9 +107,15 @@ export function MatchStatsPanel({
         teamName={team === "home" ? homeName : awayName}
         squad={team === "home" ? homeSquad : awaySquad}
         stats={team === "home" ? homePlayers : awayPlayers}
+        sheet={team === "home" ? homeSheet : awaySheet}
         condition={team === "home" ? homeCondition : awayCondition}
+        showAttributes={!compact}
       />
-      {compact ? null : <p className="hint hint--tight">Swipe the table sideways for every rating and match stat.</p>}
+      {compact ? (
+        <p className="hint hint--tight">Listed in match position order. Shirt numbers are 1–15 and 16+ on the bench.</p>
+      ) : (
+        <p className="hint hint--tight">Swipe the table sideways for every rating and match stat.</p>
+      )}
     </div>
   );
 }

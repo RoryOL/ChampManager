@@ -1031,6 +1031,7 @@ export function useGame() {
     setTactics,
     setPlans,
     tapPlayer,
+    swapPlayers,
     setPicked,
     goToMatch,
     skipMatch,

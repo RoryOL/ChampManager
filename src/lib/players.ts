@@ -328,6 +328,30 @@ export function sheetPlayers(teamId: string, sheet: TeamSheet): RatedPlayer[] {
     .filter((player): player is RatedPlayer => Boolean(player));
 }
 
+/** Championship shirt for this match: 1–15 in position order, 16+ on the bench. */
+export function matchShirtNumber(sheet: TeamSheet, name: string): number | undefined {
+  const start = sheet.starters.indexOf(name);
+  if (start >= 0) return start + 1;
+  const bench = sheet.subs.indexOf(name);
+  if (bench >= 0) return 16 + bench;
+  return undefined;
+}
+
+export function matchOrderIndex(sheet: TeamSheet, name: string): number {
+  const start = sheet.starters.indexOf(name);
+  if (start >= 0) return start;
+  const bench = sheet.subs.indexOf(name);
+  if (bench >= 0) return 15 + bench;
+  return 1000;
+}
+
+export function matchSlot(sheet: TeamSheet, name: string): PositionLine | "SUB" | undefined {
+  const start = sheet.starters.indexOf(name);
+  if (start >= 0) return XV_SLOTS[start] ?? "MF";
+  if (sheet.subs.includes(name)) return "SUB";
+  return undefined;
+}
+
 export function swapPlayersInSheet(sheet: TeamSheet, first: string, second: string): TeamSheet {
   const starters = [...sheet.starters];
   const subs = [...sheet.subs];

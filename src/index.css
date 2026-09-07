@@ -632,6 +632,23 @@ html.native-app .device {
   margin-top: 8px;
 }
 
+.swap-bar {
+  margin: 0 0 10px;
+}
+
+.swap-bar .row-actions {
+  margin-top: 4px;
+}
+
+.swap-bar .btn:disabled {
+  opacity: 0.45;
+}
+
+.player-list em {
+  white-space: normal;
+  line-height: 1.35;
+}
+
 .warn {
   color: #f0a3a3;
   font-size: 13px;

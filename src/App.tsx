@@ -139,7 +139,9 @@ export default function App() {
               onSetPlan={(name, plan) => game.setPlans({ ...game.save!.plans, [name]: plan })}
             />
           )}
-          {page === "tactics" && <TacticsScreen save={game.save} onChange={game.setTactics} />}
+          {page === "tactics" && (
+            <TacticsScreen save={game.save} onChange={game.setTactics} onSwap={game.swapPlayers} />
+          )}
           {page === "fixtures" && selectedMatch && game.save ? (
             <MatchDetailScreen
               championship={game.championship}
