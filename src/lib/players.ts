@@ -13,9 +13,13 @@ import { profileFor } from "../data/playerProfiles";
 import {
   ADJACENT_LINES,
   ATTRIBUTE_KEYS,
+  OVERALL_WEIGHT_MIN,
   POSITION_LINES,
   XV_SLOTS,
   clampDial,
+  compressHighEnd,
+  isRoleAttribute,
+  positionWeight,
   type AttributeKey,
 } from "./attributes";
 import { latestLineup, squadFor } from "./squads";
@@ -104,7 +108,11 @@ function hash(text: string): number {
 
 function stat(seed: number, min: number, max: number): number {
   const span = max - min + 1;
-  return min + (seed % span);
+  return min + ((seed >>> 0) % span);
+}
+
+function shifted(seed: number, shift: number): number {
+  return seed >>> shift;
 }
 
 export function clampStat(value: number): number {
@@ -115,98 +123,82 @@ export function positionForIndex(index: number): PositionLine {
   return XV_SLOTS[index] ?? XV_SLOTS[index % XV_SLOTS.length] ?? "MF";
 }
 
-function lineBias(line: PositionLine, key: AttributeKey): number {
-  const table: Record<PositionLine, Partial<Record<AttributeKey, number>>> = {
-    GK: {
-      puckoutReach: 4,
-      highFielding: 2,
-      aerialReach: 2,
-      composure: 2,
-      teamwork: 1,
-      speed: -2,
-      offTheBall: -3,
-      frees: -4,
-      sidelines: -3,
-    },
-    FB: {
-      strength: 3,
-      manMarking: 3,
-      aerialReach: 2,
-      hooking: 2,
-      teamwork: 1,
-      speed: -1,
-      frees: -3,
-      strikingDistance: -2,
-    },
-    HB: {
-      stamina: 2,
-      passing: 2,
-      aerialReach: 1,
-      highFielding: 1,
-      strikingDistance: 1,
-      shooting: 1,
-      sidelines: 1,
-      teamwork: 1,
-      manMarking: 1,
-    },
-    MF: {
-      stamina: 3,
-      workrate: 2,
-      teamwork: 2,
-      highFielding: 2,
-      speed: 1,
-      passing: 1,
-      strikingDistance: 1,
-    },
-    HF: {
-      firstTouch: 2,
-      vision: 2,
-      passing: 2,
-      strikingDistance: 2,
-      shooting: 2,
-      offTheBall: 1,
-      teamwork: 1,
-      frees: 1,
-      sidelines: 1,
-    },
-    FF: {
-      offTheBall: 3,
-      composure: 2,
-      strikingDistance: 2,
-      shooting: 3,
-      frees: 2,
-      firstTouch: 1,
-      manMarking: -2,
-      puckoutReach: -3,
-    },
-  };
-  return table[line][key] ?? 0;
+const STAT_FLOOR = 5;
+
+function spreadFor(grade: PlayerGrade, weight: number): number {
+  if (grade === "D") return weight < 0.4 ? 4 : 3;
+  if (grade === "A") return weight >= 0.7 ? 2 : 3;
+  return 3;
 }
 
 function rollStat(
   seed: number,
   shift: number,
-  base: number,
+  target: number,
   line: PositionLine,
   key: AttributeKey,
-  floor: number,
-  spread: number,
+  grade: PlayerGrade,
 ): number {
-  const wobble = stat(seed >> shift, -spread, spread);
-  const raw = base + lineBias(line, key) + wobble;
-  const lifted = floor > 0 ? Math.max(raw, floor - 8) : raw;
-  return clampStat(lifted);
+  const weight = positionWeight(line, key);
+  const wobble = stat(shifted(seed, shift), -spreadFor(grade, weight), spreadFor(grade, weight));
+  const raw = Math.max(5, STAT_FLOOR + (target - STAT_FLOOR) * weight + wobble);
+  const shaped = compressHighEnd(raw);
+  if (grade === "A" && weight >= 0.75) {
+    return Math.max(shaped, target - 5);
+  }
+  return shaped;
+}
+
+function rareTwenty(seed: number, shift: number): boolean {
+  return stat(shifted(seed, shift), 0, 31) === 0;
+}
+
+function finalizeStat(value: number, seed: number, shift: number, cap = 19): number {
+  const rounded = Math.round(value);
+  if (rounded >= 20 && cap >= 20) return rareTwenty(seed, shift) ? 20 : 19;
+  return clampStat(Math.min(cap, rounded));
+}
+
+function roleKeys(line: PositionLine): AttributeKey[] {
+  return ATTRIBUTE_KEYS.filter((key) => isRoleAttribute(line, key));
+}
+
+function alignRoleStats(
+  ratings: Record<AttributeKey, number>,
+  familiarity: PositionFamiliarity,
+  position: PositionLine,
+  target: number,
+  seed: number,
+): void {
+  const keys = roleKeys(position);
+  if (keys.length === 0) return;
+  for (let step = 0; step < 40; step += 1) {
+    const overall = computeOverall(ratings, familiarity, position);
+    if (overall === target) return;
+    if (overall < target) {
+      const cap = overall >= 18 && target >= 19 ? 19 : 18;
+      const ordered = [...keys].filter((key) => ratings[key] < cap).sort((a, b) => ratings[a] - ratings[b]);
+      const key = ordered[0];
+      if (!key) return;
+      ratings[key] = finalizeStat(ratings[key] + 1, seed, 11 + step, cap);
+    } else {
+      const ordered = [...keys].filter((key) => ratings[key] > 8).sort((a, b) => ratings[b] - ratings[a]);
+      const key = ordered[0];
+      if (!key) return;
+      ratings[key] = clampStat(ratings[key] - 1);
+    }
+  }
 }
 
 function familiarityFor(seed: number, natural: PositionLine, floor: number): PositionFamiliarity {
   const result = {} as PositionFamiliarity;
   for (const line of POSITION_LINES) {
     if (line === natural) {
-      result[line] = clampStat(Math.max(16, floor - 1, 14 + stat(seed >> 2, 0, 4)));
+      result[line] = clampStat(Math.max(16, floor - 1, 14 + stat(shifted(seed, 2), 0, 4)));
     } else if (ADJACENT_LINES[natural].includes(line)) {
-      result[line] = clampStat(11 + stat(seed >> (4 + POSITION_LINES.indexOf(line)), 0, 4));
+      result[line] = clampStat(11 + stat(shifted(seed, 4 + POSITION_LINES.indexOf(line)), 0, 4));
     } else {
-      result[line] = clampStat(5 + stat(seed >> (8 + POSITION_LINES.indexOf(line)), 0, 5));
+      result[line] = clampStat(5 + stat(shifted(seed, 8 + POSITION_LINES.indexOf(line)), 0, 5));
     }
   }
   return result;
@@ -220,41 +212,42 @@ export function ratePlayer(teamId: string, name: string, index: number, gameSeed
   const position = profile.position ?? positionForIndex(index);
   const target = stat(seed, profile.overallMin, profile.overallMax);
   const floor = profile.grade === "A" ? profile.overallMin : 0;
-  const base = target;
-  const spread = profile.grade === "D" ? 6 : profile.grade === "A" ? 3 : 4;
   const keys: AttributeKey[] = ATTRIBUTE_KEYS;
   const ratings = {} as Record<AttributeKey, number>;
   keys.forEach((key, i) => {
-    ratings[key] = rollStat(seed, 3 + i * 2, base, position, key, floor, spread);
+    ratings[key] = finalizeStat(rollStat(seed, 3 + i * 2, target, position, key, profile.grade), seed, 5 + i, 18);
   });
-  const spikeKey = keys[stat(seed >> 21, 0, keys.length - 1)] ?? "speed";
+  const primary = roleKeys(position);
+  const spikePool = profile.grade === "D" || profile.grade === "C" || primary.length === 0 ? keys : primary;
+  const spikeKey = spikePool[stat(shifted(seed, 21), 0, spikePool.length - 1)] ?? "speed";
   const spike =
-    profile.grade === "A" ? stat(seed >> 23, 1, 3) : profile.grade === "D" ? stat(seed >> 23, 4, 9) : stat(seed >> 23, 2, 5);
-  ratings[spikeKey] = clampStat(ratings[spikeKey] + spike);
-  const dumpKey = keys[stat(seed >> 25, 0, keys.length - 1)] ?? "puckoutReach";
+    profile.grade === "A"
+      ? stat(shifted(seed, 23), 1, 2)
+      : profile.grade === "D"
+        ? stat(shifted(seed, 23), 5, 8)
+        : stat(shifted(seed, 23), 2, 4);
+  const spikeCap = profile.grade === "A" && target >= 18 ? 19 : 18;
+  ratings[spikeKey] = finalizeStat(Math.max(ratings[spikeKey], target) + spike, seed, 29, spikeCap);
+  const dumpPool = keys.filter((key) => positionWeight(position, key) < 0.4);
+  const dumpSource = dumpPool.length > 0 ? dumpPool : keys;
+  const dumpKey = dumpSource[stat(shifted(seed, 25), 0, dumpSource.length - 1)] ?? "puckoutReach";
   if (dumpKey !== spikeKey && profile.grade === "D") {
-    ratings[dumpKey] = clampStat(ratings[dumpKey] - stat(seed >> 27, 2, 6));
+    ratings[dumpKey] = clampStat(Math.max(5, ratings[dumpKey] - stat(shifted(seed, 27), 1, 3)));
   }
   const familiarity = familiarityFor(seed, position, floor);
-  let overall = computeOverall(ratings, familiarity, position);
-  if (overall < profile.overallMin || overall > profile.overallMax) {
-    const delta = target - overall;
-    for (const key of keys) {
-      ratings[key] = clampStat(ratings[key] + delta);
-    }
-    overall = computeOverall(ratings, familiarity, position);
-  }
+  alignRoleStats(ratings, familiarity, position, target, seed);
   const bias = STAR_BIAS[name];
   if (bias) {
     for (const [key, value] of Object.entries(bias) as [AttributeKey, number][]) {
-      ratings[key] = clampStat(Math.max(ratings[key], value));
+      const lifted = Math.max(ratings[key], value);
+      ratings[key] = value >= 19 && rareTwenty(seed, 31) ? 20 : finalizeStat(lifted, seed, 31, 19);
     }
   }
-  overall = Math.max(profile.overallMin, Math.min(profile.overallMax, computeOverall(ratings, familiarity, position)));
+  const overall = computeOverall(ratings, familiarity, position);
   return {
     ...ratings,
     familiarity,
-    overall,
+    overall: Math.max(profile.overallMin, Math.min(profile.overallMax, overall)),
   };
 }
 
@@ -271,26 +264,17 @@ export function computeOverall(
   familiarity: PositionFamiliarity,
   position: PositionLine,
 ): number {
-  return clampStat(
-    Math.round(
-      (ratings.speed +
-        ratings.aerialReach +
-        ratings.stamina +
-        ratings.firstTouch +
-        ratings.highFielding +
-        ratings.strikingDistance +
-        ratings.shooting +
-        ratings.vision +
-        ratings.passing +
-        ratings.offTheBall +
-        ratings.workrate +
-        ratings.composure +
-        ratings.teamwork +
-        ratings.frees * 1.15 +
-        familiarity[position]) /
-        15,
-    ),
-  );
+  let weighted = 0;
+  let total = 0;
+  for (const key of ATTRIBUTE_KEYS) {
+    const weight = positionWeight(position, key);
+    if (weight < OVERALL_WEIGHT_MIN) continue;
+    weighted += ratings[key] * weight;
+    total += weight;
+  }
+  weighted += familiarity[position] * 0.65;
+  total += 0.65;
+  return clampStat(Math.round(weighted / Math.max(total, 1)));
 }
 
 export function ratedSquad(teamId: string, gameSeed?: number): RatedPlayer[] {

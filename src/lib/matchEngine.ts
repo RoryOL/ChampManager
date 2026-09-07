@@ -652,7 +652,7 @@ export function simulateMatch(options: {
           kind: "puckout",
           text: `Short puck-out turned over on ${halfBack}.`,
           credits: mergeCredits([
-            { name: halfBack, teamId, passesAttempted: 1 },
+            { name: halfBack, teamId, passesAttempted: 1, possessions: 1 },
             {
               name: thief,
               teamId: defendingId,

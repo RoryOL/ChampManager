@@ -111,11 +111,11 @@ function PlayerDetail({
             </p>
           ) : (
             <p className="hint hint--tight">
-              Training can lift these numbers a little (up to +2). Work one area hard and neglected stats can drift a
-              little. Small lifts stack even when the card still shows the same integer. Younger players take the work
-              better and get match fitness back quicker; veterans feel the legs longer. Green is the change from their
-              natural rating. Workrate, composure and ability under pressure do not change in training. Teamwork rises
-              when the same lads play together.
+              Training can lift these numbers a little (up to +2), and the work slows once a rating is already high.
+              Work one area hard and neglected stats can drift a little. Small lifts stack even when the card still
+              shows the same integer. Younger players take the work better and get match fitness back quicker; veterans
+              feel the legs longer. Green is the change from their natural rating. Workrate, composure and ability under
+              pressure do not change in training. Teamwork rises when the same lads play together.
             </p>
           )}
         </div>

@@ -25,7 +25,7 @@ import { clubTactics, DEFAULT_TACTICS, defaultSheet, matchOrderIndex, matchShirt
 import { nextBatch } from "./lib/schedule";
 import { matchPlayed } from "./lib/scoring";
 import { ATTRIBUTE_KEYS } from "./lib/attributes";
-import { applyMatchFatigue, applyTeamwork, applyTraining, applyWeekSession, averageMatchOverall, boostTotal, defaultCondition, fitnessOf, isOvertrained, matchStat, trainedStat, trainingDelta, weekCoachCopy } from "./lib/training";
+import { applyMatchFatigue, applyTeamwork, applyTraining, applyWeekSession, averageMatchOverall, boostTotal, defaultCondition, fitnessOf, isOvertrained, matchStat, trainedStat, trainingDelta, trainingGainFactor, weekCoachCopy } from "./lib/training";
 import { buildPreMatchBriefing } from "./lib/briefing";
 import type { Tactics } from "./types";
 import { nextSwapPick } from "./components/SwapConfirmBar";
@@ -145,6 +145,60 @@ describe("player ratings", () => {
     expect(hassettB.overall).toBeGreaterThanOrEqual(10);
     expect(hassettB.overall).toBeLessThanOrEqual(15);
     expect(ATTRIBUTE_KEYS.some((key) => hassettA[key] !== hassettB[key])).toBe(true);
+  });
+
+  it("gives elite forwards high attacking, physical and mental stats, not defensive ones", () => {
+    const odonnell = ratedSquad("eire-og").find((player) => player.name === "Shane O'Donnell");
+    expect(odonnell).toBeTruthy();
+    expect(odonnell!.position).toBe("FF");
+    expect(odonnell!.ratings.shooting).toBeGreaterThanOrEqual(16);
+    expect(odonnell!.ratings.firstTouch).toBeGreaterThanOrEqual(16);
+    expect(odonnell!.ratings.speed).toBeGreaterThanOrEqual(16);
+    expect(odonnell!.ratings.composure).toBeGreaterThanOrEqual(15);
+    expect(odonnell!.ratings.hooking).toBeLessThan(odonnell!.ratings.shooting - 3);
+    expect(odonnell!.ratings.manMarking).toBeLessThan(14);
+    expect(odonnell!.ratings.puckoutReach).toBeLessThan(12);
+    expect(odonnell!.ratings.manMarking).toBeLessThan(odonnell!.ratings.shooting);
+  });
+
+  it("keeps high-rated defenders from carrying elite finishing numbers", () => {
+    const hogan = ratedSquad("feakle").find((player) => player.name === "Adam Hogan");
+    const hayes = ratedSquad("wolfe-tones").find((player) => player.name === "Rory Hayes");
+    expect(hogan?.position).toBe("FB");
+    expect(hayes?.position).toBe("FB");
+    expect(hogan!.ratings.manMarking).toBeGreaterThanOrEqual(15);
+    expect(hogan!.ratings.hooking).toBeGreaterThanOrEqual(14);
+    expect(hogan!.ratings.strength).toBeGreaterThanOrEqual(13);
+    expect(hogan!.ratings.shooting).toBeLessThan(hogan!.ratings.manMarking - 2);
+    expect(hogan!.ratings.offTheBall).toBeLessThan(14);
+    expect(hayes!.ratings.shooting).toBeLessThan(hayes!.ratings.manMarking);
+    expect(hayes!.ratings.puckoutReach).toBeLessThan(13);
+  });
+
+  it("makes 20s rare and ratings above 18 harder than the mid-range", () => {
+    const panel = seedChampionship.teams.flatMap((team) => ratedSquad(team.id));
+    const values = panel.flatMap((player) => ATTRIBUTE_KEYS.map((key) => player.ratings[key]));
+    const count = (n: number) => values.filter((value) => value === n).length;
+    expect(values.every((value) => value >= 5 && value <= 20)).toBe(true);
+    expect(count(20) / values.length).toBeLessThan(0.015);
+    expect(count(20)).toBeLessThan(count(19));
+    expect(count(19)).toBeLessThan(count(18));
+    expect(count(18)).toBeLessThan(count(11) + count(12) + count(13));
+    expect(panel.some((player) => ATTRIBUTE_KEYS.some((key) => player.ratings[key] === 19))).toBe(true);
+
+    const forwards = panel.filter((player) => player.position === "FF" && player.ratings.overall >= 16);
+    expect(forwards.length).toBeGreaterThan(0);
+    for (const player of forwards) {
+      expect(player.ratings.shooting).toBeGreaterThan(player.ratings.manMarking);
+      expect(player.ratings.firstTouch).toBeGreaterThan(player.ratings.puckoutReach);
+      expect(player.ratings.hooking).toBeLessThanOrEqual(player.ratings.overall - 2);
+    }
+    const backs = panel.filter((player) => player.position === "FB" && player.ratings.overall >= 15);
+    expect(backs.length).toBeGreaterThan(0);
+    for (const player of backs) {
+      expect(player.ratings.manMarking).toBeGreaterThan(player.ratings.shooting);
+      expect(player.ratings.hooking).toBeGreaterThan(player.ratings.offTheBall);
+    }
   });
 
   it("marks Clare underage history and natural lines from 2025/2026 panels", () => {
@@ -558,8 +612,15 @@ describe("match engine", () => {
         climate: { sky: "sunny", windStrength: 8, windAngle: 12 },
         seed,
       });
+      const left = result.events.find(
+        (event) =>
+          event.teamId === "ballyea" &&
+          event.playerName === taker &&
+          (event.kind === "red" || event.kind === "injury"),
+      )?.minute;
       for (const event of result.events) {
         if (event.teamId !== "ballyea") continue;
+        if (left != null && event.minute >= left) continue;
         if (event.kind === "point" || event.kind === "goal") {
           openPlay += 1;
           if (event.playerName === taker) openPlayByTaker += 1;
@@ -749,6 +810,13 @@ describe("training", () => {
     mix: { defensive: 0, attacking: 0, tactics: 100, physical: 0, setpieces: 0 },
     recovery: false,
   };
+
+  it("makes training above 18 slower than a mid-range lift", () => {
+    expect(trainingGainFactor(11)).toBe(1);
+    expect(trainingGainFactor(18)).toBeLessThan(0.5);
+    expect(trainingGainFactor(19)).toBeLessThan(trainingGainFactor(18));
+    expect(trainingGainFactor(19)).toBeLessThan(trainingGainFactor(10));
+  });
 
   it("raises sharpness and fatigue, and flags overtraining", () => {
     const squad = ratedSquad("ballyea").slice(0, 3);
