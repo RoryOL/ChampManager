@@ -43,12 +43,26 @@ function startedCampaign() {
   return started.campaign;
 }
 
+function trainFullWeek(
+  campaign: ReturnType<typeof startedCampaign>,
+  clubId: string,
+  session: "mixed" | "challenge" | "recovery" | "fitness" | "skills" | "setpieces",
+  now: number,
+) {
+  let next = campaign;
+  const sessions = next.phase === "preseason" ? 3 : 1;
+  for (let index = 0; index < sessions; index += 1) {
+    next = trainClub(next, clubId, session, now + index);
+  }
+  return next;
+}
+
 function throughPreseason(campaign = startedCampaign()) {
   let next = campaign;
   for (let week = 1; week <= PRESEASON_WEEKS; week += 1) {
-    next = trainClub(next, "ballyea", "skills", NOW + week);
+    next = trainFullWeek(next, "ballyea", "skills", NOW + week * 10);
     expect(next.preseasonWeek).toBe(week);
-    next = trainClub(next, "inagh-kilnamona", "fitness", NOW + week + 1);
+    next = trainFullWeek(next, "inagh-kilnamona", "fitness", NOW + week * 10 + 3);
   }
   expect(next.phase).toBe("season");
   return next;
@@ -71,12 +85,16 @@ describe("multiplayer campaign", () => {
     expect(tooSoon.ok).toBe(false);
   });
 
-  it("holds preseason until every manager trains that week", () => {
+  it("holds preseason until every manager finishes that week's sessions", () => {
     let campaign = startedCampaign();
     campaign = trainClub(campaign, "ballyea", "skills", NOW + 10);
     expect(campaign.preseasonWeek).toBe(1);
+    expect(campaign.clubs.ballyea.sessionsDone).toBe(1);
+    expect(waitingOnWeek(campaign).map((seat) => seat.clubId).sort()).toEqual(["ballyea", "inagh-kilnamona"]);
+    campaign = trainFullWeek(campaign, "ballyea", "skills", NOW + 11);
+    expect(campaign.preseasonWeek).toBe(1);
     expect(waitingOnWeek(campaign).map((seat) => seat.clubId)).toEqual(["inagh-kilnamona"]);
-    campaign = trainClub(campaign, "inagh-kilnamona", "recovery", NOW + 11);
+    campaign = trainFullWeek(campaign, "inagh-kilnamona", "recovery", NOW + 20);
     expect(campaign.preseasonWeek).toBe(2);
     expect(waitingOnWeek(campaign).map((seat) => seat.clubId).sort()).toEqual(["ballyea", "inagh-kilnamona"]);
   });

@@ -38,7 +38,8 @@ function clubProgress(club: ClubRuntime): number {
     fatigue += row.fatigue ?? 0;
     injured += row.injury?.weeksLeft ?? 0;
   }
-  return (club.trainingDue ? 0 : 80) + club.inbox.length * 3 + injured + fatigue / 40;
+  const sessions = club.sessionsDone ?? 0;
+  return (club.trainingDue ? sessions * 22 : 80) + club.inbox.length * 3 + injured + fatigue / 40;
 }
 
 function mergeClub(left?: ClubRuntime, right?: ClubRuntime, leftRev = 0, rightRev = 0): ClubRuntime | undefined {
@@ -54,6 +55,10 @@ function mergeClub(left?: ClubRuntime, right?: ClubRuntime, leftRev = 0, rightRe
     trainingDue: left.trainingDue && right.trainingDue,
     plans: ahead.plans ?? behind.plans ?? {},
     lastSheet: ahead.lastSheet ?? behind.lastSheet,
+    intensity: ahead.intensity ?? behind.intensity,
+    weekShape: ahead.weekShape ?? behind.weekShape,
+    sessionsDone: ahead.sessionsDone ?? behind.sessionsDone ?? 0,
+    trainingDeltas: Object.keys(ahead.trainingDeltas ?? {}).length > 0 ? ahead.trainingDeltas : behind.trainingDeltas,
   };
 }
 

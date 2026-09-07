@@ -22,7 +22,7 @@ import { clubTactics, DEFAULT_TACTICS, defaultSheet, matchOrderIndex, matchShirt
 import { nextBatch } from "./lib/schedule";
 import { matchPlayed } from "./lib/scoring";
 import { ATTRIBUTE_KEYS } from "./lib/attributes";
-import { applyMatchFatigue, applyTeamwork, applyTraining, averageMatchOverall, defaultCondition, fitnessOf, isOvertrained, matchRatings, matchStat } from "./lib/training";
+import { applyMatchFatigue, applyTeamwork, applyTraining, applyWeekSession, averageMatchOverall, defaultCondition, fitnessOf, isOvertrained, matchRatings, matchStat } from "./lib/training";
 import { buildPreMatchBriefing } from "./lib/briefing";
 import type { Tactics } from "./types";
 import { nextSwapPick } from "./components/SwapConfirmBar";
@@ -679,6 +679,64 @@ describe("training", () => {
     const shuffled = applyTeamwork(first.condition, moved, first.lastSheet, "competitive");
     expect(shuffled.condition[name]?.boosts?.teamwork).toBe(2);
   });
+
+  it("tires the panel more on intense work than on light work, and lifts more keys", () => {
+    const squad = ratedSquad("ballyea").slice(0, 4);
+    const player = squad[0]!;
+    const start = Object.fromEntries(squad.map((item) => [item.name, defaultCondition()]));
+    const plans = Object.fromEntries(squad.map((item) => [item.name, physicalPlan]));
+    const light = applyTraining(squad, start, "mixed", plans, undefined, undefined, "light");
+    const intense = applyTraining(squad, start, "mixed", plans, undefined, undefined, "intense");
+    expect(intense.condition[player.name]?.fatigue ?? 0).toBeGreaterThan(light.condition[player.name]?.fatigue ?? 0);
+    const lightLifts = Object.keys(light.deltas[player.name] ?? {}).length;
+    const intenseLifts = Object.keys(intense.deltas[player.name] ?? {}).length;
+    expect(intenseLifts).toBeGreaterThanOrEqual(lightLifts);
+  });
+
+  it("runs three preseason sessions before the week turns, and only ticks injuries on the first", () => {
+    const squad = ratedSquad("ballyea");
+    const sheet = defaultSheet("ballyea");
+    const name = sheet.starters[0]!;
+    let condition = Object.fromEntries(squad.map((player) => [player.name, defaultCondition()]));
+    condition = {
+      ...condition,
+      [name]: {
+        ...defaultCondition(),
+        injury: { weeksLeft: 2, durationWeeks: 2, ailment: "hamstring", source: "match" },
+      },
+    };
+    const run = (sessionsDone: number, current = condition) =>
+      applyWeekSession({
+        squad,
+        condition: current,
+        sheet,
+        plans: {},
+        phase: "preseason",
+        preseasonWeek: 1,
+        sessionsDone,
+        intensity: "balanced",
+        weekShape: "challenge",
+        seed: 1,
+        weekKey: `preseason-1-${sessionsDone}`,
+        remainingWeeks: 12,
+      });
+    const first = run(0);
+    expect(first.sessionsDone).toBe(1);
+    expect(first.weekComplete).toBe(false);
+    expect(first.trainingDue).toBe(true);
+    expect(first.condition[name]?.injury?.weeksLeft).toBe(1);
+    expect(first.session).toBe("mixed");
+    const second = run(1, first.condition);
+    expect(second.sessionsDone).toBe(2);
+    expect(second.condition[name]?.injury?.weeksLeft).toBe(1);
+    expect(second.session).toBe("mixed");
+    const third = run(2, second.condition);
+    expect(third.weekComplete).toBe(true);
+    expect(third.sessionsDone).toBe(0);
+    expect(third.trainingDue).toBe(false);
+    expect(third.session).toBe("challenge");
+    expect(third.condition[name]?.injury?.weeksLeft).toBe(1);
+  });
 });
 
 describe("save migration", () => {
@@ -692,7 +750,7 @@ describe("save migration", () => {
       matches: [],
       inbox: [],
     });
-    expect(migrated?.version).toBe(6);
+    expect(migrated?.version).toBe(7);
     expect(migrated?.reports).toEqual({});
     expect(migrated?.tactics.mentality).toBe("attacking");
     expect(migrated?.tactics.build).toBeGreaterThan(60);
@@ -702,6 +760,9 @@ describe("save migration", () => {
     expect(migrated?.tactics.shooting).toBe(50);
     expect(migrated?.plans).toEqual({});
     expect(migrated?.phase).toBe("season");
+    expect(migrated?.intensity).toBe("balanced");
+    expect(migrated?.weekShape).toBe("challenge");
+    expect(migrated?.sessionsDone).toBe(0);
   });
 });
 

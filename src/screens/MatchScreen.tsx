@@ -119,7 +119,7 @@ export function MatchScreen({
     if (kind === "red") return "is-card is-red";
     if (kind === "booking") return "is-card is-yellow";
     if (kind === "coach" || kind === "half") return "is-coach";
-    if (kind === "injury") return "is-injury";
+    if (kind === "injury" || kind === "sub") return "is-injury";
     return "is-play";
   };
 

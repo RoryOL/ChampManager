@@ -993,6 +993,76 @@ html.native-app .device {
   color: #3b4a5c;
 }
 
+.template-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0;
+}
+
+.template-row button {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  font-size: 12px;
+}
+
+.template-row button.is-active {
+  background: var(--saffron);
+  color: #102033;
+}
+
+.training-table-wrap {
+  overflow-x: auto;
+  margin: 8px 0 4px;
+}
+
+.training-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.training-table th,
+.training-table td {
+  padding: 6px 8px;
+  text-align: left;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+
+.training-table th {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 11px;
+}
+
+.training-table td strong {
+  display: block;
+  font-size: 13px;
+}
+
+.training-table td em {
+  color: var(--muted);
+  font-style: normal;
+  font-size: 11px;
+}
+
+.training-table td small {
+  display: block;
+  font-size: 10px;
+}
+
+.training-table tr.is-selected td {
+  background: var(--you);
+}
+
+.club-banner--overview .btn {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
 .coach-brief {
   margin-top: 10px;
 }

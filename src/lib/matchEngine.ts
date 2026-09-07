@@ -103,6 +103,7 @@ const FEATURED_FEED: ReadonlySet<MatchEventKind> = new Set([
   "half",
   "coach",
   "injury",
+  "sub",
 ]);
 
 export function commentaryFeed(events: MatchEvent[]): MatchEvent[] {

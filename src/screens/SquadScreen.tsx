@@ -20,6 +20,7 @@ type Props = {
   picked: string | null;
   onTapPlayer: (name: string) => void;
   onSetPlan?: (name: string, plan: PlayerPlan) => void;
+  onOpenTraining?: () => void;
 };
 
 function roleTags(player: RatedPlayer, roles: ReturnType<typeof designatedRoles>, inXv: boolean): string[] {
@@ -187,7 +188,7 @@ function PlayerDetail({
   );
 }
 
-export function SquadScreen({ save, teams, viewTeamId, onViewTeam, picked, onTapPlayer, onSetPlan }: Props) {
+export function SquadScreen({ save, teams, viewTeamId, onViewTeam, picked, onTapPlayer, onSetPlan, onOpenTraining }: Props) {
   const ownTeam = viewTeamId === save.clubId;
   const squad = ratedSquad(viewTeamId);
   const byName = new Map(squad.map((player) => [player.name, player]));
@@ -249,6 +250,11 @@ export function SquadScreen({ save, teams, viewTeamId, onViewTeam, picked, onTap
             <h1>{compactName(viewed)}</h1>
             <span className="colour-label">{viewed.colours.label}</span>
           </div>
+          {ownTeam && onOpenTraining ? (
+            <button type="button" className="btn" onClick={onOpenTraining}>
+              Training
+            </button>
+          ) : null}
         </section>
       ) : null}
       <div className="mini-pitch">
