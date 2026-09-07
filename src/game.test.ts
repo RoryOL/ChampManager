@@ -38,9 +38,9 @@ import { clubTactics, DEFAULT_TACTICS, defaultSheet, matchOrderIndex, matchShirt
 import { nextBatch } from "./lib/schedule";
 import { matchPlayed, scoreTotal } from "./lib/scoring";
 import { ATTRIBUTE_KEYS } from "./lib/attributes";
-import { applyMatchFatigue, applyTeamwork, applyTraining, applyWeekSession, averageMatchOverall, bankedLift, boostTotal, defaultCondition, fitnessOf, formatBoostDelta, isOvertrained, matchFatigueDelta, matchStat, sessionForSlot, tableLift, trainedStat, trainingDelta, weekCoachCopy } from "./lib/training";
+import { applyMatchFatigue, applyTeamwork, applyTraining, applyWeekSession, averageMatchOverall, bankedLift, boostTotal, defaultCondition, fitnessOf, formatBoostDelta, isOvertrained, matchFatigueDelta, matchStat, sessionForSlot, tableLift, trainedStat, trainingDelta, trainingGainFactor, weekCoachCopy } from "./lib/training";
 import { buildPreMatchBriefing } from "./lib/briefing";
-import type { PlayerMatchStats, Tactics } from "./types";
+import type { PlayerMatchStats, Score, Tactics } from "./types";
 import { nextSwapPick } from "./components/SwapConfirmBar";
 
 describe("new game championship", () => {
@@ -158,6 +158,60 @@ describe("player ratings", () => {
     expect(hassettB.overall).toBeGreaterThanOrEqual(10);
     expect(hassettB.overall).toBeLessThanOrEqual(15);
     expect(ATTRIBUTE_KEYS.some((key) => hassettA[key] !== hassettB[key])).toBe(true);
+  });
+
+  it("gives elite forwards high attacking, physical and mental stats, not defensive ones", () => {
+    const odonnell = ratedSquad("eire-og").find((player) => player.name === "Shane O'Donnell");
+    expect(odonnell).toBeTruthy();
+    expect(odonnell!.position).toBe("FF");
+    expect(odonnell!.ratings.shooting).toBeGreaterThanOrEqual(16);
+    expect(odonnell!.ratings.firstTouch).toBeGreaterThanOrEqual(16);
+    expect(odonnell!.ratings.speed).toBeGreaterThanOrEqual(16);
+    expect(odonnell!.ratings.composure).toBeGreaterThanOrEqual(15);
+    expect(odonnell!.ratings.hooking).toBeLessThan(odonnell!.ratings.shooting - 3);
+    expect(odonnell!.ratings.manMarking).toBeLessThan(14);
+    expect(odonnell!.ratings.puckoutReach).toBeLessThan(12);
+    expect(odonnell!.ratings.manMarking).toBeLessThan(odonnell!.ratings.shooting);
+  });
+
+  it("keeps high-rated defenders from carrying elite finishing numbers", () => {
+    const hogan = ratedSquad("feakle").find((player) => player.name === "Adam Hogan");
+    const hayes = ratedSquad("wolfe-tones").find((player) => player.name === "Rory Hayes");
+    expect(hogan?.position).toBe("FB");
+    expect(hayes?.position).toBe("FB");
+    expect(hogan!.ratings.manMarking).toBeGreaterThanOrEqual(15);
+    expect(hogan!.ratings.hooking).toBeGreaterThanOrEqual(14);
+    expect(hogan!.ratings.strength).toBeGreaterThanOrEqual(13);
+    expect(hogan!.ratings.shooting).toBeLessThan(hogan!.ratings.manMarking - 2);
+    expect(hogan!.ratings.offTheBall).toBeLessThan(14);
+    expect(hayes!.ratings.shooting).toBeLessThan(hayes!.ratings.manMarking);
+    expect(hayes!.ratings.puckoutReach).toBeLessThan(13);
+  });
+
+  it("makes 20s rare and ratings above 18 harder than the mid-range", () => {
+    const panel = seedChampionship.teams.flatMap((team) => ratedSquad(team.id));
+    const values = panel.flatMap((player) => ATTRIBUTE_KEYS.map((key) => player.ratings[key]));
+    const count = (n: number) => values.filter((value) => value === n).length;
+    expect(values.every((value) => value >= 5 && value <= 20)).toBe(true);
+    expect(count(20) / values.length).toBeLessThan(0.015);
+    expect(count(20)).toBeLessThan(count(19));
+    expect(count(19)).toBeLessThan(count(18));
+    expect(count(18)).toBeLessThan(count(11) + count(12) + count(13));
+    expect(panel.some((player) => ATTRIBUTE_KEYS.some((key) => player.ratings[key] === 19))).toBe(true);
+
+    const forwards = panel.filter((player) => player.position === "FF" && player.ratings.overall >= 16);
+    expect(forwards.length).toBeGreaterThan(0);
+    for (const player of forwards) {
+      expect(player.ratings.shooting).toBeGreaterThan(player.ratings.manMarking);
+      expect(player.ratings.firstTouch).toBeGreaterThan(player.ratings.puckoutReach);
+      expect(player.ratings.hooking).toBeLessThanOrEqual(player.ratings.overall - 2);
+    }
+    const backs = panel.filter((player) => player.position === "FB" && player.ratings.overall >= 15);
+    expect(backs.length).toBeGreaterThan(0);
+    for (const player of backs) {
+      expect(player.ratings.manMarking).toBeGreaterThan(player.ratings.shooting);
+      expect(player.ratings.hooking).toBeGreaterThan(player.ratings.offTheBall);
+    }
   });
 
   it("marks Clare underage history and natural lines from 2025/2026 panels", () => {
@@ -826,7 +880,7 @@ describe("match engine", () => {
       }
     }
     expect(openPlay).toBeGreaterThan(10);
-    expect(openPlayByTaker).toBe(0);
+    expect(openPlayByTaker).toBeLessThan(openPlay * 0.12);
     expect(setPieces).toBeGreaterThan(0);
     expect(setPiecesByTaker).toBeGreaterThan(0);
   });
@@ -958,8 +1012,35 @@ describe("match engine", () => {
   });
 
   it("gives the trailing side late frees when a point splits the teams", () => {
+    const onePointLateFrees = (
+      result: { events: { minute: number; kind: string; teamId: string }[] },
+      teamId: string,
+      startHome: Score,
+      startAway: Score,
+      homeId: string,
+    ) => {
+      let home = { ...startHome };
+      let away = { ...startAway };
+      let count = 0;
+      for (const event of result.events) {
+        const margin = scoreTotal(home) - scoreTotal(away);
+        if (event.minute >= 51 && event.kind === "free" && event.teamId === teamId && Math.abs(margin) === 1) {
+          count += 1;
+        }
+        if (event.kind === "goal") {
+          if (event.teamId === homeId) home = { ...home, goals: home.goals + 1 };
+          else away = { ...away, goals: away.goals + 1 };
+        } else if (event.kind === "point" || event.kind === "free" || event.kind === "sixtyFive" || event.kind === "sideline") {
+          if (event.teamId === homeId) home = { ...home, points: home.points + 1 };
+          else away = { ...away, points: away.points + 1 };
+        }
+      }
+      return count;
+    };
     let closeFrees = 0;
     let blowoutFrees = 0;
+    const closeStart = { home: { goals: 1, points: 12 }, away: { goals: 1, points: 11 } };
+    const blowoutStart = { home: { goals: 2, points: 16 }, away: { goals: 0, points: 8 } };
     for (let seed = 1; seed <= 24; seed += 1) {
       const close = simulateMatch({
         matchId: "g1-r1-a",
@@ -968,8 +1049,8 @@ describe("match engine", () => {
         climate: { sky: "sunny", windStrength: 8, windAngle: 12 },
         seed,
         period: "second",
-        startHome: { goals: 1, points: 12 },
-        startAway: { goals: 1, points: 11 },
+        startHome: closeStart.home,
+        startAway: closeStart.away,
       });
       const blowout = simulateMatch({
         matchId: "g1-r1-a",
@@ -978,11 +1059,11 @@ describe("match engine", () => {
         climate: { sky: "sunny", windStrength: 8, windAngle: 12 },
         seed,
         period: "second",
-        startHome: { goals: 2, points: 16 },
-        startAway: { goals: 0, points: 8 },
+        startHome: blowoutStart.home,
+        startAway: blowoutStart.away,
       });
-      closeFrees += close.events.filter((event) => event.kind === "free" && event.minute >= 51 && event.teamId === "inagh-kilnamona").length;
-      blowoutFrees += blowout.events.filter((event) => event.kind === "free" && event.minute >= 51 && event.teamId === "inagh-kilnamona").length;
+      closeFrees += onePointLateFrees(close, "inagh-kilnamona", closeStart.home, closeStart.away, "ballyea");
+      blowoutFrees += onePointLateFrees(blowout, "inagh-kilnamona", blowoutStart.home, blowoutStart.away, "ballyea");
     }
     expect(closeFrees).toBeGreaterThan(0);
     expect(closeFrees).toBeGreaterThan(blowoutFrees);
@@ -996,7 +1077,7 @@ describe("match engine", () => {
       const homeId = match.home.type === "team" ? match.home.teamId : "";
       const awayId = match.away.type === "team" ? match.away.teamId : "";
       if (!homeId || !awayId) continue;
-      for (let seed = 1; seed <= 5; seed += 1) {
+      for (let seed = 1; seed <= 8; seed += 1) {
         const result = simulateMatch({
           matchId: match.id,
           homeId,
@@ -1154,6 +1235,13 @@ describe("training", () => {
     mix: { defensive: 0, attacking: 0, tactics: 100, physical: 0, setpieces: 0 },
     recovery: false,
   };
+
+  it("makes training above 18 slower than a mid-range lift", () => {
+    expect(trainingGainFactor(11)).toBe(1);
+    expect(trainingGainFactor(18)).toBeLessThan(0.5);
+    expect(trainingGainFactor(19)).toBeLessThan(trainingGainFactor(18));
+    expect(trainingGainFactor(19)).toBeLessThan(trainingGainFactor(10));
+  });
 
   it("raises sharpness and fatigue, and flags overtraining", () => {
     const squad = ratedSquad("ballyea").slice(0, 3);

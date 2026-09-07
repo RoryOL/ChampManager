@@ -469,10 +469,12 @@ export function matchRatings(player: RatedPlayer, condition: PlayerCondition): R
   for (const key of ATTRIBUTE_KEYS) {
     ratings[key] = matchStat(player.ratings[key], condition, key);
   }
+  const natural = computeOverall(player.ratings, player.ratings.familiarity, player.position);
+  const live = computeOverall(ratings, player.ratings.familiarity, player.position);
   return {
     ...player.ratings,
     ...ratings,
-    overall: computeOverall(ratings, player.ratings.familiarity, player.position),
+    overall: clampStat(player.ratings.overall + (live - natural)),
   };
 }
 
@@ -481,10 +483,12 @@ export function trainedRatings(player: RatedPlayer, condition: PlayerCondition):
   for (const key of ATTRIBUTE_KEYS) {
     ratings[key] = trainedStat(player.ratings[key], condition, key);
   }
+  const natural = computeOverall(player.ratings, player.ratings.familiarity, player.position);
+  const live = computeOverall(ratings, player.ratings.familiarity, player.position);
   return {
     ...player.ratings,
     ...ratings,
-    overall: computeOverall(ratings, player.ratings.familiarity, player.position),
+    overall: clampStat(player.ratings.overall + (live - natural)),
   };
 }
 
@@ -519,6 +523,7 @@ function liftFromMix(
   mix: TrainingMix,
   intensity: TrainingIntensity = "balanced",
   train = 1,
+  natural?: Record<AttributeKey, number>,
 ): AttributeBoosts {
   if (mixTotal(mix) <= 0) return current ?? {};
   const next: AttributeBoosts = { ...(current ?? {}) };
@@ -528,10 +533,19 @@ function liftFromMix(
     const offset = share - BOOST_PIVOT;
     const amount = offset >= 0 ? offset * MIX_LIFT * mul * train : offset * MIX_DECAY * mul;
     for (const key of TRAINING_TYPE_KEYS[type]) {
-      next[key] = clampBoost((next[key] ?? 0) + amount);
+      const present = (natural?.[key] ?? 10) + (next[key] ?? 0);
+      const factor = amount > 0 ? trainingGainFactor(present) : 1;
+      next[key] = clampBoost((next[key] ?? 0) + amount * factor);
     }
   }
   return next;
+}
+
+/** Training lifts slow sharply once a rating is already high. */
+export function trainingGainFactor(current: number): number {
+  if (current >= 19) return 0.12;
+  if (current >= 18) return 0.32;
+  return 1;
 }
 
 function sessionLoad(mix: TrainingMix, alreadyHeavy: boolean): { fatigue: number; sharpness: number } {
@@ -712,7 +726,7 @@ export function applyTraining(
     } else if (usedIntensity === "light") {
       fatigue -= 10 * response.recover;
       sharpness += 1 * response.train;
-      boosts = liftFromMix(boosts, plan.mix, usedIntensity, response.train);
+      boosts = liftFromMix(boosts, plan.mix, usedIntensity, response.train, player.ratings);
       for (const key of ATTRIBUTE_KEYS) {
         if ((boosts[key] ?? 0) > (before?.[key] ?? 0) + VISIBLE_LIFT) lifted.add(key);
       }
@@ -720,7 +734,7 @@ export function applyTraining(
       const load = sessionLoad(plan.mix, alreadyHeavy);
       fatigue += load.fatigue * response.fatigue * loadMul;
       sharpness += load.sharpness * response.train;
-      boosts = liftFromMix(boosts, plan.mix, usedIntensity, response.train);
+      boosts = liftFromMix(boosts, plan.mix, usedIntensity, response.train, player.ratings);
       for (const key of ATTRIBUTE_KEYS) {
         if ((boosts[key] ?? 0) > (before?.[key] ?? 0) + VISIBLE_LIFT) lifted.add(key);
       }
