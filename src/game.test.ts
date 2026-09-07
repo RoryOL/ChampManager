@@ -4,7 +4,7 @@ import { ageResponse, GRADE_LABEL, profileFor } from "./data/playerProfiles";
 import { buildCoachReport } from "./lib/coach";
 import { applyMatchForm, formValue } from "./lib/form";
 import { migrateSave } from "./lib/gameStorage";
-import { seasonStatsFor, lastMatchRating } from "./lib/matchStats";
+import { playerMatchRating, seasonStatsFor, lastMatchRating } from "./lib/matchStats";
 import { openPlayConversion } from "./lib/shooting";
 import { crossWind, parallelWind, passCompleteChance, rollClimate, withWindFor } from "./lib/weather";
 import {
@@ -27,7 +27,7 @@ import { matchPlayed } from "./lib/scoring";
 import { ATTRIBUTE_KEYS } from "./lib/attributes";
 import { applyMatchFatigue, applyTeamwork, applyTraining, applyWeekSession, averageMatchOverall, boostTotal, defaultCondition, fitnessOf, isOvertrained, matchStat, trainedStat, trainingDelta, weekCoachCopy } from "./lib/training";
 import { buildPreMatchBriefing } from "./lib/briefing";
-import type { Tactics } from "./types";
+import type { PlayerMatchStats, Tactics } from "./types";
 import { nextSwapPick } from "./components/SwapConfirmBar";
 
 describe("new game championship", () => {
@@ -1401,6 +1401,68 @@ describe("match fitness", () => {
     expect(hard[forward!.name]?.fatigue ?? 0).toBeGreaterThan(easy[forward!.name]?.fatigue ?? 0);
     expect(fitnessOf(hard[forward!.name] ?? defaultCondition())).toBeLessThan(fitnessOf(easy[forward!.name] ?? defaultCondition()));
     expect(isOvertrained({ fatigue: 80, sharpness: 50 })).toBe(true);
+  });
+});
+
+describe("match ratings", () => {
+  const hour = (partial: Partial<PlayerMatchStats>): PlayerMatchStats => ({
+    name: "Peter Duggan",
+    teamId: "clooney-quin",
+    started: true,
+    minutes: 62,
+    possessions: 8,
+    passesAttempted: 4,
+    passesCompleted: 3,
+    shots: 4,
+    scores: 2,
+    highFieldingAttempted: 1,
+    highFieldingWon: 0,
+    puckoutsWon: 0,
+    tacklesAttempted: 2,
+    tacklesWon: 1,
+    groundCovered: 8,
+    fatigue: 40,
+    fitness: 60,
+    overall: 18,
+    rating: 0,
+    mood: 50,
+    ...partial,
+  });
+
+  it("keeps an ordinary scoring hour in the 6s, not a 10", () => {
+    const rating = playerMatchRating(hour({}));
+    expect(rating).toBeGreaterThanOrEqual(6);
+    expect(rating).toBeLessThan(7.5);
+  });
+
+  it("does not give 10 for a heavy scoring night", () => {
+    const rating = playerMatchRating(
+      hour({ scores: 9, shots: 11, possessions: 14, passesAttempted: 8, passesCompleted: 7, highFieldingWon: 2 }),
+    );
+    expect(rating).toBeGreaterThanOrEqual(8);
+    expect(rating).toBeLessThan(10);
+  });
+
+  it("varies Peter Duggan's rating across matches and almost never gives him 10", () => {
+    const ratings: number[] = [];
+    for (let seed = 1; seed <= 36; seed += 1) {
+      const sim = simulateMatch({
+        matchId: "g3-r1-a",
+        homeId: "clooney-quin",
+        awayId: "cratloe",
+        seed,
+      });
+      const row = sim.players.find((player) => player.name === "Peter Duggan");
+      expect(row).toBeTruthy();
+      ratings.push(row!.rating);
+    }
+    const avg = ratings.reduce((sum, value) => sum + value, 0) / ratings.length;
+    expect(new Set(ratings).size).toBeGreaterThanOrEqual(10);
+    expect(Math.min(...ratings)).toBeLessThan(7);
+    expect(Math.max(...ratings)).toBeLessThan(10);
+    expect(ratings.filter((value) => value >= 9.9).length).toBeLessThanOrEqual(1);
+    expect(avg).toBeGreaterThan(6.5);
+    expect(avg).toBeLessThan(8.2);
   });
 });
 
