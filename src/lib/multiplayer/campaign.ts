@@ -730,6 +730,7 @@ function finishSim(
       tactics,
       squad,
       sim.events.some((event) => event.kind === "red" && event.teamId === seat.clubId),
+      seat.clubId === sim.homeId ? (sim.homeChaseEffort ?? 0) : (sim.awayChaseEffort ?? 0),
     );
     condition = applyMatchForm(condition, squad, opening, closing, sim.players, result, campaign.seed, sim.matchId);
     const teamworked = applyTeamwork(condition, closing, club.lastSheet, "competitive");

@@ -565,6 +565,11 @@ export function useGame() {
           extras?.base?.tactics ?? base.tactics,
           ratedSquad(base.clubId, base.seed),
           current.user.events.some((event) => event.kind === "red" && event.teamId === base.clubId),
+          base.clubId === current.user.homeId
+            ? (current.user.homeChaseEffort ?? 0)
+            : base.clubId === current.user.awayId
+              ? (current.user.awayChaseEffort ?? 0)
+              : 0,
         ),
         trainingDue: true,
       };

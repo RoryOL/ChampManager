@@ -264,6 +264,8 @@ export function statsFromEvents(
     awayTactics?: Tactics;
     upTo?: number;
     gameSeed?: number;
+    homeChaseEffort?: number;
+    awayChaseEffort?: number;
   },
 ): { players: PlayerMatchStats[]; homeStats: TeamMatchStats; awayStats: TeamMatchStats } {
   const rows = new Map<string, PlayerMatchStats>();
@@ -316,7 +318,8 @@ export function statsFromEvents(
     const workrate = found ? found.player.ratings.workrate : 12;
     const minutes = Math.max(row.minutes, row.started ? 1 : 0);
     const position = found?.player.position ?? slotOf(row.teamId, row.name);
-    const drain = matchFatigueDelta(minutes, tactics, position, row.started, found?.player.age);
+    const chaseEffort = row.teamId === options.homeId ? (options.homeChaseEffort ?? 0) : (options.awayChaseEffort ?? 0);
+    const drain = matchFatigueDelta(minutes, tactics, position, row.started, found?.player.age, false, chaseEffort);
     const fatigue = Math.max(0, Math.min(100, condition.fatigue + drain));
     const groundCovered = Math.round(minutes * (0.072 + workrate * 0.0032) * 10) / 10;
     return {
@@ -448,6 +451,8 @@ export function combineHalves(
     homeTactics: second.homeTactics,
     awayTactics: second.awayTactics,
     gameSeed: first.gameSeed ?? second.gameSeed,
+    homeChaseEffort: Math.min(1, (first.homeChaseEffort ?? 0) + (second.homeChaseEffort ?? 0)),
+    awayChaseEffort: Math.min(1, (first.awayChaseEffort ?? 0) + (second.awayChaseEffort ?? 0)),
   });
   const coachReport = buildCoachReport({
     clubId: names.clubId,
@@ -479,6 +484,8 @@ export function combineHalves(
     coachReport,
     climate: first.climate,
     shots: [...first.shots, ...second.shots],
+    homeChaseEffort: Math.min(1, (first.homeChaseEffort ?? 0) + (second.homeChaseEffort ?? 0)),
+    awayChaseEffort: Math.min(1, (first.awayChaseEffort ?? 0) + (second.awayChaseEffort ?? 0)),
   };
 }
 
@@ -501,6 +508,8 @@ export function liveStats(
     awayTactics: sim.awayTactics,
     upTo: cursor,
     gameSeed: sim.gameSeed,
+    homeChaseEffort: sim.homeChaseEffort,
+    awayChaseEffort: sim.awayChaseEffort,
   });
 }
 
