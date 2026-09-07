@@ -59,6 +59,7 @@ function mergeClub(left?: ClubRuntime, right?: ClubRuntime, leftRev = 0, rightRe
     weekShape: ahead.weekShape ?? behind.weekShape,
     sessionsDone: ahead.sessionsDone ?? behind.sessionsDone ?? 0,
     trainingDeltas: Object.keys(ahead.trainingDeltas ?? {}).length > 0 ? ahead.trainingDeltas : behind.trainingDeltas,
+    weekDeltas: Object.keys(ahead.weekDeltas ?? {}).length > 0 ? ahead.weekDeltas : behind.weekDeltas,
   };
 }
 

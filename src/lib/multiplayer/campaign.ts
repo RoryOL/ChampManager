@@ -58,6 +58,7 @@ import {
   PRESEASON_DATES,
   PRESEASON_WEEKS,
   squadNames,
+  weekCoachCopy,
 } from "../training";
 import { randomCode, randomId } from "./codes";
 
@@ -100,6 +101,7 @@ function newClub(clubId: string): ClubRuntime {
     weekShape: DEFAULT_WEEK_SHAPE,
     sessionsDone: 0,
     trainingDeltas: {},
+    weekDeltas: {},
   };
 }
 
@@ -240,7 +242,7 @@ export function startCampaign(
 export function saveFromCampaign(campaign: Campaign, clubId: string): GameSave {
   const club = campaign.clubs[clubId] ?? newClub(clubId);
   return {
-    version: 7,
+    version: 8,
     clubId,
     seed: campaign.seed,
     tactics: club.tactics,
@@ -259,6 +261,7 @@ export function saveFromCampaign(campaign: Campaign, clubId: string): GameSave {
     weekShape: club.weekShape ?? DEFAULT_WEEK_SHAPE,
     sessionsDone: club.sessionsDone ?? 0,
     trainingDeltas: club.trainingDeltas ?? {},
+    weekDeltas: club.weekDeltas ?? {},
   };
 }
 
@@ -383,6 +386,7 @@ function applyClubTraining(
     seed: campaign.seed,
     weekKey: `${campaign.phase}-${campaign.preseasonWeek}-${date}-${sessionsDone}`,
     remainingWeeks: remainingWeeks(saveFromCampaign(campaign, clubId), championship, clubId),
+    weekDeltas: club.weekDeltas ?? {},
   });
   const team = teamById(championship, clubId);
   const total = campaign.phase === "preseason" ? 3 : 1;
@@ -411,6 +415,23 @@ function applyClubTraining(
       }),
     ),
   ];
+  if (result.weekComplete) {
+    const coach = weekCoachCopy(
+      squad,
+      result.weekDeltas,
+      campaign.phase === "preseason" ? `Preseason week ${campaign.preseasonWeek}` : "Midweek",
+    );
+    items.push(
+      newsItem({
+        id: `${newsId(now)}-coach`,
+        kind: "briefing",
+        date,
+        title: coach.title,
+        body: coach.body,
+        tone: coach.tone,
+      }),
+    );
+  }
   let nextClub = pushInbox(
     {
       ...club,
@@ -419,7 +440,8 @@ function applyClubTraining(
       trainingDue: result.trainingDue,
       lastSheet: result.lastSheet ?? club.lastSheet,
       sessionsDone: result.sessionsDone,
-      trainingDeltas: result.deltas,
+      trainingDeltas: result.visibleDeltas,
+      weekDeltas: result.weekComplete ? {} : result.weekDeltas,
     },
     items,
   );

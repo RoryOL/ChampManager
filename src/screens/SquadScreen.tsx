@@ -9,7 +9,7 @@ import { formatPair, seasonStatsFor } from "../lib/matchStats";
 import { moodLabel, moodValue } from "../lib/mood";
 import { defaultSheet, designatedRoles, ratedSquad, sheetPlayers } from "../lib/players";
 import { FORMATION_ROWS } from "../lib/squads";
-import { boostTotal, conditionFor, fitnessOf, isOvertrained, matchRatings, matchStat, planFor } from "../lib/training";
+import { conditionFor, fitnessOf, isOvertrained, matchRatings, matchStat, planFor, visibleBoostTotal } from "../lib/training";
 import { injuryLine, isInjured } from "../lib/injuries";
 
 type Props = {
@@ -122,10 +122,11 @@ function PlayerDetail({
             </p>
           ) : (
             <p className="hint hint--tight">
-              Training can lift these numbers a little (up to +4). Younger players take the work better and get match
-              fitness back quicker; veterans feel the legs longer. Green is the change from their natural rating.
-              Workrate, composure and ability under pressure do not change in training. Teamwork rises when the same
-              lads play together.
+              Training can lift these numbers a little (up to +2). Work one area hard and neglected stats can drift a
+              little. Small lifts stack even when the card still shows the same integer. Younger players take the work
+              better and get match fitness back quicker; veterans feel the legs longer. Green is the change from their
+              natural rating. Workrate, composure and ability under pressure do not change in training. Teamwork rises
+              when the same lads play together.
             </p>
           )}
         </div>
@@ -310,7 +311,7 @@ export function SquadScreen({ save, teams, viewTeamId, onViewTeam, picked, onTap
                       ? ` · Out · ${injuryLine(conditionFor(player.name, save.condition).injury!)}`
                       : ""}
                     {ownTeam && isOvertrained(conditionFor(player.name, save.condition)) ? " · Tired" : ""}
-                    {ownTeam && boostTotal(conditionFor(player.name, save.condition)) > 0 ? " · In form" : ""}
+                    {ownTeam && visibleBoostTotal(conditionFor(player.name, save.condition)) > 0 ? " · In form" : ""}
                   </em>
                 </span>
                 {(() => {
