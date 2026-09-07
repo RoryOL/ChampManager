@@ -90,12 +90,12 @@ export const INTENSITY_OPTIONS: { value: TrainingIntensity; title: string; copy:
   {
     value: "light",
     title: "Light",
-    copy: "A recovery week in all but name. Legs come back and attributes only tick a little. Nobody picks up a training injury.",
+    copy: "Legs come back strongly and attributes only tick a little. Nobody picks up a training injury.",
   },
   {
     value: "balanced",
     title: "Balanced",
-    copy: "A normal week. Lifts come through without training injuries.",
+    copy: "A normal week. Lifts come through without costing match fitness, and without training injuries.",
   },
   {
     value: "intense",
@@ -323,9 +323,9 @@ export function sessionForSlot(
 }
 
 export function intensityLoad(intensity: TrainingIntensity): { fatigue: number; lift: "light" | "balanced" | "intense" } {
-  if (intensity === "light") return { fatigue: 0.2, lift: "light" };
+  if (intensity === "light") return { fatigue: 0, lift: "light" };
   if (intensity === "intense") return { fatigue: 1.45, lift: "intense" };
-  return { fatigue: 1, lift: "balanced" };
+  return { fatigue: 0, lift: "balanced" };
 }
 
 export function mixSummary(mix: TrainingMix): string {
@@ -718,21 +718,32 @@ export function applyTraining(
       fatigue -= 24 * response.recover;
       sharpness += 1 * response.train;
     } else if (inChallenge) {
-      fatigue += (alreadyHeavy ? 26 : 18) * response.fatigue * loadMul;
+      if (usedIntensity === "light") {
+        fatigue -= 8 * response.recover;
+      } else if (usedIntensity === "intense") {
+        fatigue += (alreadyHeavy ? 26 : 18) * response.fatigue * loadMul;
+      }
       sharpness += (alreadyHeavy ? -2 : 9) * response.train;
     } else if (session === "challenge") {
       fatigue -= 12 * response.recover;
       sharpness += 1 * response.train;
     } else if (usedIntensity === "light") {
-      fatigue -= 10 * response.recover;
+      fatigue -= 18 * response.recover;
       sharpness += 1 * response.train;
+      boosts = liftFromMix(boosts, plan.mix, usedIntensity, response.train, player.ratings);
+      for (const key of ATTRIBUTE_KEYS) {
+        if ((boosts[key] ?? 0) > (before?.[key] ?? 0) + VISIBLE_LIFT) lifted.add(key);
+      }
+    } else if (usedIntensity === "intense") {
+      const load = sessionLoad(plan.mix, alreadyHeavy);
+      fatigue += load.fatigue * response.fatigue * loadMul;
+      sharpness += load.sharpness * response.train;
       boosts = liftFromMix(boosts, plan.mix, usedIntensity, response.train, player.ratings);
       for (const key of ATTRIBUTE_KEYS) {
         if ((boosts[key] ?? 0) > (before?.[key] ?? 0) + VISIBLE_LIFT) lifted.add(key);
       }
     } else {
       const load = sessionLoad(plan.mix, alreadyHeavy);
-      fatigue += load.fatigue * response.fatigue * loadMul;
       sharpness += load.sharpness * response.train;
       boosts = liftFromMix(boosts, plan.mix, usedIntensity, response.train, player.ratings);
       for (const key of ATTRIBUTE_KEYS) {
@@ -783,8 +794,8 @@ export function applyTraining(
     intensity === "intense"
       ? " Intense work lands harder on the legs."
       : intensity === "light"
-        ? " Light work is close to a recovery week: legs come back and attributes only tick a little."
-        : "";
+        ? " Light work puts fitness back into the legs; attributes only tick a little."
+        : " Balanced work does not cost match fitness.";
   const summary =
     overtrained.length > 0
       ? `${label} is done, but ${overtrained.length} player${overtrained.length === 1 ? " is" : "s are"} overtrained. The work is banked, yet match ratings look heavy until fitness recovers.`
@@ -882,6 +893,35 @@ export function applyWeekSession(options: {
     weekComplete,
     session,
   };
+}
+
+type WeekSessionResult = ReturnType<typeof applyWeekSession>;
+
+/** Run every remaining session this week in one pass. */
+export function applyFullTrainingWeek(
+  options: Parameters<typeof applyWeekSession>[0],
+): WeekSessionResult & { sessionsRun: number } {
+  let current = { ...options };
+  let last = applyWeekSession(current);
+  let sessionsRun = 1;
+  const recovered = [...last.recovered];
+  const freshInjuries = [...last.freshInjuries];
+  while (!last.weekComplete && sessionsRun < 6) {
+    current = {
+      ...current,
+      condition: last.condition,
+      sheet: last.sheet,
+      lastSheet: last.lastSheet,
+      sessionsDone: last.sessionsDone,
+      weekDeltas: last.weekDeltas,
+      weekKey: current.weekKey.replace(/-\d+$/, `-${last.sessionsDone}`),
+    };
+    last = applyWeekSession(current);
+    sessionsRun += 1;
+    recovered.push(...last.recovered);
+    freshInjuries.push(...last.freshInjuries);
+  }
+  return { ...last, recovered, freshInjuries, sessionsRun };
 }
 
 export function applyTeamwork(

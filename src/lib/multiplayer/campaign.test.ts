@@ -14,6 +14,7 @@ import {
   submitSecondHalf,
   tickCampaign,
   trainClub,
+  trainClubWeek,
   waitingOnSecondHalf,
   waitingOnWeek,
 } from "./campaign";
@@ -97,6 +98,16 @@ describe("multiplayer campaign", () => {
     campaign = trainFullWeek(campaign, "inagh-kilnamona", "recovery", NOW + 20);
     expect(campaign.preseasonWeek).toBe(2);
     expect(waitingOnWeek(campaign).map((seat) => seat.clubId).sort()).toEqual(["ballyea", "inagh-kilnamona"]);
+  });
+
+  it("lets a manager run a two-session-plus-challenge week in one action", () => {
+    let campaign = startedCampaign();
+    campaign = trainClubWeek(campaign, "ballyea", "challenge", NOW + 30);
+    expect(campaign.clubs.ballyea.trainingDue).toBe(false);
+    expect(campaign.clubs.ballyea.sessionsDone).toBe(0);
+    expect(campaign.clubs.ballyea.weekShape).toBe("challenge");
+    expect(waitingOnWeek(campaign).map((seat) => seat.clubId)).toEqual(["inagh-kilnamona"]);
+    expect(campaign.clubs.ballyea.inbox.some((item) => item.title.includes("complete"))).toBe(true);
   });
 
   it("fills missing week actions when the host window expires", () => {

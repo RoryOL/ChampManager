@@ -4,9 +4,10 @@ import { WEEK_SHAPE_OPTIONS } from "../lib/training";
 type Props = {
   weekShape: WeekShape;
   onChange: (shape: WeekShape) => void;
+  disabled?: boolean;
 };
 
-export function WeekShapePicker({ weekShape, onChange }: Props) {
+export function WeekShapePicker({ weekShape, onChange, disabled = false }: Props) {
   return (
     <div className="choice-stack">
       {WEEK_SHAPE_OPTIONS.map((option) => (
@@ -14,6 +15,7 @@ export function WeekShapePicker({ weekShape, onChange }: Props) {
           key={option.value}
           type="button"
           className={weekShape === option.value ? "is-active" : ""}
+          disabled={disabled}
           onClick={() => onChange(option.value)}
         >
           <strong>{option.title}</strong>

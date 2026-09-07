@@ -9,7 +9,7 @@ import { NEWS_KIND_LABEL } from "../lib/news";
 import { resolveMatchSides, teamById, teamGroup } from "../lib/resolve";
 import { formatDate, stageLabel } from "../lib/scoring";
 import { buildPreMatchBriefing } from "../lib/briefing";
-import { averageFitness, averageMatchOverall, averageSharpness, DEFAULT_WEEK_SHAPE, PRESEASON_WEEKS, sessionForSlot, sessionsPerWeek } from "../lib/training";
+import { averageFitness, averageMatchOverall, averageSharpness, DEFAULT_WEEK_SHAPE, PRESEASON_WEEKS } from "../lib/training";
 import { ratedSquad } from "../lib/players";
 import { rollClimate, climateSummary } from "../lib/weather";
 
@@ -34,6 +34,7 @@ type Props = {
   onOpenPlayer: (name: string) => void;
   onOpenTraining?: () => void;
   onSetWeekShape?: (shape: WeekShape) => void;
+  onRunWeek?: (shape: WeekShape) => void;
 };
 
 function preview(body: string): string {
@@ -101,6 +102,7 @@ export function HomeScreen({
   onOpenPlayer,
   onOpenTraining,
   onSetWeekShape,
+  onRunWeek,
 }: Props) {
   const club = teamById(championship, save.clubId);
   const group = teamGroup(championship, save.clubId);
@@ -115,10 +117,7 @@ export function HomeScreen({
   const formDelta = Math.round((form.match - form.ability) * 10) / 10;
   const opened = save.inbox.find((item) => item.id === openId) ?? null;
   const unread = save.inbox.filter((item) => !item.read).length;
-  const total = sessionsPerWeek(save.phase);
-  const sessionsDone = save.sessionsDone ?? 0;
   const weekShape = save.weekShape ?? DEFAULT_WEEK_SHAPE;
-  const nextKind = sessionForSlot(save.phase, weekShape, sessionsDone);
 
   const openNews = (item: NewsItem) => {
     setOpenId(item.id);
@@ -234,20 +233,26 @@ export function HomeScreen({
         ) : null}
       </section>
 
-      {preseason && onSetWeekShape ? (
+      {preseason && (onRunWeek || onSetWeekShape) ? (
         <section className="card card--compact">
           <p className="kicker">This week&apos;s shape</p>
-          <WeekShapePicker weekShape={weekShape} onChange={onSetWeekShape} />
+          <WeekShapePicker
+            weekShape={weekShape}
+            disabled={!save.trainingDue}
+            onChange={(shape) => {
+              if (save.trainingDue && onRunWeek) onRunWeek(shape);
+              else onSetWeekShape?.(shape);
+            }}
+          />
           <p className="hint hint--tight">
-            Mixed sessions use the schedules from Training
             {save.trainingDue
-              ? ` · next up: ${nextKind === "challenge" ? "challenge match" : "mixed session"} · ${sessionsDone} of ${total} done`
-              : "."}
+              ? "Tap a shape to run all three sessions now. Mixed work still uses the schedules from Training."
+              : "This week's sessions are in."}
           </p>
-          {save.trainingDue && onOpenTraining ? (
+          {onOpenTraining ? (
             <div className="row-actions">
-              <button type="button" className="btn" onClick={onOpenTraining}>
-                Open training
+              <button type="button" className="btn btn--ghost" onClick={onOpenTraining}>
+                Edit schedules
               </button>
             </div>
           ) : null}

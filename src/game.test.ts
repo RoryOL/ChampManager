@@ -38,7 +38,7 @@ import { clubTactics, DEFAULT_TACTICS, defaultSheet, matchOrderIndex, matchShirt
 import { nextBatch } from "./lib/schedule";
 import { matchPlayed, scoreTotal } from "./lib/scoring";
 import { ATTRIBUTE_KEYS } from "./lib/attributes";
-import { applyMatchFatigue, applyTeamwork, applyTraining, applyWeekSession, averageMatchOverall, bankedLift, boostTotal, defaultCondition, fitnessOf, formatBoostDelta, isOvertrained, matchFatigueDelta, matchStat, sessionForSlot, tableLift, trainedStat, trainingDelta, trainingGainFactor, weekCoachCopy } from "./lib/training";
+import { applyMatchFatigue, applyTeamwork, applyTraining, applyFullTrainingWeek, applyWeekSession, averageMatchOverall, bankedLift, boostTotal, defaultCondition, fitnessOf, formatBoostDelta, isOvertrained, matchFatigueDelta, matchStat, sessionForSlot, tableLift, trainedStat, trainingDelta, trainingGainFactor, weekCoachCopy } from "./lib/training";
 import { buildPreMatchBriefing } from "./lib/briefing";
 import type { PlayerMatchStats, Score, Tactics } from "./types";
 import { nextSwapPick } from "./components/SwapConfirmBar";
@@ -1380,7 +1380,7 @@ describe("training", () => {
       [sheedy!.name]: physicalPlan,
       [conlon!.name]: physicalPlan,
     };
-    const after = applyTraining([sheedy!, conlon!], start, "mixed", plans).condition;
+    const after = applyTraining([sheedy!, conlon!], start, "mixed", plans, undefined, undefined, "intense").condition;
     expect(after[sheedy!.name]?.fatigue ?? 0).toBeLessThan(after[conlon!.name]?.fatigue ?? 0);
     const tired = {
       [sheedy!.name]: { fatigue: 60, sharpness: 40 },
@@ -1448,6 +1448,22 @@ describe("training", () => {
     expect(intense.deltas[player.name]?.speed ?? 0).toBeGreaterThan(light.deltas[player.name]?.speed ?? 0);
   });
 
+  it("keeps match fitness on balanced work, restores it on light, and only dumps it when intense", () => {
+    const squad = ratedSquad("ballyea").slice(0, 3);
+    const player = squad[0]!;
+    const start = Object.fromEntries(squad.map((item) => [item.name, { ...defaultCondition(), fatigue: 40 }]));
+    const plans = Object.fromEntries(squad.map((item) => [item.name, physicalPlan]));
+    const balanced = applyTraining(squad, start, "mixed", plans, undefined, undefined, "balanced");
+    const light = applyTraining(squad, start, "mixed", plans, undefined, undefined, "light");
+    const intense = applyTraining(squad, start, "mixed", plans, undefined, undefined, "intense");
+    expect(balanced.condition[player.name]?.fatigue).toBe(40);
+    expect(light.condition[player.name]?.fatigue ?? 40).toBeLessThan(28);
+    expect(intense.condition[player.name]?.fatigue ?? 0).toBeGreaterThan(40);
+    const sheet = { starters: squad.map((item) => item.name), subs: [] };
+    const balancedChallenge = applyTraining(squad, start, "challenge", {}, sheet, undefined, "balanced");
+    expect(balancedChallenge.condition[player.name]?.fatigue).toBe(40);
+  });
+
   it("runs three preseason sessions before the week turns, and only ticks injuries on the first", () => {
     const squad = ratedSquad("ballyea");
     const sheet = defaultSheet("ballyea");
@@ -1492,6 +1508,48 @@ describe("training", () => {
     expect(third.session).toBe("challenge");
     expect(third.condition[name]?.injury?.weeksLeft).toBe(1);
     expect(third.weekDeltas[name]?.teamwork ?? 0).toBeGreaterThan(0);
+  });
+
+  it("runs a whole preseason week in one pass", () => {
+    const squad = ratedSquad("ballyea");
+    const sheet = defaultSheet("ballyea");
+    const condition = Object.fromEntries(squad.map((player) => [player.name, defaultCondition()]));
+    const triple = applyFullTrainingWeek({
+      squad,
+      condition,
+      sheet,
+      plans: {},
+      phase: "preseason",
+      preseasonWeek: 1,
+      sessionsDone: 0,
+      intensity: "balanced",
+      weekShape: "triple",
+      seed: 2,
+      weekKey: "preseason-1-date-0",
+      remainingWeeks: 12,
+    });
+    expect(triple.sessionsRun).toBe(3);
+    expect(triple.weekComplete).toBe(true);
+    expect(triple.sessionsDone).toBe(0);
+    expect(triple.trainingDue).toBe(false);
+    expect(triple.session).toBe("mixed");
+    const challenge = applyFullTrainingWeek({
+      squad,
+      condition,
+      sheet,
+      plans: {},
+      phase: "preseason",
+      preseasonWeek: 1,
+      sessionsDone: 0,
+      intensity: "balanced",
+      weekShape: "challenge",
+      seed: 3,
+      weekKey: "preseason-1-date-0",
+      remainingWeeks: 12,
+    });
+    expect(challenge.sessionsRun).toBe(3);
+    expect(challenge.session).toBe("challenge");
+    expect(challenge.weekDeltas[sheet.starters[0]!]?.teamwork ?? 0).toBeGreaterThan(0);
   });
 
   it("names who trained well and who did not in the weekly coach note", () => {
