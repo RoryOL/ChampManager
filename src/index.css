@@ -230,6 +230,11 @@ html.native-app .device {
   font-size: 12px;
 }
 
+.club-pick button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .club-badge {
   display: inline-block;
   border-radius: 50%;
@@ -627,6 +632,23 @@ html.native-app .device {
   margin-top: 8px;
 }
 
+.swap-bar {
+  margin: 0 0 10px;
+}
+
+.swap-bar .row-actions {
+  margin-top: 4px;
+}
+
+.swap-bar .btn:disabled {
+  opacity: 0.45;
+}
+
+.player-list em {
+  white-space: normal;
+  line-height: 1.35;
+}
+
 .warn {
   color: #f0a3a3;
   font-size: 13px;
@@ -880,6 +902,177 @@ html.native-app .device {
 
 .choice-stack .is-active span {
   color: #3b4a5c;
+}
+
+.mix-editor {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 4px;
+}
+
+.mix-recovery {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.mix-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) 1fr 42px;
+  gap: 8px;
+  align-items: center;
+}
+
+.mix-row span {
+  display: grid;
+  gap: 2px;
+}
+
+.mix-row strong {
+  font-size: 13px;
+}
+
+.mix-row em {
+  color: var(--muted);
+  font-style: normal;
+  font-size: 11px;
+}
+
+.mix-row b {
+  font-size: 12px;
+  text-align: right;
+}
+
+.mix-row input {
+  width: 100%;
+  accent-color: var(--saffron);
+}
+
+.mix-row.is-disabled {
+  opacity: 0.45;
+}
+
+.training-schedules {
+  margin-top: 10px;
+}
+
+.plan-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.plan-row {
+  width: 100%;
+  display: grid;
+  gap: 2px;
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+
+.plan-row strong {
+  font-size: 14px;
+}
+
+.plan-row span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.plan-row.is-open {
+  background: var(--saffron);
+  color: #102033;
+}
+
+.plan-row.is-open span {
+  color: #3b4a5c;
+}
+
+.template-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0;
+}
+
+.template-row button {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  font-size: 12px;
+}
+
+.template-row button.is-active {
+  background: var(--saffron);
+  color: #102033;
+}
+
+.training-table-wrap {
+  overflow-x: auto;
+  margin: 8px 0 4px;
+}
+
+.training-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.training-table th,
+.training-table td {
+  padding: 6px 8px;
+  text-align: left;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+
+.training-table th {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 11px;
+}
+
+.training-table td strong {
+  display: block;
+  font-size: 13px;
+}
+
+.training-table td em {
+  color: var(--muted);
+  font-style: normal;
+  font-size: 11px;
+}
+
+.training-table td small {
+  display: block;
+  font-size: 10px;
+}
+
+.training-table tr.is-selected td {
+  background: var(--you);
+}
+
+.club-banner--overview .btn {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.coach-brief {
+  margin-top: 10px;
+}
+
+.attr-lock {
+  color: var(--muted);
+  font-style: normal;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .player-card {
@@ -1245,5 +1438,62 @@ html.native-app .device {
 .shot-map__legend {
   margin: 8px 0 0;
   font-size: 12px;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0;
+}
+
+.field span {
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.field input,
+.field select,
+.field textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  background: #0e1624;
+  color: var(--ink);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font: inherit;
+}
+
+.field textarea {
+  resize: vertical;
+  min-height: 72px;
+}
+
+.invite-code {
+  font-size: 32px;
+  letter-spacing: 0.18em;
+  margin: 0 0 8px;
+}
+
+.lobby-seat {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.lobby-seat em {
+  display: block;
+  color: var(--muted);
+  font-style: normal;
+  font-size: 13px;
+}
+
+.hint--warn {
+  color: #f0b429;
+}
+
+.hint--tight {
+  margin-top: 8px;
 }
 

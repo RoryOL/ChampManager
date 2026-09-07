@@ -18,6 +18,8 @@ type CoachInput = {
   players: PlayerMatchStats[];
   events: MatchEvent[];
   climate?: MatchClimate;
+  homeTeamwork?: number;
+  awayTeamwork?: number;
 };
 
 function total(score: { goals: number; points: number }): number {
@@ -164,5 +166,20 @@ export function buildCoachReport(input: CoachInput): string[] {
     notes.push(`${standout.name} carried it (${standout.rating}). Keep him on the ball.`);
   }
 
-  return notes.slice(0, 6);
+  const ourTeamwork = focused ? (usIsHome ? input.homeTeamwork : input.awayTeamwork) : input.homeTeamwork;
+  if (typeof ourTeamwork === "number") {
+    if (ourTeamwork >= 16 && us.passesCompleted >= them.passesCompleted) {
+      notes.push(
+        `Teamwork is showing (${Math.round(ourTeamwork)}). The same lads in the same positions are finding each other — keep the spine together.`,
+      );
+    } else if (ourTeamwork <= 11 && us.passesCompleted + 4 < them.passesCompleted) {
+      notes.push(
+        `Teamwork is still raw (${Math.round(ourTeamwork)}). A challenge match and another championship day in the same shape will knit the passing.`,
+      );
+    } else if (ourTeamwork >= 13) {
+      notes.push(`Teamwork sits at ${Math.round(ourTeamwork)}. Stay loyal to the fifteen that has been playing together.`);
+    }
+  }
+
+  return notes.slice(0, 7);
 }

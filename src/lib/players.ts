@@ -12,6 +12,7 @@ import type {
 import { profileFor } from "../data/playerProfiles";
 import {
   ADJACENT_LINES,
+  ATTRIBUTE_KEYS,
   POSITION_LINES,
   XV_SLOTS,
   clampDial,
@@ -25,8 +26,10 @@ const STAR_BIAS: Record<string, Partial<Record<AttributeKey, number>>> = {
     frees: 19,
     vision: 19,
     strikingDistance: 18,
+    shooting: 18,
     passing: 18,
     composure: 18,
+    teamwork: 17,
     firstTouch: 18,
     underPressure: 18,
     sidelines: 16,
@@ -37,17 +40,21 @@ const STAR_BIAS: Record<string, Partial<Record<AttributeKey, number>>> = {
     firstTouch: 18,
     offTheBall: 18,
     composure: 17,
+    shooting: 17,
     strikingDistance: 16,
+    teamwork: 16,
   },
   "Peter Duggan": {
     frees: 18,
     strikingDistance: 18,
+    shooting: 17,
     aerialReach: 18,
     highFielding: 16,
     composure: 16,
   },
   "John Conlon": {
     workrate: 18,
+    teamwork: 17,
     highFielding: 17,
     underPressure: 17,
     strength: 16,
@@ -55,6 +62,7 @@ const STAR_BIAS: Record<string, Partial<Record<AttributeKey, number>>> = {
   },
   "Mark Rodgers": {
     offTheBall: 17,
+    shooting: 17,
     strikingDistance: 17,
     frees: 16,
     composure: 16,
@@ -114,6 +122,7 @@ function lineBias(line: PositionLine, key: AttributeKey): number {
       highFielding: 2,
       aerialReach: 2,
       composure: 2,
+      teamwork: 1,
       speed: -2,
       offTheBall: -3,
       frees: -4,
@@ -124,6 +133,7 @@ function lineBias(line: PositionLine, key: AttributeKey): number {
       manMarking: 3,
       aerialReach: 2,
       hooking: 2,
+      teamwork: 1,
       speed: -1,
       frees: -3,
       strikingDistance: -2,
@@ -134,12 +144,15 @@ function lineBias(line: PositionLine, key: AttributeKey): number {
       aerialReach: 1,
       highFielding: 1,
       strikingDistance: 1,
+      shooting: 1,
       sidelines: 1,
+      teamwork: 1,
       manMarking: 1,
     },
     MF: {
       stamina: 3,
       workrate: 2,
+      teamwork: 2,
       highFielding: 2,
       speed: 1,
       passing: 1,
@@ -150,7 +163,9 @@ function lineBias(line: PositionLine, key: AttributeKey): number {
       vision: 2,
       passing: 2,
       strikingDistance: 2,
+      shooting: 2,
       offTheBall: 1,
+      teamwork: 1,
       frees: 1,
       sidelines: 1,
     },
@@ -158,6 +173,7 @@ function lineBias(line: PositionLine, key: AttributeKey): number {
       offTheBall: 3,
       composure: 2,
       strikingDistance: 2,
+      shooting: 3,
       frees: 2,
       firstTouch: 1,
       manMarking: -2,
@@ -206,27 +222,7 @@ export function ratePlayer(teamId: string, name: string, index: number, gameSeed
   const floor = profile.grade === "A" ? profile.overallMin : 0;
   const base = target;
   const spread = profile.grade === "D" ? 6 : profile.grade === "A" ? 3 : 4;
-  const keys: AttributeKey[] = [
-    "speed",
-    "aerialReach",
-    "stamina",
-    "strength",
-    "acceleration",
-    "firstTouch",
-    "highFielding",
-    "strikingDistance",
-    "vision",
-    "hooking",
-    "passing",
-    "offTheBall",
-    "manMarking",
-    "workrate",
-    "underPressure",
-    "composure",
-    "frees",
-    "sidelines",
-    "puckoutReach",
-  ];
+  const keys: AttributeKey[] = ATTRIBUTE_KEYS;
   const ratings = {} as Record<AttributeKey, number>;
   keys.forEach((key, i) => {
     ratings[key] = rollStat(seed, 3 + i * 2, base, position, key, floor, spread);
@@ -283,14 +279,16 @@ export function computeOverall(
         ratings.firstTouch +
         ratings.highFielding +
         ratings.strikingDistance +
+        ratings.shooting +
         ratings.vision +
         ratings.passing +
         ratings.offTheBall +
         ratings.workrate +
         ratings.composure +
+        ratings.teamwork +
         ratings.frees * 1.15 +
         familiarity[position]) /
-        13,
+        15,
     ),
   );
 }
@@ -330,6 +328,30 @@ export function sheetPlayers(teamId: string, sheet: TeamSheet, gameSeed?: number
   return sheet.starters
     .map((name) => byName.get(name))
     .filter((player): player is RatedPlayer => Boolean(player));
+}
+
+/** Championship shirt for this match: 1–15 in position order, 16+ on the bench. */
+export function matchShirtNumber(sheet: TeamSheet, name: string): number | undefined {
+  const start = sheet.starters.indexOf(name);
+  if (start >= 0) return start + 1;
+  const bench = sheet.subs.indexOf(name);
+  if (bench >= 0) return 16 + bench;
+  return undefined;
+}
+
+export function matchOrderIndex(sheet: TeamSheet, name: string): number {
+  const start = sheet.starters.indexOf(name);
+  if (start >= 0) return start;
+  const bench = sheet.subs.indexOf(name);
+  if (bench >= 0) return 15 + bench;
+  return 1000;
+}
+
+export function matchSlot(sheet: TeamSheet, name: string): PositionLine | "SUB" | undefined {
+  const start = sheet.starters.indexOf(name);
+  if (start >= 0) return XV_SLOTS[start] ?? "MF";
+  if (sheet.subs.includes(name)) return "SUB";
+  return undefined;
 }
 
 export function swapPlayersInSheet(sheet: TeamSheet, first: string, second: string): TeamSheet {
@@ -376,7 +398,7 @@ export type SideProfile = {
   aerial: number;
   running: number;
   hooking: number;
-  deadBall: number;
+  strength: number;
   halfBackHands: number;
   puckout: number;
   pressure: number;
@@ -454,8 +476,8 @@ export function sideProfile(
 
   let attack =
     average([
-      ...forwards.map((i) => scaled(i, ["strikingDistance", "offTheBall", "composure", "firstTouch", "frees"])),
-      ...mids.map((i) => scaled(i, ["strikingDistance", "vision", "passing", "workrate"])),
+      ...forwards.map((i) => scaled(i, ["shooting", "strikingDistance", "offTheBall", "composure", "firstTouch"])),
+      ...mids.map((i) => scaled(i, ["strikingDistance", "vision", "passing", "workrate", "teamwork"])),
     ]) || 12;
   let defence =
     average(backs.map((i) => scaled(i, ["hooking", "manMarking", "strength", "highFielding", "aerialReach"]))) ||
@@ -465,10 +487,11 @@ export function sideProfile(
   let running =
     average(
       [...mids, ...forwards].map((i) =>
-        scaled(i, ["speed", "acceleration", "firstTouch", "passing", "vision", "offTheBall"]),
+        scaled(i, ["speed", "acceleration", "firstTouch", "passing", "vision", "offTheBall", "teamwork"]),
       ),
     ) || 12;
-  let hooking = average(backs.map((i) => scaled(i, ["hooking", "strength", "workrate"]))) || 12;
+  let hooking = average(backs.map((i) => scaled(i, ["hooking", "workrate"]))) || 12;
+  let strength = average([...backs, ...mids].map((i) => scaled(i, ["strength"]))) || 12;
   let halfBackHands =
     average(halfBacks.map((i) => scaled(i, ["firstTouch", "passing", "vision", "underPressure"]))) || 12;
   const keeper = xv[0];
@@ -479,13 +502,6 @@ export function sideProfile(
   const longFreeTaker = pickNamedOrSpecialist(xv, tactics.longFreeTaker, "frees", condition);
   const shortFreeTaker = pickNamedOrSpecialist(xv, tactics.shortFreeTaker, "frees", condition);
   const sidelineTaker = pickNamedOrSpecialist(xv, tactics.sidelineTaker, "sidelines", condition);
-  const deadBallTaker = longFreeTaker ?? shortFreeTaker;
-  const deadBall = deadBallTaker
-    ? (matchStat(deadBallTaker.ratings.frees, conditionFor(deadBallTaker.name, condition), "frees") * 1.2 +
-        matchStat(deadBallTaker.ratings.composure, conditionFor(deadBallTaker.name, condition), "composure") +
-        matchStat(deadBallTaker.ratings.underPressure, conditionFor(deadBallTaker.name, condition), "underPressure")) /
-      3.2
-    : 12;
   const pressure =
     average(xv.map((player) => matchStat(player.ratings.underPressure, conditionFor(player.name, condition), "underPressure"))) ||
     12;
@@ -510,6 +526,7 @@ export function sideProfile(
   const physical = clampDial(tactics.aggression ?? 46) / 100;
   const press = clampDial(tactics.pressure ?? 48) / 100;
   hooking += physical * 2.4 + press * 0.9;
+  strength += physical * 1.1;
   defence += physical * 0.9 + press * 0.35;
 
   if (climate?.sky === "wet") {
@@ -531,7 +548,7 @@ export function sideProfile(
     aerial,
     running,
     hooking,
-    deadBall,
+    strength,
     halfBackHands,
     puckout,
     pressure,
@@ -550,6 +567,21 @@ export function sideStrength(
 ): { attack: number; defence: number } {
   const profile = sideProfile(teamId, sheet, tactics, {}, gameSeed);
   return { attack: profile.attack, defence: profile.defence };
+}
+
+export function sideTeamwork(
+  teamId: string,
+  sheet: TeamSheet,
+  condition: Record<string, PlayerCondition> = {},
+  gameSeed?: number,
+): number {
+  const xv = sheetPlayers(teamId, sheet, gameSeed);
+  if (xv.length === 0) return 12;
+  const total = xv.reduce(
+    (sum, player) => sum + matchStat(player.ratings.teamwork, conditionFor(player.name, condition), "teamwork"),
+    0,
+  );
+  return Math.round((total / xv.length) * 10) / 10;
 }
 
 export function clubTactics(teamId: string): Tactics {

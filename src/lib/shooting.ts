@@ -24,12 +24,14 @@ export function openPlayConversion(options: {
   strikingDistance: number;
   composure: number;
   shooting: number;
+  finishing?: number;
   distanceM: number;
   withWind: number;
   crossWind: number;
   wet: boolean;
 }): number {
-  const quality = options.strikingDistance * 0.55 + options.composure * 0.45;
+  const finishing = options.finishing ?? options.strikingDistance;
+  const quality = options.strikingDistance * 0.28 + finishing * 0.37 + options.composure * 0.35;
   const qualityTerm = (quality - 12) * 0.022;
   const certaintyTerm = (clampDial(options.shooting) / 100 - 0.5) * 0.24;
   const distanceTerm = (45 - options.distanceM) * 0.004;

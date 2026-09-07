@@ -25,6 +25,7 @@ export const NEWS_KIND_LABEL: Record<NewsKind, string> = {
   injury: "Medical",
   training: "Training",
   recovery: "Medical",
+  briefing: "Coach",
 };
 
 const AMBITION_LABEL: Record<AmbitionTarget, string> = {
@@ -403,7 +404,8 @@ export function migrateNewsItem(raw: unknown): NewsItem | null {
     item.kind === "press" ||
     item.kind === "injury" ||
     item.kind === "training" ||
-    item.kind === "recovery"
+    item.kind === "recovery" ||
+    item.kind === "briefing"
       ? item.kind
       : item.matchId
         ? "match"

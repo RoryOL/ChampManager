@@ -23,6 +23,21 @@ export function nextBatch(championship: Championship, clubId: string): MatchBatc
   return { label: batchLabel(anchor), matches, userMatch };
 }
 
+/** Next championship weekend in calendar order, not anchored on one club. */
+export function nextOpenBatch(championship: Championship, clubId?: string): MatchBatch | null {
+  const remaining = championship.matches.filter((match) => !matchPlayed(match));
+  if (remaining.length === 0) return null;
+  const anchor = remaining[0];
+  const matches = remaining.filter((match) => sameBatch(anchor, match));
+  const userMatch = clubId
+    ? (matches.find((match) => {
+        const { homeId, awayId } = resolveMatchSides(championship, match);
+        return homeId === clubId || awayId === clubId;
+      }) ?? null)
+    : null;
+  return { label: batchLabel(anchor), matches, userMatch };
+}
+
 function sameBatch(anchor: Match, match: Match): boolean {
   if (anchor.stage === "group") {
     return match.stage === "group" && match.round === anchor.round;

@@ -41,7 +41,7 @@ export const ADJACENT_LINES: Record<PositionLine, PositionLine[]> = {
 export type AttributeKey = Exclude<keyof PlayerRatings, "familiarity" | "overall">;
 
 export type AttributeGroup = {
-  id: "physical" | "iq" | "mentality" | "setPieces";
+  id: "physical" | "iq" | "mentality" | "setPieces" | "team";
   label: string;
   keys: AttributeKey[];
 };
@@ -59,6 +59,7 @@ export const ATTRIBUTE_GROUPS: AttributeGroup[] = [
       "firstTouch",
       "highFielding",
       "strikingDistance",
+      "shooting",
       "vision",
       "hooking",
       "passing",
@@ -72,11 +73,18 @@ export const ATTRIBUTE_GROUPS: AttributeGroup[] = [
     keys: ["workrate", "underPressure", "composure"],
   },
   {
+    id: "team",
+    label: "Team",
+    keys: ["teamwork"],
+  },
+  {
     id: "setPieces",
     label: "Set pieces",
     keys: ["frees", "sidelines", "puckoutReach"],
   },
 ];
+
+export const MENTAL_KEYS: AttributeKey[] = ["workrate", "underPressure", "composure"];
 
 export const ATTRIBUTE_KEYS: AttributeKey[] = ATTRIBUTE_GROUPS.flatMap((group) => group.keys);
 
@@ -89,14 +97,16 @@ export const ATTRIBUTE_LABELS: Record<AttributeKey, string> = {
   firstTouch: "First touch",
   highFielding: "High fielding",
   strikingDistance: "Striking from distance",
+  shooting: "Shooting",
   vision: "Vision",
-  hooking: "Hooking / blocking",
+  hooking: "Tackling / hooking",
   passing: "Passing",
   offTheBall: "Off the ball",
   manMarking: "Man marking",
   workrate: "Workrate",
   underPressure: "Ability under pressure",
   composure: "Composure",
+  teamwork: "Teamwork",
   frees: "Frees",
   sidelines: "Sidelines",
   puckoutReach: "Puck-out reach",

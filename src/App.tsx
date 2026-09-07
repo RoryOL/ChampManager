@@ -6,8 +6,10 @@ import { teamById } from "./lib/resolve";
 import { compactName } from "./lib/display";
 import { ClubBadge } from "./components/ClubBadge";
 import { ClubSelectScreen } from "./screens/ClubSelectScreen";
+import { LobbyScreen } from "./screens/LobbyScreen";
 import { HomeScreen } from "./screens/HomeScreen";
 import { SquadScreen } from "./screens/SquadScreen";
+import { TrainingScreen } from "./screens/TrainingScreen";
 import { TacticsScreen } from "./screens/TacticsScreen";
 import { FixturesScreen } from "./screens/FixturesScreen";
 import { MatchDetailScreen } from "./screens/MatchDetailScreen";
@@ -30,15 +32,42 @@ export default function App() {
     setPage("fixtures");
   };
   const selectedMatch = game.championship.matches.find((match) => match.id === fixtureId);
+  const managerLabel = game.activeSeat
+    ? `${game.activeSeat.name} · ${club ? compactName(club) : "Together"}`
+    : club
+      ? compactName(club)
+      : "Capture the Canon";
 
   return (
     <div className="device">
       <div className="status-bar" aria-hidden="true">
         <span>Capture the Canon</span>
-        <span>SHC 26</span>
+        <span>{game.campaign ? game.campaign.code : "SHC 26"}</span>
       </div>
 
-      {!game.save && <ClubSelectScreen onTakeCharge={game.takeCharge} />}
+      {!game.save && !game.campaign && (
+        <ClubSelectScreen
+          onTakeCharge={game.takeCharge}
+          onHost={game.hostCampaign}
+          onJoin={game.joinCampaign}
+          onPreviewTaken={game.previewJoinTaken}
+        />
+      )}
+
+      {game.campaign && game.campaign.phase === "lobby" && (
+        <LobbyScreen
+          campaign={game.campaign}
+          playerId={game.player.id}
+          localSeats={game.localSeats}
+          onStart={game.startLobby}
+          onLeave={game.leaveCampaign}
+          onWaitHours={game.changeWaitHours}
+          onAddManager={game.addHotseat}
+          onCopyCode={() => void game.copyCode()}
+          onCopySnapshot={() => void game.copySnapshot()}
+          roomStatus={game.roomStatus}
+        />
+      )}
 
       {game.save && game.live && (
         <MatchScreen
@@ -50,6 +79,9 @@ export default function App() {
           onClose={game.closeLive}
           onContinueSecond={game.continueSecondHalf}
           onSkipRest={game.skipRest}
+          waitingOn={game.waitingHalf.filter((seat) => seat.clubId !== game.save?.clubId)}
+          onPassDevice={game.passDevice}
+          passSeats={game.localSeats.filter((seat) => seat.playerId !== game.activeSeat?.playerId)}
         />
       )}
 
@@ -58,8 +90,8 @@ export default function App() {
           <header className="app-bar">
             <ClubBadge team={club} size="sm" variant="crest" />
             <div>
-              <p>Clare SHC 2026</p>
-              <h1>{club ? compactName(club) : "Capture the Canon"}</h1>
+              <p>{game.campaign ? `Together · ${game.campaign.code}` : "Clare SHC 2026"}</p>
+              <h1>{managerLabel}</h1>
             </div>
           </header>
           {page === "home" && (
@@ -68,10 +100,17 @@ export default function App() {
               save={game.save}
               nextMatch={game.nextUserMatch}
               batchLabel={game.batch?.label ?? null}
+              campaign={game.campaign}
+              playerId={game.activeSeat?.playerId ?? game.player.id}
+              localSeats={game.localSeats}
+              roomStatus={game.roomStatus}
               onGoToMatch={game.goToMatch}
               onSkip={game.skipMatch}
               onResign={game.resign}
-              onTrain={game.trainWeek}
+              onReady={game.confirmWeek}
+              onUnready={game.undoReady}
+              onForce={game.forceWeek}
+              onPass={game.passDevice}
               onReadNews={game.readNews}
               onOpenMatch={(matchId) => {
                 setFixtureId(matchId);
@@ -96,9 +135,23 @@ export default function App() {
               }}
               picked={game.picked}
               onTapPlayer={game.tapPlayer}
+              onSetPlan={(name, plan) => game.setPlans({ ...game.save!.plans, [name]: plan })}
+              onOpenTraining={() => setPage("training")}
             />
           )}
-          {page === "tactics" && <TacticsScreen save={game.save} onChange={game.setTactics} />}
+          {page === "training" && (
+            <TrainingScreen
+              save={game.save}
+              onBack={() => setPage("squad")}
+              onTrain={game.trainWeek}
+              onSetPlans={game.setPlans}
+              onSetIntensity={game.setIntensity}
+              onSetWeekShape={game.setWeekShape}
+            />
+          )}
+          {page === "tactics" && (
+            <TacticsScreen save={game.save} onChange={game.setTactics} onSwap={game.swapPlayers} />
+          )}
           {page === "fixtures" && selectedMatch && game.save ? (
             <MatchDetailScreen
               championship={game.championship}

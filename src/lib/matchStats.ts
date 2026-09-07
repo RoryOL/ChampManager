@@ -11,7 +11,7 @@ import type {
 } from "../types";
 import { XV_SLOTS, type AttributeKey } from "./attributes";
 import { buildCoachReport } from "./coach";
-import { ratedSquad } from "./players";
+import { ratedSquad, sideTeamwork } from "./players";
 import { conditionFor, fitnessOf, matchFatigueDelta, matchRatings } from "./training";
 
 const STAT_FIELDS = [
@@ -25,6 +25,11 @@ const STAT_FIELDS = [
   "puckoutsWon",
   "tacklesAttempted",
   "tacklesWon",
+  "freesConceded",
+  "freesAttempted",
+  "freesScored",
+  "sixtyFivesAttempted",
+  "sixtyFivesScored",
   "minutes",
 ] as const;
 
@@ -44,6 +49,11 @@ function emptyPlayer(name: string, teamId: string, started: boolean): PlayerMatc
     puckoutsWon: 0,
     tacklesAttempted: 0,
     tacklesWon: 0,
+    freesConceded: 0,
+    freesAttempted: 0,
+    freesScored: 0,
+    sixtyFivesAttempted: 0,
+    sixtyFivesScored: 0,
     groundCovered: 0,
     fatigue: 0,
     fitness: 100,
@@ -76,6 +86,11 @@ export function emptyTeamStats(teamId: string): TeamMatchStats {
     puckoutsWon: 0,
     tacklesAttempted: 0,
     tacklesWon: 0,
+    freesConceded: 0,
+    freesAttempted: 0,
+    freesScored: 0,
+    sixtyFivesAttempted: 0,
+    sixtyFivesScored: 0,
     groundCovered: 0,
     fatigue: 0,
     fitness: 100,
@@ -98,6 +113,11 @@ export function sumTeamStats(teamId: string, players: PlayerMatchStats[], sequen
     stats.puckoutsWon += row.puckoutsWon;
     stats.tacklesAttempted += row.tacklesAttempted;
     stats.tacklesWon += row.tacklesWon;
+    stats.freesConceded = (stats.freesConceded ?? 0) + (row.freesConceded ?? 0);
+    stats.freesAttempted = (stats.freesAttempted ?? 0) + (row.freesAttempted ?? 0);
+    stats.freesScored = (stats.freesScored ?? 0) + (row.freesScored ?? 0);
+    stats.sixtyFivesAttempted = (stats.sixtyFivesAttempted ?? 0) + (row.sixtyFivesAttempted ?? 0);
+    stats.sixtyFivesScored = (stats.sixtyFivesScored ?? 0) + (row.sixtyFivesScored ?? 0);
     stats.groundCovered += row.groundCovered;
   }
   stats.groundCovered = Math.round(stats.groundCovered * 10) / 10;
@@ -315,9 +335,15 @@ export function seasonStatsFor(
     combined.scores += row.scores;
     combined.highFieldingAttempted += row.highFieldingAttempted;
     combined.highFieldingWon += row.highFieldingWon;
-    combined.puckoutsWon += row.puckoutsWon;
-    combined.tacklesAttempted += row.tacklesAttempted;
-    combined.tacklesWon += row.tacklesWon;
+    combined.puckoutsWon += row.puckoutsWon ?? 0;
+    combined.tacklesAttempted += row.tacklesAttempted ?? 0;
+    combined.tacklesWon += row.tacklesWon ?? 0;
+    combined.freesConceded = (combined.freesConceded ?? 0) + (row.freesConceded ?? 0);
+    combined.freesAttempted = (combined.freesAttempted ?? 0) + (row.freesAttempted ?? 0);
+    combined.freesScored = (combined.freesScored ?? 0) + (row.freesScored ?? 0);
+    combined.sixtyFivesAttempted =
+      (combined.sixtyFivesAttempted ?? 0) + (row.sixtyFivesAttempted ?? 0);
+    combined.sixtyFivesScored = (combined.sixtyFivesScored ?? 0) + (row.sixtyFivesScored ?? 0);
     combined.groundCovered += row.groundCovered;
     combined.fatigue = row.fatigue;
     combined.fitness = row.fitness ?? fitnessOf({ fatigue: row.fatigue, sharpness: 50 });
@@ -328,6 +354,25 @@ export function seasonStatsFor(
   combined.groundCovered = Math.round(combined.groundCovered * 10) / 10;
   combined.rating = matches > 0 ? Math.round((ratingTotal / matches) * 10) / 10 : 0;
   return combined;
+}
+
+export function lastMatchRating(
+  reports: Record<string, MatchReport>,
+  teamId: string,
+  name: string,
+  matchIds?: string[],
+): number | undefined {
+  const ids = matchIds ?? Object.keys(reports);
+  for (let i = ids.length - 1; i >= 0; i--) {
+    const row = reports[ids[i]]?.players.find((player) => player.teamId === teamId && player.name === name);
+    if (row) return row.rating;
+  }
+  return undefined;
+}
+
+export function formatMatchRating(value: number | undefined): string {
+  if (value === undefined || value <= 0) return "–";
+  return Number.isInteger(value) ? `${value}` : value.toFixed(1);
 }
 
 export function formatPair(made: number, attempted: number): string {
@@ -365,6 +410,8 @@ export function combineHalves(
     players: tallied.players,
     events,
     climate: first.climate,
+    homeTeamwork: sideTeamwork(second.homeId, second.homeSheet, {}, first.gameSeed ?? second.gameSeed),
+    awayTeamwork: sideTeamwork(second.awayId, second.awaySheet, {}, first.gameSeed ?? second.gameSeed),
   });
   return {
     ...second,
@@ -416,9 +463,11 @@ export const CHART_RATING_KEYS: AttributeKey[] = [
   "passing",
   "offTheBall",
   "manMarking",
+  "shooting",
   "workrate",
   "underPressure",
   "composure",
+  "teamwork",
   "frees",
   "sidelines",
   "puckoutReach",
@@ -438,9 +487,11 @@ export const CHART_RATING_SHORT: Record<AttributeKey, string> = {
   passing: "Pas",
   offTheBall: "Off",
   manMarking: "Mrk",
+  shooting: "Sht",
   workrate: "WR",
   underPressure: "Prs",
   composure: "Cmp",
+  teamwork: "Tm",
   frees: "Fr",
   sidelines: "SL",
   puckoutReach: "PO",

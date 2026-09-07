@@ -99,7 +99,7 @@ export type StandingRow = TeamStats & {
   status: "quarter-final" | "safe" | "relegation" | "pending";
 };
 
-export type PageId = "home" | "squad" | "tactics" | "fixtures" | "table";
+export type PageId = "home" | "squad" | "tactics" | "fixtures" | "table" | "training";
 
 export type PositionLine = "GK" | "FB" | "HB" | "MF" | "HF" | "FF";
 
@@ -132,6 +132,7 @@ export type PlayerRatings = {
   firstTouch: number;
   highFielding: number;
   strikingDistance: number;
+  shooting: number;
   vision: number;
   hooking: number;
   passing: number;
@@ -140,6 +141,7 @@ export type PlayerRatings = {
   workrate: number;
   underPressure: number;
   composure: number;
+  teamwork: number;
   frees: number;
   sidelines: number;
   puckoutReach: number;
@@ -175,11 +177,31 @@ export type PlayerCondition = {
   injury?: PlayerInjury;
 };
 
-export type TrainingFocus = "fitness" | "skills" | "setpieces" | "challenge" | "recovery";
+export type TrainingType = "defensive" | "attacking" | "tactics" | "physical" | "setpieces";
+
+export type TrainingMix = Record<TrainingType, number>;
+
+export type PlayerPlan = {
+  mix: TrainingMix;
+  recovery: boolean;
+};
+
+export type TrainingPlans = Record<string, PlayerPlan>;
+
+/** Week session: individual mixes, a challenge match, or a full recovery week. */
+export type WeekSession = "mixed" | "challenge" | "recovery";
+
+export type TrainingIntensity = "intense" | "balanced" | "light";
+
+/** Preseason week: two mixed sessions plus a challenge, or three mixed sessions. */
+export type WeekShape = "challenge" | "triple";
+
+/** @deprecated Use WeekSession. Kept so older saves/tests still type-check during migration. */
+export type TrainingFocus = WeekSession | "fitness" | "skills" | "setpieces";
 
 export type CalendarPhase = "preseason" | "season";
 
-export type NewsKind = "chairman" | "match" | "press" | "injury" | "training" | "recovery";
+export type NewsKind = "chairman" | "match" | "press" | "injury" | "training" | "recovery" | "briefing";
 
 export type NewsTone = "positive" | "negative" | "neutral";
 
@@ -236,6 +258,7 @@ export type MatchEventKind =
   | "turnover"
   | "coach"
   | "injury"
+  | "sub"
   | "half"
   | "full";
 
@@ -253,6 +276,11 @@ export type StatCredit = {
   puckoutsWon?: number;
   tacklesAttempted?: number;
   tacklesWon?: number;
+  freesConceded?: number;
+  freesAttempted?: number;
+  freesScored?: number;
+  sixtyFivesAttempted?: number;
+  sixtyFivesScored?: number;
   minutes?: number;
 };
 
@@ -281,6 +309,11 @@ export type PlayerMatchStats = {
   puckoutsWon: number;
   tacklesAttempted: number;
   tacklesWon: number;
+  freesConceded?: number;
+  freesAttempted?: number;
+  freesScored?: number;
+  sixtyFivesAttempted?: number;
+  sixtyFivesScored?: number;
   groundCovered: number;
   fatigue: number;
   fitness: number;
@@ -301,6 +334,11 @@ export type TeamMatchStats = {
   puckoutsWon: number;
   tacklesAttempted: number;
   tacklesWon: number;
+  freesConceded?: number;
+  freesAttempted?: number;
+  freesScored?: number;
+  sixtyFivesAttempted?: number;
+  sixtyFivesScored?: number;
   groundCovered: number;
   fatigue: number;
   fitness: number;
@@ -352,7 +390,7 @@ export type TeamSheet = {
 };
 
 export type GameSave = {
-  version: 5;
+  version: 7;
   clubId: string;
   seed: number;
   tactics: Tactics;
@@ -365,6 +403,76 @@ export type GameSave = {
   trainingDue: boolean;
   reports: Record<string, MatchReport>;
   ambition: AmbitionTarget;
+  plans: TrainingPlans;
+  lastSheet?: TeamSheet;
+  intensity: TrainingIntensity;
+  weekShape: WeekShape;
+  sessionsDone: number;
+  trainingDeltas: Record<string, AttributeBoosts>;
 };
 
-export type LivePhase = "first" | "half-time" | "second" | "finished";
+export type LivePhase = "first" | "half-time" | "half-wait" | "second" | "finished";
+
+export type WaitHours = 0 | 1 | 6 | 12 | 24 | 72 | 168;
+
+export type Seat = {
+  playerId: string;
+  name: string;
+  clubId: string;
+};
+
+export type ClubRuntime = {
+  tactics: Tactics;
+  sheet: TeamSheet;
+  condition: Record<string, PlayerCondition>;
+  inbox: NewsItem[];
+  trainingDue: boolean;
+  plans: TrainingPlans;
+  lastSheet?: TeamSheet;
+  intensity: TrainingIntensity;
+  weekShape: WeekShape;
+  sessionsDone: number;
+  trainingDeltas: Record<string, AttributeBoosts>;
+};
+
+export type HalfPlan = {
+  tactics: Tactics;
+  sheet: TeamSheet;
+  submittedAt: number;
+};
+
+export type MatchLive = {
+  matchId: string;
+  first: SimulatedMatch;
+  homeSecond?: HalfPlan;
+  awaySecond?: HalfPlan;
+  combined?: SimulatedMatch;
+  injuries?: Record<string, import("./lib/injuries").RolledInjury[]>;
+};
+
+export type WeekState = {
+  locked: boolean;
+  deadlineAt: number | null;
+  ready: Record<string, { at: number }>;
+  lives: Record<string, MatchLive>;
+  batchLabel?: string;
+  batchMatchIds?: string[];
+};
+
+export type Campaign = {
+  version: 1;
+  id: string;
+  code: string;
+  revision: number;
+  seed: number;
+  hostPlayerId: string;
+  waitHours: WaitHours;
+  createdAt: number;
+  seats: Seat[];
+  phase: "lobby" | "preseason" | "season";
+  preseasonWeek: number;
+  matches: { id: string; homeScore: Score | null; awayScore: Score | null }[];
+  reports: Record<string, MatchReport>;
+  clubs: Record<string, ClubRuntime>;
+  week: WeekState;
+};

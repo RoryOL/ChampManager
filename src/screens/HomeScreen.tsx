@@ -1,11 +1,13 @@
 import { useState } from "react";
-import type { Championship, GameSave, Match, NewsItem, TrainingFocus } from "../types";
+import type { Campaign, Championship, GameSave, Match, NewsItem, Seat } from "../types";
+import { CampaignWeekCard } from "../components/CampaignWeekCard";
 import { ClubBadge } from "../components/ClubBadge";
 import { compactName, sideLabel } from "../lib/display";
 import { NEWS_KIND_LABEL } from "../lib/news";
 import { resolveMatchSides, teamById, teamGroup } from "../lib/resolve";
 import { formatDate, stageLabel } from "../lib/scoring";
-import { averageFitness, averageMatchOverall, averageSharpness, PRESEASON_WEEKS, TRAINING_OPTIONS } from "../lib/training";
+import { buildPreMatchBriefing } from "../lib/briefing";
+import { averageFitness, averageMatchOverall, averageSharpness, PRESEASON_WEEKS, sessionsPerWeek } from "../lib/training";
 import { ratedSquad } from "../lib/players";
 import { rollClimate, climateSummary } from "../lib/weather";
 
@@ -14,10 +16,17 @@ type Props = {
   save: GameSave;
   nextMatch: Match | null;
   batchLabel: string | null;
+  campaign?: Campaign | null;
+  playerId?: string;
+  localSeats?: Seat[];
+  roomStatus?: "offline" | "connecting" | "live";
   onGoToMatch: () => void;
   onSkip: () => void;
   onResign: () => void;
-  onTrain: (focus: TrainingFocus) => void;
+  onReady?: () => void;
+  onUnready?: () => void;
+  onForce?: () => void;
+  onPass?: (playerId: string) => void;
   onReadNews: (id: string) => void;
   onOpenMatch: (matchId: string) => void;
   onOpenPlayer: (name: string) => void;
@@ -71,10 +80,17 @@ export function HomeScreen({
   save,
   nextMatch,
   batchLabel,
+  campaign,
+  playerId,
+  localSeats = [],
+  roomStatus,
   onGoToMatch,
   onSkip,
   onResign,
-  onTrain,
+  onReady,
+  onUnready,
+  onForce,
+  onPass,
   onReadNews,
   onOpenMatch,
   onOpenPlayer,
@@ -82,7 +98,6 @@ export function HomeScreen({
   const club = teamById(championship, save.clubId);
   const group = teamGroup(championship, save.clubId);
   const sides = nextMatch ? resolveMatchSides(championship, nextMatch) : null;
-  const [focus, setFocus] = useState<TrainingFocus>("skills");
   const [openId, setOpenId] = useState<string | null>(null);
   const squad = ratedSquad(save.clubId, save.seed);
   const names = squad.map((player) => player.name);
@@ -93,6 +108,8 @@ export function HomeScreen({
   const formDelta = Math.round((form.match - form.ability) * 10) / 10;
   const opened = save.inbox.find((item) => item.id === openId) ?? null;
   const unread = save.inbox.filter((item) => !item.read).length;
+  const total = sessionsPerWeek(save.phase);
+  const sessionsDone = save.sessionsDone ?? 0;
 
   const openNews = (item: NewsItem) => {
     setOpenId(item.id);
@@ -130,7 +147,7 @@ export function HomeScreen({
           {club ? <span className="colour-label">{club.colours.label}</span> : null}
         </div>
         <button type="button" className="text-btn" onClick={onResign}>
-          Resign
+          {campaign ? "Leave" : "Resign"}
         </button>
       </section>
 
@@ -147,38 +164,28 @@ export function HomeScreen({
           {formDelta !== 0 ? ` (${formDelta > 0 ? "+" : ""}${formDelta})` : ""} · ability {form.ability}
         </p>
         {save.trainingDue ? (
-          <>
-            <div className="choice-stack">
-              {TRAINING_OPTIONS.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  className={focus === option.value ? "is-active" : ""}
-                  onClick={() => setFocus(option.value)}
-                >
-                  <strong>{option.title}</strong>
-                  <span>{option.copy}</span>
-                </button>
-              ))}
-            </div>
-            <div className="row-actions">
-              <button type="button" className="btn" onClick={() => onTrain(focus)}>
-                {preseason ? `Train week ${save.preseasonWeek}` : "Run midweek session"}
-              </button>
-            </div>
-          </>
+          <p className="hint hint--tight">
+            Training is due
+            {preseason ? ` · session ${sessionsDone + 1} of ${total}` : ""}. Open it from the Squad tab.
+          </p>
+        ) : campaign && preseason ? (
+          <p className="tactic-copy">Your week is in. Waiting on the other managers before it turns.</p>
         ) : null}
-        {!preseason && nextMatch && sides ? (
+        {!preseason && nextMatch && sides && !(campaign && !campaign.week.locked) ? (
           <div className="row-actions">
             <button type="button" className="btn" onClick={onGoToMatch}>
-              {sideLabel(championship, nextMatch.home)} v {sideLabel(championship, nextMatch.away)}
+              {campaign
+                ? "Watch first half"
+                : `${sideLabel(championship, nextMatch.home)} v ${sideLabel(championship, nextMatch.away)}`}
             </button>
-            <button type="button" className="btn btn--ghost" onClick={onSkip}>
-              Instant result
-            </button>
+            {campaign ? null : (
+              <button type="button" className="btn btn--ghost" onClick={onSkip}>
+                Instant result
+              </button>
+            )}
           </div>
         ) : null}
-        {!preseason && !nextMatch && batchLabel ? (
+        {!preseason && !nextMatch && batchLabel && !campaign ? (
           <div className="row-actions">
             <button type="button" className="btn" onClick={onSkip}>
               Simulate {batchLabel}
@@ -191,10 +198,41 @@ export function HomeScreen({
             {nextMatch.venue ? ` · ${nextMatch.venue}` : ""} · {climateSummary(rollClimate(save.seed, nextMatch.id))}
           </p>
         ) : null}
+        {!preseason && nextMatch ? (
+          <div className="coach-brief">
+            <p className="kicker">Coach notes</p>
+            {buildPreMatchBriefing({
+              clubId: save.clubId,
+              match: nextMatch,
+              championship,
+              tactics: save.tactics,
+              sheet: save.sheet,
+              condition: save.condition,
+            }).notes.map((note) => (
+              <p key={note} className="hint hint--tight">
+                {note}
+              </p>
+            ))}
+          </div>
+        ) : null}
         {preseason && !save.trainingDue ? (
-          <p className="hint hint--tight">Round 1 waits after six weeks. Finish the session above when it is due.</p>
+          <p className="hint hint--tight">Round 1 waits after six weeks. Open training from Squad when the next week is due.</p>
         ) : null}
       </section>
+
+      {campaign && playerId && onReady && onUnready && onForce && onPass ? (
+        <CampaignWeekCard
+          campaign={campaign}
+          clubId={save.clubId}
+          playerId={playerId}
+          localSeats={localSeats}
+          roomStatus={roomStatus}
+          onReady={onReady}
+          onUnready={onUnready}
+          onForce={onForce}
+          onPass={onPass}
+        />
+      ) : null}
 
       <section>
         <h3 className="list-title">

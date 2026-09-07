@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { seedChampionship } from "./data/championship";
-import { applyInjury, injuryChance, rollInjuryWeeks, sitInjuredPlayers, tickInjuries } from "./lib/injuries";
+import { applyInjury, bestBenchForSlot, injuryChance, insertInjuryEvents, rollInjuryWeeks, sitInjuredPlayers, tickInjuries } from "./lib/injuries";
 import { applyNewsMood } from "./lib/mood";
 import {
   ambitionFor,
@@ -50,9 +50,12 @@ describe("injuries", () => {
     const fresh = injuryChance(kid, { fatigue: 0, sharpness: 70 }, "match");
     expect(veteran.age).toBeGreaterThan(kid.age);
     expect(tired).toBeGreaterThan(fresh);
-    expect(injuryChance(veteran, { fatigue: 82, sharpness: 30 }, "training", "challenge")).toBeGreaterThan(
-      injuryChance(veteran, { fatigue: 82, sharpness: 30 }, "training", "recovery"),
+    expect(injuryChance(veteran, { fatigue: 82, sharpness: 30 }, "training", "challenge", "intense")).toBeGreaterThan(
+      injuryChance(veteran, { fatigue: 82, sharpness: 30 }, "training", "recovery", "intense"),
     );
+    expect(injuryChance(veteran, { fatigue: 82, sharpness: 30 }, "training", "mixed", "balanced")).toBe(0);
+    expect(injuryChance(veteran, { fatigue: 82, sharpness: 30 }, "training", "mixed", "light")).toBe(0);
+    expect(injuryChance(veteran, { fatigue: 82, sharpness: 30 }, "training", "mixed", "intense")).toBeGreaterThan(0);
   });
 
   it("rolls absences between one week and the remaining season", () => {
@@ -79,6 +82,57 @@ describe("injuries", () => {
     const done = tickInjuries(mid.condition, squad);
     expect(done.recovered).toEqual([name]);
     expect(done.condition[name]?.injury).toBeUndefined();
+  });
+
+  it("brings on the best remaining sub for the injured starter's slot", () => {
+    const squad = ratedSquad("ballyea");
+    const sheet = defaultSheet("ballyea");
+    const gk = sheet.starters[0]!;
+    const best = bestBenchForSlot(sheet, squad, 0, new Set([gk]))!;
+    const other = sheet.subs.find((name) => name !== best)!;
+    const arranged = { starters: sheet.starters, subs: [other, ...sheet.subs.filter((name) => name !== other)] };
+    const injured = applyInjury({}, gk, {
+      weeksLeft: 3,
+      durationWeeks: 3,
+      ailment: "hamstring",
+      source: "match",
+    });
+    const next = sitInjuredPlayers(arranged, squad, injured);
+    expect(next.starters[0]).toBe(best);
+    expect(arranged.subs[0]).toBe(other);
+    expect(next.starters[0]).not.toBe(other);
+  });
+
+  it("inserts an immediate sub event when a starter goes down", () => {
+    const squad = ratedSquad("ballyea");
+    const sheet = defaultSheet("ballyea");
+    const outgoing = sheet.starters[0]!;
+    const incoming = bestBenchForSlot(sheet, squad, 0, new Set([outgoing]))!;
+    const sim = simulateMatch({
+      matchId: "g1-r1-a",
+      homeId: "ballyea",
+      awayId: "kilmaley",
+      homeSheet: sheet,
+      seed: 9,
+    });
+    const rolled = {
+      name: outgoing,
+      minute: 12,
+      injury: { weeksLeft: 3, durationWeeks: 3, ailment: "hamstring", source: "match" as const },
+      event: {
+        minute: 12,
+        teamId: "ballyea",
+        playerName: outgoing,
+        kind: "injury" as const,
+        text: `${outgoing} is in trouble.`,
+      },
+    };
+    const next = insertInjuryEvents(sim, [rolled], { clubId: "ballyea", squad, sheet });
+    const injuryAt = next.events.findIndex((event) => event.kind === "injury" && event.playerName === outgoing);
+    expect(injuryAt).toBeGreaterThanOrEqual(0);
+    expect(next.events[injuryAt + 1]?.kind).toBe("sub");
+    expect(next.events[injuryAt + 1]?.playerName).toBe(incoming);
+    expect(next.homeSheet.starters[0]).toBe(incoming);
   });
 });
 
@@ -150,7 +204,7 @@ describe("save news migration", () => {
       matches: [],
       inbox: [{ id: "old", title: "Welcome to Ballyea", body: "Preseason is underway.", date: "2026-06-12" }],
     });
-    expect(migrated?.version).toBe(5);
+    expect(migrated?.version).toBe(7);
     expect(migrated?.ambition).toBe(ambitionFor("ballyea").target);
     expect(migrated?.inbox[0]?.kind).toBe("training");
     expect(newSave("ballyea").ambition).toBe(ambitionFor("ballyea").target);

@@ -1,14 +1,15 @@
 import { useEffect, useRef } from "react";
-import type { GameSave, PlayerCondition, PlayerMatchStats, RatedPlayer, Team } from "../types";
+import type { GameSave, PlayerCondition, PlayerMatchStats, PlayerPlan, RatedPlayer, Team } from "../types";
 import { GRADE_LABEL } from "../data/playerProfiles";
 import { ClubBadge } from "../components/ClubBadge";
-import { ATTRIBUTE_GROUPS, ATTRIBUTE_KEYS, ATTRIBUTE_LABELS, LINE_LABELS, POSITION_LINES, type AttributeKey } from "../lib/attributes";
+import { TrainingMixEditor } from "../components/TrainingMixEditor";
+import { ATTRIBUTE_GROUPS, ATTRIBUTE_KEYS, ATTRIBUTE_LABELS, LINE_LABELS, MENTAL_KEYS, POSITION_LINES, type AttributeKey } from "../lib/attributes";
 import { compactName } from "../lib/display";
 import { formatPair, seasonStatsFor } from "../lib/matchStats";
 import { moodLabel, moodValue } from "../lib/mood";
 import { defaultSheet, designatedRoles, ratedSquad, sheetPlayers } from "../lib/players";
 import { FORMATION_ROWS } from "../lib/squads";
-import { boostTotal, conditionFor, fitnessOf, isOvertrained, matchRatings, matchStat } from "../lib/training";
+import { boostTotal, conditionFor, fitnessOf, isOvertrained, matchRatings, matchStat, planFor } from "../lib/training";
 import { injuryLine, isInjured } from "../lib/injuries";
 
 type Props = {
@@ -18,6 +19,8 @@ type Props = {
   onViewTeam: (teamId: string) => void;
   picked: string | null;
   onTapPlayer: (name: string) => void;
+  onSetPlan?: (name: string, plan: PlayerPlan) => void;
+  onOpenTraining?: () => void;
 };
 
 function roleTags(player: RatedPlayer, roles: ReturnType<typeof designatedRoles>, inXv: boolean): string[] {
@@ -46,11 +49,15 @@ function PlayerDetail({
   condition,
   showCondition,
   season,
+  plan,
+  onSetPlan,
 }: {
   player: RatedPlayer;
   condition?: PlayerCondition;
   showCondition: boolean;
   season: PlayerMatchStats;
+  plan?: PlayerPlan;
+  onSetPlan?: (plan: PlayerPlan) => void;
 }) {
   const match = showCondition && condition ? matchRatings(player, condition) : player.ratings;
   const overallDelta = match.overall - player.ratings.overall;
@@ -117,8 +124,16 @@ function PlayerDetail({
             <p className="hint hint--tight">
               Training can lift these numbers a little (up to +4). Younger players take the work better and get match
               fitness back quicker; veterans feel the legs longer. Green is the change from their natural rating.
+              Workrate, composure and ability under pressure do not change in training. Teamwork rises when the same
+              lads play together.
             </p>
           )}
+        </div>
+      ) : null}
+      {showCondition && plan && onSetPlan ? (
+        <div className="attr-group">
+          <h4>This week</h4>
+          <TrainingMixEditor plan={plan} onChange={onSetPlan} />
         </div>
       ) : null}
       {ATTRIBUTE_GROUPS.map((group) => (
@@ -127,9 +142,13 @@ function PlayerDetail({
           {group.keys.map((key: AttributeKey) => {
             const value = match[key];
             const delta = showCondition && condition ? matchStat(player.ratings[key], condition, key) - player.ratings[key] : 0;
+            const locked = MENTAL_KEYS.includes(key);
             return (
               <div key={key} className="attr-row">
-                <span>{ATTRIBUTE_LABELS[key]}</span>
+                <span>
+                  {ATTRIBUTE_LABELS[key]}
+                  {locked ? <em className="attr-lock"> natural</em> : ""}
+                </span>
                 <div className="attr-bar">
                   <i className={delta > 0 ? "is-up" : delta < 0 ? "is-down" : ""} style={{ width: `${(value / 20) * 100}%` }} />
                 </div>
@@ -150,6 +169,11 @@ function PlayerDetail({
             <li>Possessions {season.possessions} · passes {formatPair(season.passesCompleted, season.passesAttempted)}</li>
             <li>Shots {formatPair(season.scores, season.shots)} · high fielding {formatPair(season.highFieldingWon, season.highFieldingAttempted)}</li>
             <li>Puck-outs won {season.puckoutsWon} · tackles {formatPair(season.tacklesWon, season.tacklesAttempted)}</li>
+            <li>
+              Frees {formatPair(season.freesScored ?? 0, season.freesAttempted ?? 0)} · 65s{" "}
+              {formatPair(season.sixtyFivesScored ?? 0, season.sixtyFivesAttempted ?? 0)} · frees conceded{" "}
+              {season.freesConceded ?? 0}
+            </li>
             <li>Ground {season.groundCovered} km · fitness {season.fitness}</li>
           </ul>
         )}
@@ -169,7 +193,7 @@ function PlayerDetail({
   );
 }
 
-export function SquadScreen({ save, teams, viewTeamId, onViewTeam, picked, onTapPlayer }: Props) {
+export function SquadScreen({ save, teams, viewTeamId, onViewTeam, picked, onTapPlayer, onSetPlan, onOpenTraining }: Props) {
   const ownTeam = viewTeamId === save.clubId;
   const squad = ratedSquad(viewTeamId, save.seed);
   const byName = new Map(squad.map((player) => [player.name, player]));
@@ -231,6 +255,11 @@ export function SquadScreen({ save, teams, viewTeamId, onViewTeam, picked, onTap
             <h1>{compactName(viewed)}</h1>
             <span className="colour-label">{viewed.colours.label}</span>
           </div>
+          {ownTeam && onOpenTraining ? (
+            <button type="button" className="btn" onClick={onOpenTraining}>
+              Training
+            </button>
+          ) : null}
         </section>
       ) : null}
       <div className="mini-pitch">
@@ -299,6 +328,8 @@ export function SquadScreen({ save, teams, viewTeamId, onViewTeam, picked, onTap
                   condition={ownTeam ? conditionFor(selected.name, save.condition) : undefined}
                   showCondition={ownTeam}
                   season={seasonStatsFor(save.reports, viewTeamId, selected.name)}
+                  plan={ownTeam ? planFor(selected.name, save.plans, selected.position) : undefined}
+                  onSetPlan={ownTeam && onSetPlan ? (plan) => onSetPlan(selected.name, plan) : undefined}
                 />
               ) : null}
             </li>
