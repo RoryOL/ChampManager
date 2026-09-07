@@ -19,6 +19,7 @@ import {
   trainClub,
   unreadyClub,
   waitingOnSecondHalf,
+  withClubPlans,
   withClubSheet,
   withClubTactics,
 } from "../lib/multiplayer/campaign";
@@ -68,10 +69,12 @@ import {
 } from "../lib/news";
 import {
   applyMatchFatigue,
+  applyTeamwork,
   applyTraining,
   PRESEASON_DATES,
   PRESEASON_WEEKS,
 } from "../lib/training";
+import { ensureMatchBriefing } from "../lib/briefing";
 import {
   championshipFromSave,
   clearSave,
@@ -79,6 +82,7 @@ import {
   newSave,
   persistSave,
   withInbox,
+  withPlans,
   withSheet,
   withTactics,
   writeScores,
@@ -94,8 +98,9 @@ import type {
   SimulatedMatch,
   Tactics,
   TeamSheet,
-  TrainingFocus,
+  TrainingPlans,
   WaitHours,
+  WeekSession,
 } from "../types";
 
 export type LiveMatch = {
@@ -580,6 +585,8 @@ export function useGame() {
           result,
         ),
       };
+      const teamworked = applyTeamwork(next.condition, sheet, base.lastSheet, "competitive");
+      next = { ...next, condition: teamworked.condition, lastSheet: teamworked.lastSheet };
       for (const rolled of current.injuries) {
         next = { ...next, condition: applyInjury(next.condition, rolled.name, rolled.injury) };
       }
@@ -821,11 +828,23 @@ export function useGame() {
 
   const closeLive = useCallback(() => setLive(null), []);
 
+  const setPlans = useCallback(
+    (plans: TrainingPlans) => {
+      if (campaign && activeSeat) {
+        commitCampaign(withClubPlans(campaign, activeSeat.clubId, plans));
+        return;
+      }
+      if (!save) return;
+      commitSolo(withPlans(save, plans));
+    },
+    [activeSeat, campaign, commitCampaign, commitSolo, save],
+  );
+
   const trainWeek = useCallback(
-    (focus: TrainingFocus) => {
+    (session: WeekSession) => {
       if (!save || !save.trainingDue) return;
       if (campaign && activeSeat) {
-        commitCampaign(trainClub(campaign, activeSeat.clubId, focus));
+        commitCampaign(trainClub(campaign, activeSeat.clubId, session));
         return;
       }
       const squad = ratedSquad(save.clubId);
@@ -835,12 +854,12 @@ export function useGame() {
           ? (PRESEASON_DATES[save.preseasonWeek - 1] ?? PRESEASON_DATES.at(-1) ?? "")
           : championship.matches.find((match) => !matchPlayed(match))?.date ?? "";
       const ticked = tickInjuries(save.condition, squad);
-      const trained = applyTraining(squad, ticked.condition, focus);
+      const trained = applyTraining(squad, ticked.condition, session, save.plans, save.sheet, save.lastSheet);
       const weeks = remainingWeeks(save, championship, save.clubId);
       const freshInjuries = rollTrainingInjuries({
         squad,
         condition: trained.condition,
-        focus,
+        focus: session,
         seed: save.seed,
         weekKey: `${save.phase}-${save.preseasonWeek}-${date}`,
         remainingWeeks: weeks,
@@ -855,6 +874,7 @@ export function useGame() {
         condition,
         sheet,
         trainingDue: false,
+        lastSheet: trained.lastSheet ?? save.lastSheet,
       };
       const items: NewsItem[] = ticked.recovered.map((name) =>
         recoveryNews({ name, date, seed: save.seed }),
@@ -913,6 +933,7 @@ export function useGame() {
         );
       }
       next = withInbox(next, items);
+      next = ensureMatchBriefing(next, championshipFromSave(next));
       commitSolo(next);
     },
     [activeSeat, campaign, championship, commitCampaign, commitSolo, save],
@@ -1008,7 +1029,9 @@ export function useGame() {
     leaveCampaign,
     resign,
     setTactics,
+    setPlans,
     tapPlayer,
+    swapPlayers,
     setPicked,
     goToMatch,
     skipMatch,

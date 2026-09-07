@@ -52,6 +52,8 @@ function mergeClub(left?: ClubRuntime, right?: ClubRuntime, leftRev = 0, rightRe
     ...ahead,
     inbox: unionInbox(ahead.inbox, behind.inbox),
     trainingDue: left.trainingDue && right.trainingDue,
+    plans: ahead.plans ?? behind.plans ?? {},
+    lastSheet: ahead.lastSheet ?? behind.lastSheet,
   };
 }
 

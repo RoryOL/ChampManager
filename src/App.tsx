@@ -107,6 +107,7 @@ export default function App() {
               onSkip={game.skipMatch}
               onResign={game.resign}
               onTrain={game.trainWeek}
+              onSetPlans={game.setPlans}
               onReady={game.confirmWeek}
               onUnready={game.undoReady}
               onForce={game.forceWeek}
@@ -135,9 +136,12 @@ export default function App() {
               }}
               picked={game.picked}
               onTapPlayer={game.tapPlayer}
+              onSetPlan={(name, plan) => game.setPlans({ ...game.save!.plans, [name]: plan })}
             />
           )}
-          {page === "tactics" && <TacticsScreen save={game.save} onChange={game.setTactics} />}
+          {page === "tactics" && (
+            <TacticsScreen save={game.save} onChange={game.setTactics} onSwap={game.swapPlayers} />
+          )}
           {page === "fixtures" && selectedMatch && game.save ? (
             <MatchDetailScreen
               championship={game.championship}

@@ -13,7 +13,7 @@ import type {
 import { clampDial } from "./attributes";
 import { buildCoachReport, liveCoachTip } from "./coach";
 import { mergeCredits, passChain, deliverTo, statsFromEvents } from "./matchStats";
-import { clubTactics, defaultSheet, sheetPlayers, sideProfile, type SideProfile } from "./players";
+import { clubTactics, defaultSheet, sheetPlayers, sideProfile, sideTeamwork, type SideProfile } from "./players";
 import {
   conversionContext,
   goalChanceFromDistance,
@@ -214,6 +214,8 @@ export function simulateMatch(options: {
   const awayNames = awaySheet.starters;
   const homeXv = sheetPlayers(options.homeId, homeSheet);
   const awayXv = sheetPlayers(options.awayId, awaySheet);
+  const homeTeamwork = sideTeamwork(options.homeId, homeSheet, options.homeCondition);
+  const awayTeamwork = sideTeamwork(options.awayId, awaySheet, options.awayCondition);
   const playerOf = (teamId: string, name: string) =>
     (teamId === options.homeId ? homeXv : awayXv).find((player) => player.name === name);
   const periodMinutes = period === "first" ? 32 : period === "second" ? 30 : 62;
@@ -512,7 +514,7 @@ export function simulateMatch(options: {
       statRng,
       hops,
       carrier,
-      passCompleteChance(climate, direct),
+      passCompleteChance(climate, direct, teamId === options.homeId ? homeTeamwork : awayTeamwork),
     );
     if (!moved.retained) {
       push({
@@ -531,6 +533,7 @@ export function simulateMatch(options: {
     const shooter = playerOf(teamId, playerName);
     const striking = shooter?.ratings.strikingDistance ?? 12;
     const composure = shooter?.ratings.composure ?? 12;
+    const finishing = shooter?.ratings.shooting ?? striking;
     const distanceM0 = shotDistanceM(shooting, striking, random);
     let distanceM = distanceM0;
     if (direct > 0.62 && random() < 0.18 + (profile.aerial - 12) * 0.012) {
@@ -547,6 +550,7 @@ export function simulateMatch(options: {
       strikingDistance: striking,
       composure,
       shooting,
+      finishing,
       distanceM,
       withWind: wind.withWind,
       crossWind: wind.crossWind,
@@ -784,6 +788,8 @@ export function simulateMatch(options: {
     players: tallied.players,
     events,
     climate,
+    homeTeamwork,
+    awayTeamwork,
   });
 
   return {

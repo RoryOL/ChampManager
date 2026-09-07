@@ -132,6 +132,7 @@ export type PlayerRatings = {
   firstTouch: number;
   highFielding: number;
   strikingDistance: number;
+  shooting: number;
   vision: number;
   hooking: number;
   passing: number;
@@ -140,6 +141,7 @@ export type PlayerRatings = {
   workrate: number;
   underPressure: number;
   composure: number;
+  teamwork: number;
   frees: number;
   sidelines: number;
   puckoutReach: number;
@@ -175,11 +177,26 @@ export type PlayerCondition = {
   injury?: PlayerInjury;
 };
 
-export type TrainingFocus = "fitness" | "skills" | "setpieces" | "challenge" | "recovery";
+export type TrainingType = "defensive" | "attacking" | "tactics" | "physical" | "setpieces";
+
+export type TrainingMix = Record<TrainingType, number>;
+
+export type PlayerPlan = {
+  mix: TrainingMix;
+  recovery: boolean;
+};
+
+export type TrainingPlans = Record<string, PlayerPlan>;
+
+/** Week session: individual mixes, a challenge match, or a full recovery week. */
+export type WeekSession = "mixed" | "challenge" | "recovery";
+
+/** @deprecated Use WeekSession. Kept so older saves/tests still type-check during migration. */
+export type TrainingFocus = WeekSession | "fitness" | "skills" | "setpieces";
 
 export type CalendarPhase = "preseason" | "season";
 
-export type NewsKind = "chairman" | "match" | "press" | "injury" | "training" | "recovery";
+export type NewsKind = "chairman" | "match" | "press" | "injury" | "training" | "recovery" | "briefing";
 
 export type NewsTone = "positive" | "negative" | "neutral";
 
@@ -351,7 +368,7 @@ export type TeamSheet = {
 };
 
 export type GameSave = {
-  version: 5;
+  version: 6;
   clubId: string;
   seed: number;
   tactics: Tactics;
@@ -364,6 +381,8 @@ export type GameSave = {
   trainingDue: boolean;
   reports: Record<string, MatchReport>;
   ambition: AmbitionTarget;
+  plans: TrainingPlans;
+  lastSheet?: TeamSheet;
 };
 
 export type LivePhase = "first" | "half-time" | "half-wait" | "second" | "finished";
@@ -382,6 +401,8 @@ export type ClubRuntime = {
   condition: Record<string, PlayerCondition>;
   inbox: NewsItem[];
   trainingDue: boolean;
+  plans: TrainingPlans;
+  lastSheet?: TeamSheet;
 };
 
 export type HalfPlan = {

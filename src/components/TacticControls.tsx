@@ -33,9 +33,9 @@ function TakerSelect({
       <span>{label}</span>
       <select value={selected} onChange={(event) => onChange(event.target.value)}>
         <option value="">Best available</option>
-        {players.map((player) => (
+        {players.map((player, index) => (
           <option key={player.name} value={player.name}>
-            {player.number}. {player.name}
+            {index + 1}. {player.name}
           </option>
         ))}
       </select>

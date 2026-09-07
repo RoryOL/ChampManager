@@ -3,7 +3,7 @@ import { seedChampionship } from "./data/championship";
 import { ageResponse, GRADE_LABEL, profileFor } from "./data/playerProfiles";
 import { buildCoachReport } from "./lib/coach";
 import { migrateSave } from "./lib/gameStorage";
-import { seasonStatsFor } from "./lib/matchStats";
+import { seasonStatsFor, lastMatchRating } from "./lib/matchStats";
 import { applyMatchMood } from "./lib/mood";
 import { openPlayConversion } from "./lib/shooting";
 import { crossWind, parallelWind, passCompleteChance, rollClimate, withWindFor } from "./lib/weather";
@@ -18,12 +18,14 @@ import {
   tackleChance,
   yellowOnFoulChance,
 } from "./lib/matchEngine";
-import { clubTactics, DEFAULT_TACTICS, defaultSheet, playerAge, ratePlayer, ratedSquad, sideStrength } from "./lib/players";
+import { clubTactics, DEFAULT_TACTICS, defaultSheet, matchOrderIndex, matchShirtNumber, matchSlot, playerAge, ratePlayer, ratedSquad, sideStrength } from "./lib/players";
 import { nextBatch } from "./lib/schedule";
 import { matchPlayed } from "./lib/scoring";
 import { ATTRIBUTE_KEYS } from "./lib/attributes";
-import { applyMatchFatigue, applyTraining, averageMatchOverall, defaultCondition, fitnessOf, isOvertrained, matchRatings, matchStat } from "./lib/training";
+import { applyMatchFatigue, applyTeamwork, applyTraining, averageMatchOverall, defaultCondition, fitnessOf, isOvertrained, matchRatings, matchStat } from "./lib/training";
+import { buildPreMatchBriefing } from "./lib/briefing";
 import type { Tactics } from "./types";
+import { nextSwapPick } from "./components/SwapConfirmBar";
 
 describe("new game championship", () => {
   it("starts with every tie unplayed", () => {
@@ -55,6 +57,8 @@ describe("player ratings", () => {
     expect(kelly?.ratings.overall).toBeGreaterThanOrEqual(17);
     expect(kelly?.ratings.frees).toBeGreaterThanOrEqual(17);
     expect(kelly?.ratings.vision).toBeGreaterThanOrEqual(17);
+    expect(kelly?.ratings.shooting).toBeGreaterThanOrEqual(16);
+    expect(kelly?.ratings.teamwork).toBeGreaterThanOrEqual(12);
     expect(ratePlayer("ballyea", "Tony Kelly", 7).overall).toBe(
       ratePlayer("ballyea", "Tony Kelly", 7).overall,
     );
@@ -485,6 +489,19 @@ describe("match engine", () => {
     expect(certain).toBeGreaterThan(balanced + 0.08);
   });
 
+  it("converts more when the shooter has a finishing attribute", () => {
+    const base = {
+      strikingDistance: 12,
+      composure: 12,
+      shooting: 50,
+      distanceM: 45,
+      withWind: 0,
+      crossWind: 0,
+      wet: false,
+    };
+    expect(openPlayConversion({ ...base, finishing: 18 })).toBeGreaterThan(openPlayConversion({ ...base, finishing: 8 }));
+  });
+
   it("lets a shoot-on-sight side take more shots than a certain side", () => {
     const calm = { sky: "sunny" as const, windStrength: 8, windAngle: 10 };
     let speculativeShots = 0;
@@ -558,14 +575,24 @@ describe("weather", () => {
 });
 
 describe("training", () => {
+  const physicalPlan = {
+    mix: { defensive: 0, attacking: 0, tactics: 0, physical: 100, setpieces: 0 },
+    recovery: false,
+  };
+  const tacticsPlan = {
+    mix: { defensive: 0, attacking: 0, tactics: 100, physical: 0, setpieces: 0 },
+    recovery: false,
+  };
+
   it("raises sharpness and fatigue, and flags overtraining", () => {
     const squad = ratedSquad("ballyea").slice(0, 3);
     const start = Object.fromEntries(squad.map((player) => [player.name, defaultCondition()]));
-    const first = applyTraining(squad, start, "challenge");
+    const plans = Object.fromEntries(squad.map((player) => [player.name, physicalPlan]));
+    const first = applyTraining(squad, start, "challenge", {}, defaultSheet("ballyea"));
     const tired = Object.fromEntries(
       squad.map((player) => [player.name, { fatigue: 80, sharpness: 70 }]),
     );
-    const second = applyTraining(squad, tired, "fitness");
+    const second = applyTraining(squad, tired, "mixed", plans);
     expect(first.condition[squad[0].name]?.sharpness ?? 0).toBeGreaterThan(defaultCondition().sharpness);
     expect(second.overtrained.length).toBeGreaterThan(0);
     expect(isOvertrained(second.condition[squad[0].name] ?? defaultCondition())).toBe(true);
@@ -575,21 +602,35 @@ describe("training", () => {
     const squad = ratedSquad("ballyea").slice(0, 4);
     const player = squad[0];
     const start = Object.fromEntries(squad.map((item) => [item.name, defaultCondition()]));
-    const afterSkills = applyTraining(squad, start, "skills");
+    const afterSkills = applyTraining(squad, start, "mixed", { [player.name]: tacticsPlan });
     const form = afterSkills.condition[player.name] ?? defaultCondition();
     expect(matchStat(player.ratings.firstTouch, form, "firstTouch")).toBe(player.ratings.firstTouch + 1);
     expect(matchStat(player.ratings.passing, form, "passing")).toBe(player.ratings.passing + 1);
     expect(matchStat(player.ratings.speed, form, "speed")).toBe(player.ratings.speed);
+    expect(matchStat(player.ratings.workrate, form, "workrate")).toBe(player.ratings.workrate);
+    expect(matchStat(player.ratings.composure, form, "composure")).toBe(player.ratings.composure);
     expect(afterSkills.summary).toMatch(/first touch/i);
     expect(afterSkills.summary).toMatch(/player profile/i);
+  });
+
+  it("does not let training move mental attributes", () => {
+    const squad = ratedSquad("ballyea").slice(0, 3);
+    const player = squad[0]!;
+    const start = Object.fromEntries(squad.map((item) => [item.name, defaultCondition()]));
+    const after = applyTraining(squad, start, "challenge", {}, defaultSheet("ballyea"));
+    const form = after.condition[player.name] ?? defaultCondition();
+    expect(form.boosts?.workrate ?? 0).toBe(0);
+    expect(form.boosts?.composure ?? 0).toBe(0);
+    expect(form.boosts?.underPressure ?? 0).toBe(0);
   });
 
   it("caps match-form boosts and lets fatigue hide them until recovery", () => {
     const squad = ratedSquad("ballyea").slice(0, 2);
     const player = squad[0];
+    const plans = Object.fromEntries(squad.map((item) => [item.name, physicalPlan]));
     let condition = Object.fromEntries(squad.map((item) => [item.name, defaultCondition()]));
     for (let week = 0; week < 4; week += 1) {
-      condition = applyTraining(squad, condition, "fitness").condition;
+      condition = applyTraining(squad, condition, "mixed", plans).condition;
     }
     const heavy = condition[player.name] ?? defaultCondition();
     expect(heavy.boosts?.speed).toBe(4);
@@ -608,7 +649,11 @@ describe("training", () => {
       [sheedy!.name]: defaultCondition(),
       [conlon!.name]: defaultCondition(),
     };
-    const after = applyTraining([sheedy!, conlon!], start, "fitness").condition;
+    const plans = {
+      [sheedy!.name]: physicalPlan,
+      [conlon!.name]: physicalPlan,
+    };
+    const after = applyTraining([sheedy!, conlon!], start, "mixed", plans).condition;
     expect(after[sheedy!.name]?.fatigue ?? 0).toBeLessThan(after[conlon!.name]?.fatigue ?? 0);
     const tired = {
       [sheedy!.name]: { fatigue: 60, sharpness: 40 },
@@ -616,6 +661,23 @@ describe("training", () => {
     };
     const recovered = applyTraining([sheedy!, conlon!], tired, "recovery").condition;
     expect(recovered[sheedy!.name]?.fatigue ?? 0).toBeLessThan(recovered[conlon!.name]?.fatigue ?? 0);
+  });
+
+  it("raises teamwork when the same lads play the same positions", () => {
+    const squad = ratedSquad("ballyea");
+    const sheet = defaultSheet("ballyea");
+    const start = Object.fromEntries(squad.map((player) => [player.name, defaultCondition()]));
+    const first = applyTeamwork(start, sheet, undefined, "competitive");
+    const again = applyTeamwork(first.condition, sheet, first.lastSheet, "competitive");
+    const name = sheet.starters[0]!;
+    expect(first.condition[name]?.boosts?.teamwork).toBe(1);
+    expect(again.condition[name]?.boosts?.teamwork).toBe(3);
+    const moved = {
+      starters: [...sheet.starters.slice(1), sheet.starters[0]!],
+      subs: sheet.subs,
+    };
+    const shuffled = applyTeamwork(first.condition, moved, first.lastSheet, "competitive");
+    expect(shuffled.condition[name]?.boosts?.teamwork).toBe(2);
   });
 });
 
@@ -630,7 +692,7 @@ describe("save migration", () => {
       matches: [],
       inbox: [],
     });
-    expect(migrated?.version).toBe(5);
+    expect(migrated?.version).toBe(6);
     expect(migrated?.reports).toEqual({});
     expect(migrated?.tactics.mentality).toBe("attacking");
     expect(migrated?.tactics.build).toBeGreaterThan(60);
@@ -638,7 +700,28 @@ describe("save migration", () => {
     expect(migrated?.tactics.aggression).toBeGreaterThan(30);
     expect(migrated?.tactics.pressure).toBeGreaterThan(60);
     expect(migrated?.tactics.shooting).toBe(50);
+    expect(migrated?.plans).toEqual({});
     expect(migrated?.phase).toBe("season");
+  });
+});
+
+describe("pre-match briefing", () => {
+  it("names threats, how to nullify them, and a weakness to attack", () => {
+    const match = seedChampionship.matches.find((item) => item.id === "g1-r1-a");
+    expect(match).toBeTruthy();
+    const built = buildPreMatchBriefing({
+      clubId: "ballyea",
+      match: match!,
+      championship: seedChampionship,
+      tactics: DEFAULT_TACTICS,
+      sheet: defaultSheet("ballyea"),
+      condition: {},
+    });
+    const body = built.notes.join(" ");
+    expect(body).toMatch(/threat/i);
+    expect(body).toMatch(/nullify/i);
+    expect(body).toMatch(/weakness/i);
+    expect(body).toMatch(/teamwork/i);
   });
 });
 
@@ -730,6 +813,61 @@ describe("match intel", () => {
       events: [],
     });
     expect(notes.join(" ")).toMatch(/long ball|aerials|puck-outs/i);
+  });
+
+  it("comments on teamwork after a championship day", () => {
+    const notes = buildCoachReport({
+      clubId: "ballyea",
+      homeId: "ballyea",
+      awayId: "inagh-kilnamona",
+      homeName: "Ballyea",
+      awayName: "Inagh-Kilnamona",
+      homeTactics: DEFAULT_TACTICS,
+      awayTactics: DEFAULT_TACTICS,
+      homeStats: {
+        teamId: "ballyea",
+        possessions: 22,
+        passesAttempted: 40,
+        passesCompleted: 32,
+        shots: 10,
+        scores: 7,
+        highFieldingAttempted: 6,
+        highFieldingWon: 4,
+        puckoutsWon: 5,
+        tacklesAttempted: 8,
+        tacklesWon: 5,
+        groundCovered: 90,
+        fatigue: 36,
+        fitness: 64,
+        overall: 14,
+        rating: 7,
+      },
+      awayStats: {
+        teamId: "inagh-kilnamona",
+        possessions: 18,
+        passesAttempted: 30,
+        passesCompleted: 20,
+        shots: 8,
+        scores: 4,
+        highFieldingAttempted: 6,
+        highFieldingWon: 3,
+        puckoutsWon: 4,
+        tacklesAttempted: 7,
+        tacklesWon: 3,
+        groundCovered: 86,
+        fatigue: 40,
+        fitness: 60,
+        overall: 13,
+        rating: 6,
+      },
+      homeScore: { goals: 1, points: 14 },
+      awayScore: { goals: 0, points: 12 },
+      players: [],
+      events: [],
+      homeTeamwork: 17,
+      awayTeamwork: 11,
+    });
+    expect(notes.join(" ")).toMatch(/teamwork/i);
   });
 
   it("drops mood for players left on the bench after a loss", () => {
@@ -885,5 +1023,178 @@ describe("match fitness", () => {
     expect(hard[forward!.name]?.fatigue ?? 0).toBeGreaterThan(easy[forward!.name]?.fatigue ?? 0);
     expect(fitnessOf(hard[forward!.name] ?? defaultCondition())).toBeLessThan(fitnessOf(easy[forward!.name] ?? defaultCondition()));
     expect(isOvertrained({ fatigue: 80, sharpness: 50 })).toBe(true);
+  });
+});
+
+describe("match shirts and swap confirmation", () => {
+  it("numbers the fifteen 1–15 in slot order and the bench from 16", () => {
+    const sheet = defaultSheet("ballyea");
+    expect(matchShirtNumber(sheet, sheet.starters[0])).toBe(1);
+    expect(matchShirtNumber(sheet, sheet.starters[14])).toBe(15);
+    expect(matchSlot(sheet, sheet.starters[0])).toBe("GK");
+    expect(matchSlot(sheet, sheet.starters[7])).toBe("MF");
+    expect(matchSlot(sheet, sheet.starters[14])).toBe("FF");
+    expect(matchShirtNumber(sheet, sheet.subs[0])).toBe(16);
+    expect(matchSlot(sheet, sheet.subs[0])).toBe("SUB");
+    expect(matchOrderIndex(sheet, sheet.subs[0])).toBe(15);
+    expect(matchShirtNumber(sheet, "Nobody")).toBeUndefined();
+  });
+
+  it("does not swap until two names are picked", () => {
+    expect(nextSwapPick(null, null, "A")).toEqual({ first: "A", second: null });
+    expect(nextSwapPick("A", null, "B")).toEqual({ first: "A", second: "B" });
+    expect(nextSwapPick("A", "B", "A")).toEqual({ first: "B", second: null });
+    expect(nextSwapPick("A", "B", "C")).toEqual({ first: "A", second: "C" });
+  });
+
+  it("reads the latest match rating in championship order", () => {
+    const reports = {
+      first: {
+        matchId: "first",
+        homeId: "ballyea",
+        awayId: "feakle",
+        homeScore: { goals: 0, points: 0 },
+        awayScore: { goals: 0, points: 0 },
+        homeTactics: DEFAULT_TACTICS,
+        awayTactics: DEFAULT_TACTICS,
+        homeSheet: defaultSheet("ballyea"),
+        awaySheet: defaultSheet("feakle"),
+        homeStats: {
+          teamId: "ballyea",
+          possessions: 0,
+          passesAttempted: 0,
+          passesCompleted: 0,
+          shots: 0,
+          scores: 0,
+          highFieldingAttempted: 0,
+          highFieldingWon: 0,
+          puckoutsWon: 0,
+          tacklesAttempted: 0,
+          tacklesWon: 0,
+          groundCovered: 0,
+          fatigue: 0,
+          fitness: 100,
+          overall: 0,
+          rating: 0,
+        },
+        awayStats: {
+          teamId: "feakle",
+          possessions: 0,
+          passesAttempted: 0,
+          passesCompleted: 0,
+          shots: 0,
+          scores: 0,
+          highFieldingAttempted: 0,
+          highFieldingWon: 0,
+          puckoutsWon: 0,
+          tacklesAttempted: 0,
+          tacklesWon: 0,
+          groundCovered: 0,
+          fatigue: 0,
+          fitness: 100,
+          overall: 0,
+          rating: 0,
+        },
+        players: [
+          {
+            name: "Tony Kelly",
+            teamId: "ballyea",
+            started: true,
+            minutes: 60,
+            possessions: 1,
+            passesAttempted: 1,
+            passesCompleted: 1,
+            shots: 1,
+            scores: 1,
+            highFieldingAttempted: 0,
+            highFieldingWon: 0,
+            puckoutsWon: 0,
+            tacklesAttempted: 0,
+            tacklesWon: 0,
+            groundCovered: 1,
+            fatigue: 10,
+            fitness: 90,
+            overall: 19,
+            rating: 7.1,
+            mood: 60,
+          },
+        ],
+        coachReport: [],
+      },
+      second: {
+        matchId: "second",
+        homeId: "ballyea",
+        awayId: "feakle",
+        homeScore: { goals: 0, points: 0 },
+        awayScore: { goals: 0, points: 0 },
+        homeTactics: DEFAULT_TACTICS,
+        awayTactics: DEFAULT_TACTICS,
+        homeSheet: defaultSheet("ballyea"),
+        awaySheet: defaultSheet("feakle"),
+        homeStats: {
+          teamId: "ballyea",
+          possessions: 0,
+          passesAttempted: 0,
+          passesCompleted: 0,
+          shots: 0,
+          scores: 0,
+          highFieldingAttempted: 0,
+          highFieldingWon: 0,
+          puckoutsWon: 0,
+          tacklesAttempted: 0,
+          tacklesWon: 0,
+          groundCovered: 0,
+          fatigue: 0,
+          fitness: 100,
+          overall: 0,
+          rating: 0,
+        },
+        awayStats: {
+          teamId: "feakle",
+          possessions: 0,
+          passesAttempted: 0,
+          passesCompleted: 0,
+          shots: 0,
+          scores: 0,
+          highFieldingAttempted: 0,
+          highFieldingWon: 0,
+          puckoutsWon: 0,
+          tacklesAttempted: 0,
+          tacklesWon: 0,
+          groundCovered: 0,
+          fatigue: 0,
+          fitness: 100,
+          overall: 0,
+          rating: 0,
+        },
+        players: [
+          {
+            name: "Tony Kelly",
+            teamId: "ballyea",
+            started: true,
+            minutes: 60,
+            possessions: 1,
+            passesAttempted: 1,
+            passesCompleted: 1,
+            shots: 1,
+            scores: 1,
+            highFieldingAttempted: 0,
+            highFieldingWon: 0,
+            puckoutsWon: 0,
+            tacklesAttempted: 0,
+            tacklesWon: 0,
+            groundCovered: 1,
+            fatigue: 10,
+            fitness: 90,
+            overall: 19,
+            rating: 8.6,
+            mood: 70,
+          },
+        ],
+        coachReport: [],
+      },
+    };
+    expect(lastMatchRating(reports, "ballyea", "Tony Kelly", ["first", "second"])).toBe(8.6);
+    expect(lastMatchRating(reports, "ballyea", "Tony Kelly", ["second", "first"])).toBe(7.1);
   });
 });

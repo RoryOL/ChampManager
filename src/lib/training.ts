@@ -1,6 +1,18 @@
-import type { AttributeBoosts, PlayerCondition, PositionLine, RatedPlayer, Tactics, TrainingFocus } from "../types";
+import type {
+  AttributeBoosts,
+  PlayerCondition,
+  PlayerPlan,
+  PositionLine,
+  RatedPlayer,
+  Tactics,
+  TeamSheet,
+  TrainingMix,
+  TrainingPlans,
+  TrainingType,
+  WeekSession,
+} from "../types";
 import { ageResponse } from "../data/playerProfiles";
-import { ATTRIBUTE_KEYS, ATTRIBUTE_LABELS, clampDial, type AttributeKey } from "./attributes";
+import { ATTRIBUTE_KEYS, ATTRIBUTE_LABELS, MENTAL_KEYS, clampDial, type AttributeKey } from "./attributes";
 import { isInjured } from "./injuries";
 import { moodAdjust } from "./mood";
 import { clampStat, computeOverall, ratedSquad } from "./players";
@@ -18,45 +30,146 @@ export const PRESEASON_DATES = [
 
 export const MAX_STAT_BOOST = 4;
 
-export const TRAINING_BOOSTS: Record<TrainingFocus, AttributeKey[]> = {
-  fitness: ["speed", "acceleration", "stamina"],
-  skills: ["firstTouch", "passing", "strikingDistance", "vision"],
+export const TRAINING_TYPES: TrainingType[] = ["defensive", "attacking", "tactics", "physical", "setpieces"];
+
+export const TRAINING_TYPE_KEYS: Record<TrainingType, AttributeKey[]> = {
+  defensive: ["hooking", "manMarking"],
+  attacking: ["shooting", "offTheBall"],
+  tactics: ["passing", "vision", "firstTouch"],
+  physical: ["strength", "speed", "acceleration"],
   setpieces: ["frees", "sidelines", "puckoutReach"],
-  challenge: ["workrate", "underPressure", "composure", "offTheBall"],
-  recovery: [],
 };
 
-export const TRAINING_OPTIONS: {
-  value: TrainingFocus;
-  title: string;
-  copy: string;
-}[] = [
+export const TRAINING_TYPE_OPTIONS: { value: TrainingType; title: string; copy: string }[] = [
+  { value: "defensive", title: "Defensive", copy: "Tackling / hooking and man marking." },
+  { value: "attacking", title: "Attacking", copy: "Shooting and off the ball." },
+  { value: "tactics", title: "Tactics", copy: "Passing, vision and first touch." },
+  { value: "physical", title: "Physical", copy: "Strength, speed and acceleration." },
+  { value: "setpieces", title: "Set pieces", copy: "Frees, sidelines and puck-out reach." },
+];
+
+export const SESSION_OPTIONS: { value: WeekSession; title: string; copy: string }[] = [
   {
-    value: "fitness",
-    title: "Fitness",
-    copy: "Slight lift to speed, acceleration and stamina on the player profile (up to +4). Younger legs take it better; older panels feel it more.",
-  },
-  {
-    value: "skills",
-    title: "Skills",
-    copy: "Slight lift to first touch, passing, striking from distance and vision on the player profile.",
-  },
-  {
-    value: "setpieces",
-    title: "Set pieces",
-    copy: "Slight lift to frees, sidelines and puck-out reach on the player profile. Useful, not a full session.",
+    value: "mixed",
+    title: "Individual schedules",
+    copy: "Each player splits the week across defensive, attacking, tactics, physical and set-piece work. Mental attributes stay as they are.",
   },
   {
     value: "challenge",
-    title: "Challenge game",
-    copy: "Slight lift to workrate, composure, under pressure and off the ball. Biggest sharpness gain, heaviest legs.",
+    title: "Challenge match",
+    copy: "A midweek game for the fifteen. Teamwork rises when the same lads play together in the same positions. Heavier legs.",
   },
   {
     value: "recovery",
-    title: "Recovery",
-    copy: "Cuts fatigue so trained profile stats show through. Younger players bounce back quicker.",
+    title: "Recovery week",
+    copy: "The whole panel eases off so match fitness comes back. Banked training still shows once the legs are fresh.",
   },
 ];
+
+export function emptyMix(): TrainingMix {
+  return { defensive: 0, attacking: 0, tactics: 0, physical: 0, setpieces: 0 };
+}
+
+export function defaultMixFor(line: PositionLine): TrainingMix {
+  switch (line) {
+    case "GK":
+      return { defensive: 10, attacking: 0, tactics: 25, physical: 20, setpieces: 45 };
+    case "FB":
+      return { defensive: 40, attacking: 0, tactics: 20, physical: 30, setpieces: 10 };
+    case "HB":
+      return { defensive: 30, attacking: 5, tactics: 30, physical: 25, setpieces: 10 };
+    case "MF":
+      return { defensive: 20, attacking: 15, tactics: 25, physical: 30, setpieces: 10 };
+    case "HF":
+      return { defensive: 10, attacking: 30, tactics: 30, physical: 20, setpieces: 10 };
+    case "FF":
+      return { defensive: 5, attacking: 40, tactics: 25, physical: 10, setpieces: 20 };
+    default:
+      return { defensive: 20, attacking: 20, tactics: 20, physical: 20, setpieces: 20 };
+  }
+}
+
+export function mixTotal(mix: TrainingMix): number {
+  return TRAINING_TYPES.reduce((sum, type) => sum + (mix[type] ?? 0), 0);
+}
+
+export function normalizeMix(mix: TrainingMix): TrainingMix {
+  const raw = TRAINING_TYPES.map((type) => Math.max(0, Math.round(mix[type] ?? 0)));
+  const total = raw.reduce((sum, value) => sum + value, 0);
+  if (total <= 0) return emptyMix();
+  const next = emptyMix();
+  let used = 0;
+  TRAINING_TYPES.forEach((type, index) => {
+    if (index === TRAINING_TYPES.length - 1) {
+      next[type] = Math.max(0, 100 - used);
+      return;
+    }
+    const share = Math.round(((raw[index] ?? 0) / total) * 100);
+    next[type] = share;
+    used += share;
+  });
+  return next;
+}
+
+export function setMixShare(mix: TrainingMix, type: TrainingType, value: number): TrainingMix {
+  const clamped = Math.max(0, Math.min(100, Math.round(value)));
+  const others = TRAINING_TYPES.filter((item) => item !== type);
+  const rest = others.reduce((sum, item) => sum + (mix[item] ?? 0), 0);
+  const leftover = 100 - clamped;
+  const next = emptyMix();
+  next[type] = clamped;
+  if (rest <= 0) {
+    const first = others[0];
+    if (first) next[first] = leftover;
+    return next;
+  }
+  let used = 0;
+  others.forEach((item, index) => {
+    if (index === others.length - 1) {
+      next[item] = Math.max(0, leftover - used);
+      return;
+    }
+    const share = Math.round(((mix[item] ?? 0) / rest) * leftover);
+    next[item] = share;
+    used += share;
+  });
+  return next;
+}
+
+export function planFor(name: string, plans: TrainingPlans, position: PositionLine): PlayerPlan {
+  const stored = plans[name];
+  if (stored) {
+    return { mix: normalizeMix(stored.mix), recovery: stored.recovery === true };
+  }
+  return { mix: defaultMixFor(position), recovery: false };
+}
+
+export function applyPlansToSquad(squad: RatedPlayer[], template: PlayerPlan): TrainingPlans {
+  const next: TrainingPlans = {};
+  for (const player of squad) {
+    next[player.name] = { mix: normalizeMix(template.mix), recovery: template.recovery };
+  }
+  return next;
+}
+
+export function mixSummary(mix: TrainingMix): string {
+  const parts = TRAINING_TYPE_OPTIONS.filter((option) => (mix[option.value] ?? 0) > 0).map(
+    (option) => `${option.title} ${mix[option.value]}%`,
+  );
+  return parts.length > 0 ? parts.join(" · ") : "No work set";
+}
+
+export function dominantType(mix: TrainingMix): TrainingType | null {
+  let best: TrainingType | null = null;
+  let value = 0;
+  for (const type of TRAINING_TYPES) {
+    if ((mix[type] ?? 0) > value) {
+      best = type;
+      value = mix[type] ?? 0;
+    }
+  }
+  return value > 0 ? best : null;
+}
 
 export function defaultCondition(): PlayerCondition {
   return { fatigue: 0, sharpness: 38, mood: 58 };
@@ -152,12 +265,53 @@ export function boostTotal(condition: PlayerCondition): number {
   return Object.values(condition.boosts).reduce((sum, value) => sum + (value ?? 0), 0);
 }
 
-function liftBoosts(current: AttributeBoosts | undefined, keys: AttributeKey[]): AttributeBoosts {
+export const TRAINING_OPTIONS = SESSION_OPTIONS;
+
+function liftBoosts(current: AttributeBoosts | undefined, keys: AttributeKey[], amount = 1): AttributeBoosts {
   const next: AttributeBoosts = { ...(current ?? {}) };
   for (const key of keys) {
-    next[key] = clampBoost((next[key] ?? 0) + 1);
+    if (MENTAL_KEYS.includes(key)) continue;
+    next[key] = clampBoost((next[key] ?? 0) + amount);
   }
   return next;
+}
+
+function liftFromMix(current: AttributeBoosts | undefined, mix: TrainingMix): AttributeBoosts {
+  let next = current;
+  for (const type of TRAINING_TYPES) {
+    const share = mix[type] ?? 0;
+    if (share < 10) continue;
+    const keys = TRAINING_TYPE_KEYS[type];
+    if (share >= 50) {
+      next = liftBoosts(next, keys);
+    } else if (share >= 25) {
+      next = liftBoosts(next, keys.slice(0, Math.min(2, keys.length)));
+    } else {
+      next = liftBoosts(next, keys.slice(0, 1));
+    }
+  }
+  return next ?? {};
+}
+
+function sessionLoad(mix: TrainingMix, alreadyHeavy: boolean): { fatigue: number; sharpness: number } {
+  const physical = (mix.physical ?? 0) / 100;
+  const defensive = (mix.defensive ?? 0) / 100;
+  const attacking = (mix.attacking ?? 0) / 100;
+  const tactics = (mix.tactics ?? 0) / 100;
+  const setpieces = (mix.setpieces ?? 0) / 100;
+  const fatigue =
+    physical * (alreadyHeavy ? 22 : 15) +
+    defensive * (alreadyHeavy ? 18 : 12) +
+    attacking * (alreadyHeavy ? 16 : 10) +
+    tactics * (alreadyHeavy ? 16 : 10) +
+    setpieces * (alreadyHeavy ? 12 : 8);
+  const sharpness =
+    physical * (alreadyHeavy ? -3 : 7) +
+    defensive * (alreadyHeavy ? 0 : 5) +
+    attacking * (alreadyHeavy ? 1 : 6) +
+    tactics * (alreadyHeavy ? 1 : 6) +
+    setpieces * (alreadyHeavy ? 1 : 5);
+  return { fatigue, sharpness };
 }
 
 function joinLabels(keys: AttributeKey[]): string {
@@ -171,11 +325,15 @@ function joinLabels(keys: AttributeKey[]): string {
 export function applyTraining(
   squad: RatedPlayer[],
   condition: Record<string, PlayerCondition>,
-  focus: TrainingFocus,
-): { condition: Record<string, PlayerCondition>; overtrained: string[]; summary: string } {
+  session: WeekSession,
+  plans: TrainingPlans = {},
+  sheet?: TeamSheet,
+  previous?: TeamSheet,
+): { condition: Record<string, PlayerCondition>; overtrained: string[]; summary: string; lastSheet?: TeamSheet } {
   const next = { ...condition };
   const overtrained: string[] = [];
-  const keys = TRAINING_BOOSTS[focus];
+  const lifted = new Set<AttributeKey>();
+  const used = new Set([...(sheet?.starters ?? []), ...(sheet?.subs ?? [])]);
 
   for (const player of squad) {
     const current = cloneCondition(next[player.name] ?? defaultCondition());
@@ -183,39 +341,33 @@ export function applyTraining(
       next[player.name] = current;
       continue;
     }
+    const plan = planFor(player.name, plans, player.position);
+    const recovery = session === "recovery" || plan.recovery;
+    const inChallenge = session === "challenge" && used.has(player.name);
     const alreadyHeavy = fitnessOf(current) <= 50;
     const response = ageResponse(player.age);
     let fatigue = current.fatigue;
     let sharpness = current.sharpness;
     let boosts = current.boosts;
 
-    switch (focus) {
-      case "fitness":
-        fatigue += (alreadyHeavy ? 22 : 15) * response.fatigue;
-        sharpness += (alreadyHeavy ? -3 : 7) * response.train;
-        break;
-      case "skills":
-        fatigue += (alreadyHeavy ? 16 : 10) * response.fatigue;
-        sharpness += (alreadyHeavy ? 1 : 6) * response.train;
-        break;
-      case "setpieces":
-        fatigue += (alreadyHeavy ? 12 : 8) * response.fatigue;
-        sharpness += (alreadyHeavy ? 1 : 5) * response.train;
-        break;
-      case "challenge":
-        fatigue += (alreadyHeavy ? 26 : 18) * response.fatigue;
-        sharpness += (alreadyHeavy ? -2 : 9) * response.train;
-        break;
-      case "recovery":
-        fatigue -= 24 * response.recover;
-        sharpness += 1 * response.train;
-        break;
-      default:
-        break;
-    }
-
-    if (keys.length > 0) {
-      boosts = liftBoosts(boosts, keys);
+    if (recovery) {
+      fatigue -= 24 * response.recover;
+      sharpness += 1 * response.train;
+    } else if (inChallenge) {
+      fatigue += (alreadyHeavy ? 26 : 18) * response.fatigue;
+      sharpness += (alreadyHeavy ? -2 : 9) * response.train;
+    } else if (session === "challenge") {
+      fatigue -= 12 * response.recover;
+      sharpness += 1 * response.train;
+    } else {
+      const load = sessionLoad(plan.mix, alreadyHeavy);
+      fatigue += load.fatigue * response.fatigue;
+      sharpness += load.sharpness * response.train;
+      const before = boosts;
+      boosts = liftFromMix(boosts, plan.mix);
+      for (const key of ATTRIBUTE_KEYS) {
+        if ((boosts[key] ?? 0) > (before?.[key] ?? 0)) lifted.add(key);
+      }
     }
 
     fatigue = clampCondition(fatigue);
@@ -234,16 +386,54 @@ export function applyTraining(
     };
   }
 
-  const label = TRAINING_OPTIONS.find((item) => item.value === focus)?.title ?? focus;
-  const lifted = joinLabels(keys);
+  let lastSheet = sheet;
+  if (session === "challenge" && sheet) {
+    const teamworked = applyTeamwork(next, sheet, previous, "challenge");
+    Object.assign(next, teamworked.condition);
+    lastSheet = teamworked.lastSheet;
+  }
+
+  const label = SESSION_OPTIONS.find((item) => item.value === session)?.title ?? session;
+  const liftedText = joinLabels([...lifted]);
   const summary =
     overtrained.length > 0
       ? `${label} is done, but ${overtrained.length} player${overtrained.length === 1 ? " is" : "s are"} overtrained. The work is banked, yet match ratings look heavy until fitness recovers.`
-      : focus === "recovery"
+      : session === "recovery"
         ? "Recovery week lands. Match fitness is back up, so banked ratings show through again."
-        : `${label} session is in the book. ${lifted.charAt(0).toUpperCase()}${lifted.slice(1)} are up on the player profiles — open the squad to see the numbers move.`;
+        : session === "challenge"
+          ? "Challenge match is in the book. Teamwork lifts when the same lads stay in the same positions. Mental attributes did not move."
+          : liftedText
+            ? `${label} session is in the book. ${liftedText.charAt(0).toUpperCase()}${liftedText.slice(1)} are up on the player profiles — open the squad to see the numbers move. Workrate and composure stay as they are.`
+            : `${label} session is in the book. Open the squad to see who took a lift. Workrate and composure stay as they are.`;
 
-  return { condition: next, overtrained, summary };
+  return { condition: next, overtrained, summary, lastSheet };
+}
+
+export function applyTeamwork(
+  condition: Record<string, PlayerCondition>,
+  sheet: TeamSheet,
+  previous?: TeamSheet,
+  kind: "challenge" | "competitive" = "competitive",
+): { condition: Record<string, PlayerCondition>; lastSheet: TeamSheet } {
+  const next = { ...condition };
+  const returning = new Set(previous?.starters ?? []);
+
+  const bump = (name: string, amount: number) => {
+    if (amount <= 0) return;
+    const current = cloneCondition(next[name] ?? defaultCondition());
+    const boosts = liftBoosts(current.boosts, ["teamwork"], amount);
+    next[name] = { ...current, boosts };
+  };
+
+  sheet.starters.forEach((name, index) => {
+    let amount = 1;
+    if (previous?.starters[index] === name) amount += 1;
+    bump(name, amount);
+  });
+  for (const name of sheet.subs) {
+    bump(name, kind === "competitive" && returning.has(name) ? 1 : 0);
+  }
+  return { condition: next, lastSheet: { starters: [...sheet.starters], subs: [...sheet.subs] } };
 }
 
 export function matchFatigueDelta(
