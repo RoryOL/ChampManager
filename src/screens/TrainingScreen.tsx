@@ -1,22 +1,26 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import type { GameSave, PlayerPlan, TrainingIntensity, WeekSession, WeekShape } from "../types";
+import { Toast } from "../components/Toast";
 import { TrainingMixEditor } from "../components/TrainingMixEditor";
 import { ATTRIBUTE_LABELS } from "../lib/attributes";
 import { isInjured } from "../lib/injuries";
 import { ratedSquad } from "../lib/players";
 import {
+  IN_SEASON_SESSION_OPTIONS,
   INTENSITY_OPTIONS,
   PRESEASON_WEEKS,
-  SESSION_OPTIONS,
   SQUAD_TEMPLATES,
   WEEK_SHAPE_OPTIONS,
+  applyIntensityToPlayers,
   applyTemplateToPlayers,
   conditionFor,
   defaultMixFor,
   fitnessOf,
+  intensityTitle,
   mixAbbrev,
   mixSummary,
   planFor,
+  planIntensity,
   sessionForSlot,
   sessionsPerWeek,
   trainedStat,
@@ -52,6 +56,7 @@ export function TrainingScreen({ save, onBack, onTrain, onSetPlans, onSetIntensi
   const [selected, setSelected] = useState<string[]>([]);
   const [templateId, setTemplateId] = useState<SquadTemplateId>("position");
   const [session, setSession] = useState<WeekSession>("mixed");
+  const [toast, setToast] = useState<string | null>(null);
   const [draft, setDraft] = useState<PlayerPlan>(() => ({
     mix: defaultMixFor("MF"),
     recovery: false,
@@ -61,8 +66,10 @@ export function TrainingScreen({ save, onBack, onTrain, onSetPlans, onSetIntensi
   const weekShape = save.weekShape ?? "challenge";
   const sessionsDone = save.sessionsDone ?? 0;
   const total = sessionsPerWeek(save.phase);
-  const nextKind = sessionForSlot(save.phase, weekShape, sessionsDone, session);
+  const nextKind = sessionForSlot(save.phase, weekShape, sessionsDone, session === "recovery" ? "mixed" : session);
   const names = useMemo(() => new Set(selected), [selected]);
+  const allNames = useMemo(() => squad.map((player) => player.name), [squad]);
+  const showToast = useCallback((message: string) => setToast(message), []);
 
   const toggle = (name: string) => {
     setSelected((current) => (current.includes(name) ? current.filter((item) => item !== name) : [...current, name]));
@@ -70,16 +77,39 @@ export function TrainingScreen({ save, onBack, onTrain, onSetPlans, onSetIntensi
 
   const applyTemplate = (targets: string[]) => {
     if (targets.length === 0) return;
+    const preset = SQUAD_TEMPLATES.find((item) => item.id === templateId);
     onSetPlans(applyTemplateToPlayers(squad, save.plans, templateId, targets));
+    const label = preset?.title ?? "template";
+    showToast(
+      targets.length === squad.length
+        ? `Applied ${label} to the whole panel.`
+        : `Applied ${label} to ${targets.length} selected.`,
+    );
   };
 
   const applyDraft = (targets: string[]) => {
     if (targets.length === 0) return;
     const next = { ...save.plans };
     for (const name of targets) {
-      next[name] = { mix: draft.mix, recovery: draft.recovery };
+      next[name] = { mix: draft.mix, recovery: false, intensity: draft.intensity };
     }
     onSetPlans(next);
+    showToast(`Assigned mix and intensity to ${targets.length} selected.`);
+  };
+
+  const setSquadIntensity = (value: TrainingIntensity) => {
+    onSetIntensity(value);
+    showToast(`Squad intensity set to ${intensityTitle(value)}. Players with their own setting keep it.`);
+  };
+
+  const applySquadIntensity = (targets: string[]) => {
+    if (targets.length === 0) return;
+    onSetPlans(applyIntensityToPlayers(squad, save.plans, targets, undefined));
+    showToast(
+      targets.length === squad.length
+        ? `Whole panel now uses ${intensityTitle(intensity)}.`
+        : `${targets.length} selected now use ${intensityTitle(intensity)}.`,
+    );
   };
 
   const runLabel = preseason
@@ -88,9 +118,7 @@ export function TrainingScreen({ save, onBack, onTrain, onSetPlans, onSetIntensi
       : `Run session ${sessionsDone + 1} of ${total}`
     : session === "challenge"
       ? "Play challenge match"
-      : session === "recovery"
-        ? "Run recovery week"
-        : "Run midweek session";
+      : "Run midweek session";
 
   return (
     <div className="screen">
@@ -104,9 +132,8 @@ export function TrainingScreen({ save, onBack, onTrain, onSetPlans, onSetIntensi
       </p>
       <h2>Training</h2>
       <p className="hint hint--tight">
-        {preseason
-          ? "Each preseason week has three slots: two mixed sessions and a challenge match, or three mixed sessions. Intensity is for the whole panel. Gains are small and can take a few sessions to show on the card. Work one area hard and others can drift."
-          : "One session before the next championship day. Intensity still applies. Numbers move slowly, and neglected areas can rust a little."}
+        Set schedules and intensity for the panel or for individuals. Light is the recovery week: legs come back and
+        attributes only tick a little.
       </p>
 
       <section className="card card--compact">
@@ -117,12 +144,17 @@ export function TrainingScreen({ save, onBack, onTrain, onSetPlans, onSetIntensi
               key={option.value}
               type="button"
               className={intensity === option.value ? "is-active" : ""}
-              onClick={() => onSetIntensity(option.value)}
+              onClick={() => setSquadIntensity(option.value)}
             >
               <strong>{option.title}</strong>
               <span>{option.copy}</span>
             </button>
           ))}
+        </div>
+        <div className="row-actions">
+          <button type="button" className="btn btn--ghost" onClick={() => applySquadIntensity(allNames)}>
+            Apply intensity to panel
+          </button>
         </div>
       </section>
 
@@ -135,7 +167,10 @@ export function TrainingScreen({ save, onBack, onTrain, onSetPlans, onSetIntensi
                 key={option.value}
                 type="button"
                 className={weekShape === option.value ? "is-active" : ""}
-                onClick={() => onSetWeekShape(option.value)}
+                onClick={() => {
+                  onSetWeekShape(option.value);
+                  showToast(`Week shape set to ${option.title}.`);
+                }}
               >
                 <strong>{option.title}</strong>
                 <span>{option.copy}</span>
@@ -151,7 +186,7 @@ export function TrainingScreen({ save, onBack, onTrain, onSetPlans, onSetIntensi
         <section className="card card--compact">
           <p className="kicker">This week&apos;s session</p>
           <div className="choice-stack">
-            {SESSION_OPTIONS.map((option) => (
+            {IN_SEASON_SESSION_OPTIONS.map((option) => (
               <button
                 key={option.value}
                 type="button"
@@ -167,7 +202,7 @@ export function TrainingScreen({ save, onBack, onTrain, onSetPlans, onSetIntensi
       )}
 
       <section className="card card--compact">
-        <p className="kicker">Assign schedules</p>
+        <p className="kicker">Schedules</p>
         <div className="template-row">
           {SQUAD_TEMPLATES.map((option) => (
             <button
@@ -182,7 +217,7 @@ export function TrainingScreen({ save, onBack, onTrain, onSetPlans, onSetIntensi
         </div>
         <p className="hint hint--tight">{SQUAD_TEMPLATES.find((item) => item.id === templateId)?.copy}</p>
         <div className="row-actions">
-          <button type="button" className="btn" onClick={() => applyTemplate(squad.map((player) => player.name))}>
+          <button type="button" className="btn" onClick={() => applyTemplate(allNames)}>
             Apply template to panel
           </button>
           <button
@@ -195,12 +230,20 @@ export function TrainingScreen({ save, onBack, onTrain, onSetPlans, onSetIntensi
           </button>
         </div>
         <p className="kicker">Custom mix for selected</p>
-        <TrainingMixEditor plan={draft} onChange={setDraft} />
+        <TrainingMixEditor plan={draft} squadIntensity={intensity} onChange={setDraft} />
         <div className="row-actions">
           <button type="button" className="btn btn--ghost" disabled={selected.length === 0} onClick={() => applyDraft(selected)}>
             Assign mix to {selected.length || 0} selected
           </button>
-          <button type="button" className="text-btn" onClick={() => setSelected(squad.map((player) => player.name))}>
+          <button
+            type="button"
+            className="btn btn--ghost"
+            disabled={selected.length === 0}
+            onClick={() => applySquadIntensity(selected)}
+          >
+            Use squad intensity
+          </button>
+          <button type="button" className="text-btn" onClick={() => setSelected(allNames)}>
             Select all
           </button>
           {selected.length > 0 ? (
@@ -220,6 +263,7 @@ export function TrainingScreen({ save, onBack, onTrain, onSetPlans, onSetIntensi
                 <th />
                 <th>Player</th>
                 <th>Schedule</th>
+                <th>Intensity</th>
                 <th>Fit</th>
                 {TABLE_KEYS.map((key) => (
                   <th key={key}>{ATTRIBUTE_LABELS[key]}</th>
@@ -236,6 +280,7 @@ export function TrainingScreen({ save, onBack, onTrain, onSetPlans, onSetIntensi
                 const lastBits = Object.entries(last)
                   .filter(([, value]) => Math.round(value ?? 0) !== 0)
                   .map(([key, value]) => `${ATTRIBUTE_LABELS[key as keyof typeof ATTRIBUTE_LABELS]} ${formatDelta(Math.round(value ?? 0))}`);
+                const playerIntensity = planIntensity(plan, intensity);
                 return (
                   <tr key={player.name} className={checked ? "is-selected" : ""}>
                     <td>
@@ -248,7 +293,8 @@ export function TrainingScreen({ save, onBack, onTrain, onSetPlans, onSetIntensi
                         {isInjured(condition) ? " · Out" : ""}
                       </em>
                     </td>
-                    <td>{plan.recovery ? "Recovery" : mixAbbrev(plan.mix)}</td>
+                    <td>{mixAbbrev(plan.mix)}</td>
+                    <td>{plan.intensity || plan.recovery ? intensityTitle(playerIntensity) : `Squad · ${intensityTitle(intensity)}`}</td>
                     <td>{fitnessOf(condition)}</td>
                     {TABLE_KEYS.map((key) => {
                       const value = trainedStat(player.ratings[key], condition, key);
@@ -272,7 +318,8 @@ export function TrainingScreen({ save, onBack, onTrain, onSetPlans, onSetIntensi
             <p className="kicker">{selected[0]} · {mixSummary(planFor(selected[0]!, save.plans, squad.find((item) => item.name === selected[0])?.position ?? "MF").mix)}</p>
             <TrainingMixEditor
               plan={planFor(selected[0]!, save.plans, squad.find((item) => item.name === selected[0])?.position ?? "MF")}
-              onChange={(plan) => onSetPlans({ ...save.plans, [selected[0]!]: plan })}
+              squadIntensity={intensity}
+              onChange={(plan) => onSetPlans({ ...save.plans, [selected[0]!]: { ...plan, recovery: false } })}
             />
           </div>
         ) : null}
@@ -291,6 +338,7 @@ export function TrainingScreen({ save, onBack, onTrain, onSetPlans, onSetIntensi
             : "Midweek work is in. Championship day is next."}
         </p>
       )}
+      <Toast message={toast} onDone={() => setToast(null)} />
     </div>
   );
 }

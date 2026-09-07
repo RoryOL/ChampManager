@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import type { GameSave, PlayerCondition, PlayerMatchStats, PlayerPlan, RatedPlayer, Team } from "../types";
+import type { GameSave, PlayerCondition, PlayerMatchStats, PlayerPlan, RatedPlayer, Team, TrainingIntensity } from "../types";
 import { GRADE_LABEL } from "../data/playerProfiles";
 import { ClubBadge } from "../components/ClubBadge";
 import { TrainingMixEditor } from "../components/TrainingMixEditor";
@@ -51,6 +51,7 @@ function PlayerDetail({
   season,
   plan,
   onSetPlan,
+  squadIntensity,
 }: {
   player: RatedPlayer;
   condition?: PlayerCondition;
@@ -58,6 +59,7 @@ function PlayerDetail({
   season: PlayerMatchStats;
   plan?: PlayerPlan;
   onSetPlan?: (plan: PlayerPlan) => void;
+  squadIntensity?: TrainingIntensity;
 }) {
   const match = showCondition && condition ? matchRatings(player, condition) : player.ratings;
   const trained = showCondition && condition ? trainedRatings(player, condition) : player.ratings;
@@ -134,8 +136,8 @@ function PlayerDetail({
       ) : null}
       {showCondition && plan && onSetPlan ? (
         <div className="attr-group">
-          <h4>This week</h4>
-          <TrainingMixEditor plan={plan} onChange={onSetPlan} />
+          <h4>Schedule and intensity</h4>
+          <TrainingMixEditor plan={plan} squadIntensity={squadIntensity} onChange={onSetPlan} />
         </div>
       ) : null}
       {ATTRIBUTE_GROUPS.map((group) => (
@@ -331,6 +333,7 @@ export function SquadScreen({ save, teams, viewTeamId, onViewTeam, picked, onTap
                   showCondition={ownTeam}
                   season={seasonStatsFor(save.reports, viewTeamId, selected.name)}
                   plan={ownTeam ? planFor(selected.name, save.plans, selected.position) : undefined}
+                  squadIntensity={save.intensity}
                   onSetPlan={ownTeam && onSetPlan ? (plan) => onSetPlan(selected.name, plan) : undefined}
                 />
               ) : null}

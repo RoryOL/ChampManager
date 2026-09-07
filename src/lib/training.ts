@@ -84,11 +84,13 @@ export const SESSION_OPTIONS: { value: WeekSession; title: string; copy: string 
   },
 ];
 
+export const IN_SEASON_SESSION_OPTIONS = SESSION_OPTIONS.filter((option) => option.value !== "recovery");
+
 export const INTENSITY_OPTIONS: { value: TrainingIntensity; title: string; copy: string }[] = [
   {
     value: "light",
     title: "Light",
-    copy: "Easier on the legs. Stats move slowly. Nobody picks up a training injury.",
+    copy: "A recovery week in all but name. Legs come back and attributes only tick a little. Nobody picks up a training injury.",
   },
   {
     value: "balanced",
@@ -230,10 +232,28 @@ export function setMixShare(mix: TrainingMix, type: TrainingType, value: number)
   return next;
 }
 
+export function planIntensity(plan: PlayerPlan, squadIntensity: TrainingIntensity): TrainingIntensity {
+  if (plan.intensity === "light" || plan.intensity === "balanced" || plan.intensity === "intense") {
+    return plan.intensity;
+  }
+  if (plan.recovery) return "light";
+  return squadIntensity;
+}
+
+export function intensityTitle(intensity: TrainingIntensity): string {
+  return INTENSITY_OPTIONS.find((option) => option.value === intensity)?.title ?? intensity;
+}
+
 export function planFor(name: string, plans: TrainingPlans, position: PositionLine): PlayerPlan {
   const stored = plans[name];
   if (stored) {
-    return { mix: normalizeMix(stored.mix), recovery: stored.recovery === true };
+    const intensity =
+      stored.intensity === "light" || stored.intensity === "balanced" || stored.intensity === "intense"
+        ? stored.intensity
+        : stored.recovery === true
+          ? "light"
+          : undefined;
+    return { mix: normalizeMix(stored.mix), recovery: stored.recovery === true, intensity };
   }
   return { mix: defaultMixFor(position), recovery: false };
 }
@@ -241,7 +261,11 @@ export function planFor(name: string, plans: TrainingPlans, position: PositionLi
 export function applyPlansToSquad(squad: RatedPlayer[], template: PlayerPlan): TrainingPlans {
   const next: TrainingPlans = {};
   for (const player of squad) {
-    next[player.name] = { mix: normalizeMix(template.mix), recovery: template.recovery };
+    next[player.name] = {
+      mix: normalizeMix(template.mix),
+      recovery: false,
+      intensity: template.intensity,
+    };
   }
   return next;
 }
@@ -257,11 +281,28 @@ export function applyTemplateToPlayers(
   const preset = SQUAD_TEMPLATES.find((item) => item.id === templateId);
   for (const player of squad) {
     if (!wanted.has(player.name)) continue;
+    const existing = next[player.name];
     if (templateId === "position" || !preset?.mix) {
-      next[player.name] = { mix: defaultMixFor(player.position), recovery: false };
+      next[player.name] = { mix: defaultMixFor(player.position), recovery: false, intensity: existing?.intensity };
     } else {
-      next[player.name] = { mix: normalizeMix(preset.mix), recovery: false };
+      next[player.name] = { mix: normalizeMix(preset.mix), recovery: false, intensity: existing?.intensity };
     }
+  }
+  return next;
+}
+
+export function applyIntensityToPlayers(
+  squad: RatedPlayer[],
+  current: TrainingPlans,
+  names: string[],
+  intensity: TrainingIntensity | undefined,
+): TrainingPlans {
+  const wanted = new Set(names);
+  const next = { ...current };
+  for (const player of squad) {
+    if (!wanted.has(player.name)) continue;
+    const plan = planFor(player.name, next, player.position);
+    next[player.name] = { mix: plan.mix, recovery: false, intensity };
   }
   return next;
 }
@@ -282,7 +323,7 @@ export function sessionForSlot(
 }
 
 export function intensityLoad(intensity: TrainingIntensity): { fatigue: number; lift: "light" | "balanced" | "intense" } {
-  if (intensity === "light") return { fatigue: 0.55, lift: "light" };
+  if (intensity === "light") return { fatigue: 0.2, lift: "light" };
   if (intensity === "intense") return { fatigue: 1.45, lift: "intense" };
   return { fatigue: 1, lift: "balanced" };
 }
@@ -335,7 +376,7 @@ export function clampBoost(value: number): number {
 }
 
 export function mixLiftFactor(intensity: TrainingIntensity): number {
-  if (intensity === "light") return 0.7;
+  if (intensity === "light") return 0.28;
   if (intensity === "intense") return 1.28;
   return 1;
 }
@@ -620,7 +661,6 @@ export function applyTraining(
   const used = new Set([...(sheet?.starters ?? []), ...(sheet?.subs ?? [])]);
   const deltas: Record<string, AttributeBoosts> = {};
   const visibleDeltas: Record<string, AttributeBoosts> = {};
-  const loadMul = intensityLoad(intensity).fatigue;
 
   for (const player of squad) {
     const current = cloneCondition(next[player.name] ?? defaultCondition());
@@ -629,7 +669,9 @@ export function applyTraining(
       continue;
     }
     const plan = planFor(player.name, plans, player.position);
-    const recovery = session === "recovery" || plan.recovery;
+    const usedIntensity = planIntensity(plan, intensity);
+    const loadMul = intensityLoad(usedIntensity).fatigue;
+    const recovery = session === "recovery";
     const inChallenge = session === "challenge" && used.has(player.name);
     const alreadyHeavy = fitnessOf(current) <= 50;
     const response = ageResponse(player.age);
@@ -647,11 +689,18 @@ export function applyTraining(
     } else if (session === "challenge") {
       fatigue -= 12 * response.recover;
       sharpness += 1 * response.train;
+    } else if (usedIntensity === "light") {
+      fatigue -= 10 * response.recover;
+      sharpness += 1 * response.train;
+      boosts = liftFromMix(boosts, plan.mix, usedIntensity, response.train);
+      for (const key of ATTRIBUTE_KEYS) {
+        if ((boosts[key] ?? 0) > (before?.[key] ?? 0) + VISIBLE_LIFT) lifted.add(key);
+      }
     } else {
       const load = sessionLoad(plan.mix, alreadyHeavy);
       fatigue += load.fatigue * response.fatigue * loadMul;
       sharpness += load.sharpness * response.train;
-      boosts = liftFromMix(boosts, plan.mix, intensity, response.train);
+      boosts = liftFromMix(boosts, plan.mix, usedIntensity, response.train);
       for (const key of ATTRIBUTE_KEYS) {
         if ((boosts[key] ?? 0) > (before?.[key] ?? 0) + VISIBLE_LIFT) lifted.add(key);
       }
@@ -697,7 +746,11 @@ export function applyTraining(
   const label = SESSION_OPTIONS.find((item) => item.value === session)?.title ?? session;
   const liftedText = joinLabels([...lifted]);
   const intensityNote =
-    intensity === "intense" ? " Intense work lands harder on the legs." : intensity === "light" ? " Light work keeps the legs fresher." : "";
+    intensity === "intense"
+      ? " Intense work lands harder on the legs."
+      : intensity === "light"
+        ? " Light work is close to a recovery week: legs come back and attributes only tick a little."
+        : "";
   const summary =
     overtrained.length > 0
       ? `${label} is done, but ${overtrained.length} player${overtrained.length === 1 ? " is" : "s are"} overtrained. The work is banked, yet match ratings look heavy until fitness recovers.`

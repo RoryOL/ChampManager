@@ -183,7 +183,10 @@ export type TrainingMix = Record<TrainingType, number>;
 
 export type PlayerPlan = {
   mix: TrainingMix;
-  recovery: boolean;
+  /** Old saves treated this as a skipped week; it now maps to light intensity. */
+  recovery?: boolean;
+  /** Overrides squad intensity for this player. Unset means use the squad default. */
+  intensity?: TrainingIntensity;
 };
 
 export type TrainingPlans = Record<string, PlayerPlan>;

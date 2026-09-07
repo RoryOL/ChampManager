@@ -819,6 +819,36 @@ describe("training", () => {
     expect(recovered[sheedy!.name]?.fatigue ?? 0).toBeLessThan(recovered[conlon!.name]?.fatigue ?? 0);
   });
 
+  it("treats a stored recovery plan as light intensity with only a small lift", () => {
+    const squad = ratedSquad("ballyea").slice(0, 2);
+    const rested = squad[0]!;
+    const working = squad[1]!;
+    const start = Object.fromEntries(squad.map((item) => [item.name, { ...defaultCondition(), fatigue: 40 }]));
+    const plans = {
+      [rested.name]: { ...physicalPlan, recovery: true },
+      [working.name]: physicalPlan,
+    };
+    const after = applyTraining(squad, start, "mixed", plans, undefined, undefined, "intense");
+    expect(after.condition[rested.name]?.fatigue ?? 0).toBeLessThan(start[rested.name]!.fatigue);
+    expect(after.condition[working.name]?.fatigue ?? 0).toBeGreaterThan(start[working.name]!.fatigue);
+    expect(after.deltas[rested.name]?.speed ?? 0).toBeGreaterThan(0);
+    expect(after.deltas[working.name]?.speed ?? 0).toBeGreaterThan(after.deltas[rested.name]?.speed ?? 0);
+  });
+
+  it("lets a player keep a lighter intensity than the rest of the panel", () => {
+    const squad = ratedSquad("ballyea").slice(0, 2);
+    const easy = squad[0]!;
+    const hard = squad[1]!;
+    const start = Object.fromEntries(squad.map((item) => [item.name, defaultCondition()]));
+    const plans = {
+      [easy.name]: { ...physicalPlan, intensity: "light" as const },
+      [hard.name]: { ...physicalPlan, intensity: "intense" as const },
+    };
+    const after = applyTraining(squad, start, "mixed", plans, undefined, undefined, "balanced");
+    expect(after.deltas[hard.name]?.speed ?? 0).toBeGreaterThan(after.deltas[easy.name]?.speed ?? 0);
+    expect(after.condition[easy.name]?.fatigue ?? 0).toBeLessThan(after.condition[hard.name]?.fatigue ?? 0);
+  });
+
   it("raises teamwork when the same lads play the same positions", () => {
     const squad = ratedSquad("ballyea");
     const sheet = defaultSheet("ballyea");
