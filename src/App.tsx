@@ -122,6 +122,8 @@ export default function App() {
                 setFixtureId(null);
                 setPage("squad");
               }}
+              onOpenTraining={() => setPage("training")}
+              onSetWeekShape={game.setWeekShape}
             />
           )}
           {page === "squad" && (

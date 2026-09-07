@@ -1,13 +1,14 @@
 import { useState } from "react";
-import type { Campaign, Championship, GameSave, Match, NewsItem, Seat } from "../types";
+import type { Campaign, Championship, GameSave, Match, NewsItem, Seat, WeekShape } from "../types";
 import { CampaignWeekCard } from "../components/CampaignWeekCard";
 import { ClubBadge } from "../components/ClubBadge";
+import { WeekShapePicker } from "../components/WeekShapePicker";
 import { compactName, sideLabel } from "../lib/display";
 import { NEWS_KIND_LABEL } from "../lib/news";
 import { resolveMatchSides, teamById, teamGroup } from "../lib/resolve";
 import { formatDate, stageLabel } from "../lib/scoring";
 import { buildPreMatchBriefing } from "../lib/briefing";
-import { averageFitness, averageMatchOverall, averageSharpness, PRESEASON_WEEKS, sessionsPerWeek } from "../lib/training";
+import { averageFitness, averageMatchOverall, averageSharpness, DEFAULT_WEEK_SHAPE, PRESEASON_WEEKS, sessionForSlot, sessionsPerWeek } from "../lib/training";
 import { ratedSquad } from "../lib/players";
 import { rollClimate, climateSummary } from "../lib/weather";
 
@@ -30,6 +31,8 @@ type Props = {
   onReadNews: (id: string) => void;
   onOpenMatch: (matchId: string) => void;
   onOpenPlayer: (name: string) => void;
+  onOpenTraining?: () => void;
+  onSetWeekShape?: (shape: WeekShape) => void;
 };
 
 function preview(body: string): string {
@@ -94,6 +97,8 @@ export function HomeScreen({
   onReadNews,
   onOpenMatch,
   onOpenPlayer,
+  onOpenTraining,
+  onSetWeekShape,
 }: Props) {
   const club = teamById(championship, save.clubId);
   const group = teamGroup(championship, save.clubId);
@@ -110,6 +115,8 @@ export function HomeScreen({
   const unread = save.inbox.filter((item) => !item.read).length;
   const total = sessionsPerWeek(save.phase);
   const sessionsDone = save.sessionsDone ?? 0;
+  const weekShape = save.weekShape ?? DEFAULT_WEEK_SHAPE;
+  const nextKind = sessionForSlot(save.phase, weekShape, sessionsDone);
 
   const openNews = (item: NewsItem) => {
     setOpenId(item.id);
@@ -163,13 +170,17 @@ export function HomeScreen({
           Championship XV match rating {form.match}
           {formDelta !== 0 ? ` (${formDelta > 0 ? "+" : ""}${formDelta})` : ""} · ability {form.ability}
         </p>
-        {save.trainingDue ? (
-          <p className="hint hint--tight">
-            Training is due
-            {preseason ? ` · session ${sessionsDone + 1} of ${total}` : ""}. Open it from the Squad tab.
-          </p>
-        ) : campaign && preseason ? (
+        {save.trainingDue && !preseason ? (
+          <p className="hint hint--tight">Midweek training is due. Mixed work uses the schedules from Training.</p>
+        ) : campaign && preseason && !save.trainingDue ? (
           <p className="tactic-copy">Your week is in. Waiting on the other managers before it turns.</p>
+        ) : null}
+        {save.trainingDue && !preseason && onOpenTraining ? (
+          <div className="row-actions">
+            <button type="button" className="btn" onClick={onOpenTraining}>
+              Open training
+            </button>
+          </div>
         ) : null}
         {!preseason && nextMatch && sides && !(campaign && !campaign.week.locked) ? (
           <div className="row-actions">
@@ -217,9 +228,29 @@ export function HomeScreen({
           </div>
         ) : null}
         {preseason && !save.trainingDue ? (
-          <p className="hint hint--tight">Round 1 waits after six weeks. Open training from Squad when the next week is due.</p>
+          <p className="hint hint--tight">Round 1 waits after six weeks. Open training when the next week is due.</p>
         ) : null}
       </section>
+
+      {preseason && onSetWeekShape ? (
+        <section className="card card--compact">
+          <p className="kicker">This week&apos;s shape</p>
+          <WeekShapePicker weekShape={weekShape} onChange={onSetWeekShape} />
+          <p className="hint hint--tight">
+            Mixed sessions use the schedules from Training
+            {save.trainingDue
+              ? ` · next up: ${nextKind === "challenge" ? "challenge match" : "mixed session"} · ${sessionsDone} of ${total} done`
+              : "."}
+          </p>
+          {save.trainingDue && onOpenTraining ? (
+            <div className="row-actions">
+              <button type="button" className="btn" onClick={onOpenTraining}>
+                Open training
+              </button>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
 
       {campaign && playerId && onReady && onUnready && onForce && onPass ? (
         <CampaignWeekCard

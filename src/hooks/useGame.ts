@@ -906,7 +906,7 @@ export function useGame() {
         trainingDue: result.trainingDue,
         lastSheet: result.lastSheet ?? save.lastSheet,
         sessionsDone: result.sessionsDone,
-        trainingDeltas: result.visibleDeltas,
+        trainingDeltas: result.deltas,
         weekDeltas: result.weekComplete ? {} : result.weekDeltas,
       };
       const items: NewsItem[] = result.recovered.map((name) => recoveryNews({ name, date, seed: save.seed }));

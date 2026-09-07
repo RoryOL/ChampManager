@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 import type { GameSave, PlayerPlan, TrainingIntensity, WeekSession, WeekShape } from "../types";
 import { Toast } from "../components/Toast";
 import { TrainingMixEditor } from "../components/TrainingMixEditor";
+import { WeekShapePicker } from "../components/WeekShapePicker";
 import { ATTRIBUTE_LABELS } from "../lib/attributes";
 import { isInjured } from "../lib/injuries";
 import { ratedSquad } from "../lib/players";
@@ -10,12 +11,13 @@ import {
   INTENSITY_OPTIONS,
   PRESEASON_WEEKS,
   SQUAD_TEMPLATES,
-  WEEK_SHAPE_OPTIONS,
   applyIntensityToPlayers,
   applyTemplateToPlayers,
+  bankedLift,
   conditionFor,
   defaultMixFor,
   fitnessOf,
+  formatBoostDelta,
   intensityTitle,
   mixAbbrev,
   mixSummary,
@@ -23,8 +25,8 @@ import {
   planIntensity,
   sessionForSlot,
   sessionsPerWeek,
+  tableLift,
   trainedStat,
-  trainingDelta,
   type SquadTemplateId,
 } from "../lib/training";
 
@@ -39,15 +41,9 @@ type Props = {
 
 const TABLE_KEYS = ["shooting", "passing", "hooking", "speed", "teamwork"] as const;
 
-function formatDelta(value: number): string {
-  if (value > 0) return `+${value}`;
-  if (value < 0) return `${value}`;
-  return "0";
-}
-
-function deltaClass(value: number): string {
-  if (value > 0) return "is-up";
-  if (value < 0) return "is-down";
+function liftClass(value: number): string {
+  if (value > 0) return "is-lift-up";
+  if (value < 0) return "is-lift-down";
   return "";
 }
 
@@ -133,7 +129,7 @@ export function TrainingScreen({ save, onBack, onTrain, onSetPlans, onSetIntensi
       <h2>Training</h2>
       <p className="hint hint--tight">
         Set schedules and intensity for the panel or for individuals. Light is the recovery week: legs come back and
-        attributes only tick a little.
+        attributes only tick a little. Mixed sessions — three in a week, or two plus a challenge — use these schedules.
       </p>
 
       <section className="card card--compact">
@@ -161,22 +157,13 @@ export function TrainingScreen({ save, onBack, onTrain, onSetPlans, onSetIntensi
       {preseason ? (
         <section className="card card--compact">
           <p className="kicker">This week&apos;s shape</p>
-          <div className="choice-stack">
-            {WEEK_SHAPE_OPTIONS.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                className={weekShape === option.value ? "is-active" : ""}
-                onClick={() => {
-                  onSetWeekShape(option.value);
-                  showToast(`Week shape set to ${option.title}.`);
-                }}
-              >
-                <strong>{option.title}</strong>
-                <span>{option.copy}</span>
-              </button>
-            ))}
-          </div>
+          <WeekShapePicker
+            weekShape={weekShape}
+            onChange={(shape) => {
+              onSetWeekShape(shape);
+              showToast(shape === "triple" ? "Week set to three sessions." : "Week set to two sessions + challenge.");
+            }}
+          />
           <p className="hint hint--tight">
             Next up: {nextKind === "challenge" ? "challenge match" : "mixed session"} · {sessionsDone} of {total} done
             this week.
@@ -256,19 +243,21 @@ export function TrainingScreen({ save, onBack, onTrain, onSetPlans, onSetIntensi
 
       <section className="card card--compact">
         <p className="kicker">Panel</p>
+        <p className="hint hint--tight">
+          Green and red show banked training, including small lifts that have not ticked the profile number yet.
+        </p>
         <div className="training-table-wrap">
           <table className="training-table">
             <thead>
               <tr>
-                <th />
-                <th>Player</th>
+                <th className="col-check" />
+                <th className="col-player">Player</th>
                 <th>Schedule</th>
                 <th>Intensity</th>
                 <th>Fit</th>
                 {TABLE_KEYS.map((key) => (
                   <th key={key}>{ATTRIBUTE_LABELS[key]}</th>
                 ))}
-                <th>Last lifts</th>
               </tr>
             </thead>
             <tbody>
@@ -277,16 +266,13 @@ export function TrainingScreen({ save, onBack, onTrain, onSetPlans, onSetIntensi
                 const condition = conditionFor(player.name, save.condition);
                 const checked = names.has(player.name);
                 const last = save.trainingDeltas?.[player.name] ?? {};
-                const lastBits = Object.entries(last)
-                  .filter(([, value]) => Math.round(value ?? 0) !== 0)
-                  .map(([key, value]) => `${ATTRIBUTE_LABELS[key as keyof typeof ATTRIBUTE_LABELS]} ${formatDelta(Math.round(value ?? 0))}`);
                 const playerIntensity = planIntensity(plan, intensity);
                 return (
                   <tr key={player.name} className={checked ? "is-selected" : ""}>
-                    <td>
+                    <td className="col-check">
                       <input type="checkbox" checked={checked} onChange={() => toggle(player.name)} aria-label={`Select ${player.name}`} />
                     </td>
-                    <td>
+                    <td className="col-player">
                       <strong>{player.name}</strong>
                       <em>
                         {player.position}
@@ -298,15 +284,15 @@ export function TrainingScreen({ save, onBack, onTrain, onSetPlans, onSetIntensi
                     <td>{fitnessOf(condition)}</td>
                     {TABLE_KEYS.map((key) => {
                       const value = trainedStat(player.ratings[key], condition, key);
-                      const delta = trainingDelta(condition, key);
+                      const lift = tableLift(bankedLift(condition, key), last[key] ?? 0);
+                      const amount = formatBoostDelta(lift);
                       return (
-                        <td key={key}>
+                        <td key={key} className={liftClass(lift)}>
                           {value}
-                          {delta !== 0 ? <small className={deltaClass(delta)}>{formatDelta(delta)}</small> : null}
+                          {amount ? <small>{amount}</small> : null}
                         </td>
                       );
                     })}
-                    <td>{lastBits.length > 0 ? lastBits.join(" · ") : "—"}</td>
                   </tr>
                 );
               })}

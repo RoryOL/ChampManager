@@ -440,7 +440,7 @@ function applyClubTraining(
       trainingDue: result.trainingDue,
       lastSheet: result.lastSheet ?? club.lastSheet,
       sessionsDone: result.sessionsDone,
-      trainingDeltas: result.visibleDeltas,
+      trainingDeltas: result.deltas,
       weekDeltas: result.weekComplete ? {} : result.weekDeltas,
     },
     items,
