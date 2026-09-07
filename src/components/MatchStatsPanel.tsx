@@ -80,6 +80,17 @@ export function MatchStatsPanel({
             away={formatPair(awayStats.scores, awayStats.shots)}
           />
           <TeamRow
+            label="Frees (scored)"
+            home={formatPair(homeStats.freesScored ?? 0, homeStats.freesAttempted ?? 0)}
+            away={formatPair(awayStats.freesScored ?? 0, awayStats.freesAttempted ?? 0)}
+          />
+          <TeamRow
+            label="65s (scored)"
+            home={formatPair(homeStats.sixtyFivesScored ?? 0, homeStats.sixtyFivesAttempted ?? 0)}
+            away={formatPair(awayStats.sixtyFivesScored ?? 0, awayStats.sixtyFivesAttempted ?? 0)}
+          />
+          <TeamRow label="Frees conceded" home={homeStats.freesConceded ?? 0} away={awayStats.freesConceded ?? 0} />
+          <TeamRow
             label="High fielding"
             home={formatPair(homeStats.highFieldingWon, homeStats.highFieldingAttempted)}
             away={formatPair(awayStats.highFieldingWon, awayStats.highFieldingAttempted)}

@@ -60,6 +60,9 @@ export function PlayerMatchTable({
             <th>Poss</th>
             <th>Pass</th>
             <th>Shot</th>
+            <th title="Frees scored / attempted">Free</th>
+            <th title="65s scored / attempted">65</th>
+            <th title="Frees conceded">FrC</th>
             <th>HF</th>
             <th>POw</th>
             <th>Tck</th>
@@ -85,6 +88,9 @@ export function PlayerMatchTable({
               <td>{row.possessions}</td>
               <td>{formatPair(row.passesCompleted, row.passesAttempted)}</td>
               <td>{formatPair(row.scores, row.shots)}</td>
+              <td>{formatPair(row.freesScored ?? 0, row.freesAttempted ?? 0)}</td>
+              <td>{formatPair(row.sixtyFivesScored ?? 0, row.sixtyFivesAttempted ?? 0)}</td>
+              <td>{row.freesConceded ?? 0}</td>
               <td>{formatPair(row.highFieldingWon, row.highFieldingAttempted)}</td>
               <td>{row.puckoutsWon}</td>
               <td>{formatPair(row.tacklesWon, row.tacklesAttempted)}</td>

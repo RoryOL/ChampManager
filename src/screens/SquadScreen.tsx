@@ -169,6 +169,11 @@ function PlayerDetail({
             <li>Possessions {season.possessions} · passes {formatPair(season.passesCompleted, season.passesAttempted)}</li>
             <li>Shots {formatPair(season.scores, season.shots)} · high fielding {formatPair(season.highFieldingWon, season.highFieldingAttempted)}</li>
             <li>Puck-outs won {season.puckoutsWon} · tackles {formatPair(season.tacklesWon, season.tacklesAttempted)}</li>
+            <li>
+              Frees {formatPair(season.freesScored ?? 0, season.freesAttempted ?? 0)} · 65s{" "}
+              {formatPair(season.sixtyFivesScored ?? 0, season.sixtyFivesAttempted ?? 0)} · frees conceded{" "}
+              {season.freesConceded ?? 0}
+            </li>
             <li>Ground {season.groundCovered} km · fitness {season.fitness}</li>
           </ul>
         )}

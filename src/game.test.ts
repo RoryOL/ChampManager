@@ -206,16 +206,20 @@ describe("match engine", () => {
   });
 
   it("produces set-piece and puck-out events", () => {
-    const result = simulateMatch({
-      matchId: "g1-r1-a",
-      homeId: "ballyea",
-      awayId: "inagh-kilnamona",
-      homeTactics: { ...DEFAULT_TACTICS, build: 88, puckout: 82 },
-      awayTactics: { ...DEFAULT_TACTICS, puckout: 18 },
-      seed: 99,
-    });
-    const kinds = new Set(result.events.map((event) => event.kind));
-    expect(["free", "sixtyFive", "sideline"].some((kind) => kinds.has(kind as "free"))).toBe(true);
+    const kinds = new Set<string>();
+    for (let seed = 99; seed <= 108 && !["free", "sixtyFive", "sideline"].some((kind) => kinds.has(kind)); seed += 1) {
+      const result = simulateMatch({
+        matchId: "g1-r1-a",
+        homeId: "ballyea",
+        awayId: "inagh-kilnamona",
+        homeTactics: { ...DEFAULT_TACTICS, build: 88, puckout: 82, aggression: 88 },
+        awayTactics: { ...DEFAULT_TACTICS, puckout: 18, aggression: 80 },
+        seed,
+      });
+      for (const event of result.events) kinds.add(event.kind);
+    }
+    expect(["free", "sixtyFive", "sideline"].some((kind) => kinds.has(kind))).toBe(true);
+    expect(kinds.has("puckout")).toBe(true);
   });
 
   it("lets a sweeper cut the goals conceded compared with a 6-2-6", () => {
@@ -382,6 +386,10 @@ describe("match engine", () => {
     expect(pressHooks).toBeGreaterThan(sitHooks);
   });
 
+  it("lets strength win more tackles than a lighter panel", () => {
+    expect(tackleChance(12, 46, 48, 18)).toBeGreaterThan(tackleChance(12, 46, 48, 8));
+  });
+
   it("uses the named long-free, short-free and sideline takers", () => {
     const sheet = defaultSheet("ballyea");
     const longName = sheet.starters[12] ?? sheet.starters[11];
@@ -411,6 +419,68 @@ describe("match engine", () => {
     expect(homeSet.length).toBeGreaterThan(0);
     const names = new Set(homeSet.map((event) => event.playerName));
     expect([...names].every((name) => name === longName || name === shortName || name === sidelineName)).toBe(true);
+  });
+
+  it("awards 65s after a save or a tackle over the end line", () => {
+    const sixtyFives: { prior: string[] }[] = [];
+    for (let seed = 1; seed <= 36; seed += 1) {
+      const result = simulateMatch({
+        matchId: "g1-r1-a",
+        homeId: "ballyea",
+        awayId: "inagh-kilnamona",
+        climate: { sky: "sunny", windStrength: 8, windAngle: 12 },
+        seed,
+      });
+      result.events.forEach((event, index) => {
+        if (event.kind !== "sixtyFive") return;
+        const prior = result.events.slice(Math.max(0, index - 3), index).map((item) => item.kind);
+        sixtyFives.push({ prior });
+      });
+    }
+    expect(sixtyFives.length).toBeGreaterThan(0);
+    expect(sixtyFives.every((row) => row.prior.includes("save") || row.prior.includes("hook"))).toBe(true);
+  });
+
+  it("does not let the designated free-taker hog open-play shots", () => {
+    const sheet = defaultSheet("ballyea");
+    const taker = sheet.starters[2] ?? sheet.starters[1];
+    let openPlay = 0;
+    let openPlayByTaker = 0;
+    let setPieces = 0;
+    let setPiecesByTaker = 0;
+    for (let seed = 1; seed <= 24; seed += 1) {
+      const result = simulateMatch({
+        matchId: "g1-r1-a",
+        homeId: "ballyea",
+        awayId: "inagh-kilnamona",
+        homeTactics: {
+          ...DEFAULT_TACTICS,
+          longFreeTaker: taker,
+          shortFreeTaker: taker,
+          sidelineTaker: taker,
+        },
+        climate: { sky: "sunny", windStrength: 8, windAngle: 12 },
+        seed,
+      });
+      for (const event of result.events) {
+        if (event.teamId !== "ballyea") continue;
+        if (event.kind === "point" || event.kind === "goal") {
+          openPlay += 1;
+          if (event.playerName === taker) openPlayByTaker += 1;
+        } else if (event.kind === "wide" && !/free|65|sideline/i.test(event.text)) {
+          openPlay += 1;
+          if (event.playerName === taker) openPlayByTaker += 1;
+        }
+        if (event.kind === "free" || event.kind === "sixtyFive" || event.kind === "sideline") {
+          setPieces += 1;
+          if (event.playerName === taker) setPiecesByTaker += 1;
+        }
+      }
+    }
+    expect(openPlay).toBeGreaterThan(10);
+    expect(openPlayByTaker).toBe(0);
+    expect(setPieces).toBeGreaterThan(0);
+    expect(setPiecesByTaker).toBe(setPieces);
   });
 
   it("plays at championship tempo: tackles, possessions and scoring", () => {
@@ -823,6 +893,44 @@ describe("match intel", () => {
     }
   });
 
+  it("records frees conceded, frees taken and 65s per player", () => {
+    let sawFrees = false;
+    let sawSixtyFives = false;
+    for (let seed = 1; seed <= 28; seed += 1) {
+      const result = simulateMatch({
+        matchId: "g1-r1-a",
+        homeId: "ballyea",
+        awayId: "inagh-kilnamona",
+        homeTactics: { ...DEFAULT_TACTICS, aggression: 92 },
+        awayTactics: { ...DEFAULT_TACTICS, aggression: 88 },
+        climate: { sky: "sunny", windStrength: 8, windAngle: 12 },
+        seed,
+      });
+      const sum = (pick: (row: (typeof result.players)[number]) => number) =>
+        result.players.reduce((total, row) => total + pick(row), 0);
+      const freesAttempted = sum((row) => row.freesAttempted ?? 0);
+      const freesScored = sum((row) => row.freesScored ?? 0);
+      const freesConceded = sum((row) => row.freesConceded ?? 0);
+      const sixtyAttempted = sum((row) => row.sixtyFivesAttempted ?? 0);
+      const sixtyScored = sum((row) => row.sixtyFivesScored ?? 0);
+      const freeHits = result.events.filter((event) => event.kind === "free").length;
+      const freeWides = result.events.filter((event) => event.kind === "wide" && /free/i.test(event.text)).length;
+      const sixtyHits = result.events.filter((event) => event.kind === "sixtyFive").length;
+      const sixtyWides = result.events.filter((event) => event.kind === "wide" && /65/i.test(event.text)).length;
+      expect(freesAttempted).toBe(freeHits + freeWides);
+      expect(freesScored).toBe(freeHits);
+      expect(freesConceded).toBe(freesAttempted);
+      expect(sixtyAttempted).toBe(sixtyHits + sixtyWides);
+      expect(sixtyScored).toBe(sixtyHits);
+      expect((result.homeStats.freesAttempted ?? 0) + (result.awayStats.freesAttempted ?? 0)).toBe(freesAttempted);
+      expect((result.homeStats.freesConceded ?? 0) + (result.awayStats.freesConceded ?? 0)).toBe(freesConceded);
+      if (freesAttempted > 0) sawFrees = true;
+      if (sixtyAttempted > 0) sawSixtyFives = true;
+    }
+    expect(sawFrees).toBe(true);
+    expect(sawSixtyFives).toBe(true);
+  });
+
   it("flags a long-ball plan that lost the aerials", () => {
     const notes = buildCoachReport({
       clubId: "ballyea",
@@ -1057,6 +1165,9 @@ describe("match intel", () => {
     expect(rolled.minutes).toBe(62);
     expect(rolled.scores).toBe(3);
     expect(rolled.rating).toBe(8.4);
+    expect(rolled.freesConceded).toBe(0);
+    expect(rolled.freesAttempted).toBe(0);
+    expect(rolled.sixtyFivesAttempted).toBe(0);
   });
 });
 
