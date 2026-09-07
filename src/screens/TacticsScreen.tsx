@@ -69,7 +69,7 @@ export function TacticsScreen({ save, onChange, onSwap, onSetSheet }: Props) {
         hint="Pick two names, then tap Swap. A second tap on the same name drops him from the pair."
       />
       <div className="row-actions">
-        <button type="button" className="btn btn--ghost" onClick={askCoach}>
+        <button type="button" className="btn" onClick={askCoach}>
           Ask the coach to pick the team
         </button>
       </div>
