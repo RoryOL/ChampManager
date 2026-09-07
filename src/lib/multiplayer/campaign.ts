@@ -440,7 +440,7 @@ function applyClubTraining(
       trainingDue: result.trainingDue,
       lastSheet: result.lastSheet ?? club.lastSheet,
       sessionsDone: result.sessionsDone,
-      trainingDeltas: result.visibleDeltas,
+      trainingDeltas: result.deltas,
       weekDeltas: result.weekComplete ? {} : result.weekDeltas,
     },
     items,
@@ -730,6 +730,7 @@ function finishSim(
       tactics,
       squad,
       sim.events.some((event) => event.kind === "red" && event.teamId === seat.clubId),
+      seat.clubId === sim.homeId ? (sim.homeChaseEffort ?? 0) : (sim.awayChaseEffort ?? 0),
     );
     condition = applyMatchForm(condition, squad, opening, closing, sim.players, result, campaign.seed, sim.matchId);
     const teamworked = applyTeamwork(condition, closing, club.lastSheet, "competitive");

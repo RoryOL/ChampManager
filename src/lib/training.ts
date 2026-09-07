@@ -445,6 +445,25 @@ export function trainingDelta(condition: PlayerCondition, key: AttributeKey): nu
   return value === 0 ? 0 : value;
 }
 
+export function bankedLift(condition: PlayerCondition, key: AttributeKey): number {
+  return snapBoost(condition.boosts?.[key] ?? 0);
+}
+
+/** Signed lift for the training table: banked total, or last session if nothing is banked yet. */
+export function tableLift(banked: number, lastSession = 0): number {
+  return snapBoost(banked !== 0 ? banked : lastSession);
+}
+
+export function formatBoostDelta(value: number): string {
+  const snapped = snapBoost(value);
+  if (snapped === 0) return "";
+  const abs = Math.abs(snapped);
+  const shown = abs >= 1 ? Math.round(snapped * 10) / 10 : Math.round(snapped * 100) / 100;
+  if (shown === 0) return "";
+  const body = Number.isInteger(shown) ? String(Math.abs(shown)) : Math.abs(shown).toFixed(abs >= 1 ? 1 : 2).replace(/0$/, "");
+  return shown < 0 ? `-${body}` : `+${body}`;
+}
+
 export function matchRatings(player: RatedPlayer, condition: PlayerCondition): RatedPlayer["ratings"] {
   const ratings = {} as Record<AttributeKey, number>;
   for (const key of ATTRIBUTE_KEYS) {
@@ -898,6 +917,7 @@ export function matchFatigueDelta(
   started: boolean,
   age = 27,
   shortForwards = false,
+  chaseEffort = 0,
 ): number {
   if (minutes <= 0) return 0;
   const share = Math.min(1, minutes / 62);
@@ -918,6 +938,7 @@ export function matchFatigueDelta(
   if ((plan.shape === "sweeper" || shortForwards) && (position === "HF" || position === "FF")) {
     gain += 9 * share;
   }
+  gain += Math.min(1, Math.max(0, chaseEffort)) * 14 * share;
   gain *= ageResponse(age).fatigue;
   return Math.round(gain);
 }
@@ -929,6 +950,7 @@ export function applyMatchFatigue(
   tactics: Tactics | undefined = undefined,
   squad: RatedPlayer[] = [],
   shortForwards = false,
+  chaseEffort = 0,
 ): Record<string, PlayerCondition> {
   const next = { ...condition };
   const byName = new Map(squad.map((player) => [player.name, player]));
@@ -936,7 +958,7 @@ export function applyMatchFatigue(
     const current = cloneCondition(next[name] ?? defaultCondition());
     const position = byName.get(name)?.position ?? "MF";
     const age = byName.get(name)?.age ?? 27;
-    const add = matchFatigueDelta(62, tactics, position, started, age, shortForwards);
+    const add = matchFatigueDelta(62, tactics, position, started, age, shortForwards, chaseEffort);
     const recover = 4 * ageResponse(age).recover;
     next[name] = {
       fatigue: clampCondition(current.fatigue + add - recover),

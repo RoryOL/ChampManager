@@ -344,8 +344,8 @@ export function puckoutLabel(value: number): string {
   if (value < 25) return "Short to the half-backs";
   if (value < 45) return "Mostly short";
   if (value < 60) return "Mixed restarts";
-  if (value < 80) return "Mostly long";
-  return "Long contest in midfield";
+  if (value < 80) return "Mostly long to a target";
+  return "Long to a midfielder or half-forward";
 }
 
 export function aggressionLabel(value: number): string {

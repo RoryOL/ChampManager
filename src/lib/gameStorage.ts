@@ -42,6 +42,7 @@ type LegacyTactics = {
   longFreeTaker?: string;
   shortFreeTaker?: string;
   sidelineTaker?: string;
+  puckoutTarget?: string;
 };
 
 function isTactics(value: unknown): value is Tactics {
@@ -73,6 +74,7 @@ export function migrateTactics(raw: unknown): Tactics {
       longFreeTaker: raw.longFreeTaker,
       shortFreeTaker: raw.shortFreeTaker,
       sidelineTaker: raw.sidelineTaker,
+      puckoutTarget: raw.puckoutTarget,
     };
   }
   const legacy = (raw ?? {}) as LegacyTactics;
@@ -108,6 +110,7 @@ export function migrateTactics(raw: unknown): Tactics {
     longFreeTaker: legacy.longFreeTaker,
     shortFreeTaker: legacy.shortFreeTaker,
     sidelineTaker: legacy.sidelineTaker,
+    puckoutTarget: (legacy as { puckoutTarget?: string }).puckoutTarget,
   };
 }
 

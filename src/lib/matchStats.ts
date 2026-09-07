@@ -201,21 +201,54 @@ export function mergeCredits(credits: StatCredit[]): StatCredit[] {
   return [...byKey.values()];
 }
 
-function matchRating(row: PlayerMatchStats): number {
-  const passRate = row.passesAttempted > 0 ? row.passesCompleted / row.passesAttempted : 0.7;
-  const tackleRate = row.tacklesAttempted > 0 ? row.tacklesWon / row.tacklesAttempted : 0.5;
-  const shotRate = row.shots > 0 ? row.scores / row.shots : 0.4;
-  const raw =
-    5.4 +
-    row.scores * 0.55 +
-    row.puckoutsWon * 0.12 +
-    row.highFieldingWon * 0.1 +
-    (passRate - 0.65) * 2.2 +
-    (tackleRate - 0.45) * 1.6 +
-    (shotRate - 0.4) * 1.4 +
-    Math.min(row.possessions, 12) * 0.04 -
-    Math.max(0, row.shots - row.scores) * 0.12;
-  return Math.max(1, Math.min(10, Math.round(raw * 10) / 10));
+function taper(count: number, first: number, cap: number): number {
+  if (count <= 0 || cap <= 0) return 0;
+  return cap * (1 - Math.exp((-first * count) / cap));
+}
+
+function rateDelta(made: number, attempted: number, baseline: number, weight: number): number {
+  if (attempted < 3) return 0;
+  const confidence = Math.min(1, attempted / 8);
+  return ((made / attempted) - baseline) * confidence * weight;
+}
+
+function squashHigh(raw: number): number {
+  if (raw <= 8.8) return raw;
+  const extra = raw - 8.8;
+  return 8.8 + extra / (1 + extra * 0.22);
+}
+
+/** Championship match rating on a 1–10 scale. A 10 is a once-in-a-season hour. */
+export function playerMatchRating(row: PlayerMatchStats): number {
+  const minutes = Math.max(0, row.minutes);
+  if (minutes < 8) {
+    const cameo = 5.6 + (row.scores + row.tacklesWon + row.puckoutsWon) * 0.15;
+    return Math.max(1, Math.min(6.8, Math.round(cameo * 10) / 10));
+  }
+
+  const setPieceScores = (row.freesScored ?? 0) + (row.sixtyFivesScored ?? 0);
+  const openScores = Math.max(0, row.scores - setPieceScores);
+  const misses = Math.max(0, row.shots - row.scores);
+
+  let raw =
+    5.9 +
+    taper(openScores, 0.4, 1.85) +
+    taper(Math.max(0, openScores - 4), 0.28, 1.15) +
+    taper(setPieceScores, 0.16, 0.55) +
+    taper(row.puckoutsWon, 0.08, 0.55) +
+    taper(row.highFieldingWon, 0.07, 0.45) +
+    taper(Math.min(row.possessions, 16), 0.025, 0.4) +
+    rateDelta(row.passesCompleted, row.passesAttempted, 0.68, 1.35) +
+    rateDelta(row.tacklesWon, row.tacklesAttempted, 0.48, 1.05) +
+    rateDelta(row.scores, row.shots, 0.48, 0.9) -
+    Math.min(0.85, misses * 0.1) -
+    Math.min(0.45, (row.freesConceded ?? 0) * 0.1);
+
+  if (minutes >= 50 && row.possessions <= 2 && row.scores === 0 && row.tacklesWon <= 1) {
+    raw -= 0.55;
+  }
+
+  return Math.max(1, Math.min(10, Math.round(squashHigh(raw) * 10) / 10));
 }
 
 export function statsFromEvents(
@@ -231,6 +264,8 @@ export function statsFromEvents(
     awayTactics?: Tactics;
     upTo?: number;
     gameSeed?: number;
+    homeChaseEffort?: number;
+    awayChaseEffort?: number;
   },
 ): { players: PlayerMatchStats[]; homeStats: TeamMatchStats; awayStats: TeamMatchStats } {
   const rows = new Map<string, PlayerMatchStats>();
@@ -283,7 +318,8 @@ export function statsFromEvents(
     const workrate = found ? found.player.ratings.workrate : 12;
     const minutes = Math.max(row.minutes, row.started ? 1 : 0);
     const position = found?.player.position ?? slotOf(row.teamId, row.name);
-    const drain = matchFatigueDelta(minutes, tactics, position, row.started, found?.player.age);
+    const chaseEffort = row.teamId === options.homeId ? (options.homeChaseEffort ?? 0) : (options.awayChaseEffort ?? 0);
+    const drain = matchFatigueDelta(minutes, tactics, position, row.started, found?.player.age, false, chaseEffort);
     const fatigue = Math.max(0, Math.min(100, condition.fatigue + drain));
     const groundCovered = Math.round(minutes * (0.072 + workrate * 0.0032) * 10) / 10;
     return {
@@ -293,7 +329,7 @@ export function statsFromEvents(
       fatigue,
       fitness: Math.max(0, Math.min(100, 100 - fatigue)),
       overall,
-      rating: matchRating({ ...row, minutes }),
+      rating: playerMatchRating({ ...row, minutes }),
       mood: formValue(condition),
     };
   });
@@ -415,6 +451,8 @@ export function combineHalves(
     homeTactics: second.homeTactics,
     awayTactics: second.awayTactics,
     gameSeed: first.gameSeed ?? second.gameSeed,
+    homeChaseEffort: Math.min(1, (first.homeChaseEffort ?? 0) + (second.homeChaseEffort ?? 0)),
+    awayChaseEffort: Math.min(1, (first.awayChaseEffort ?? 0) + (second.awayChaseEffort ?? 0)),
   });
   const coachReport = buildCoachReport({
     clubId: names.clubId,
@@ -446,6 +484,8 @@ export function combineHalves(
     coachReport,
     climate: first.climate,
     shots: [...first.shots, ...second.shots],
+    homeChaseEffort: Math.min(1, (first.homeChaseEffort ?? 0) + (second.homeChaseEffort ?? 0)),
+    awayChaseEffort: Math.min(1, (first.awayChaseEffort ?? 0) + (second.awayChaseEffort ?? 0)),
   };
 }
 
@@ -468,6 +508,8 @@ export function liveStats(
     awayTactics: sim.awayTactics,
     upTo: cursor,
     gameSeed: sim.gameSeed,
+    homeChaseEffort: sim.homeChaseEffort,
+    awayChaseEffort: sim.awayChaseEffort,
   });
 }
 

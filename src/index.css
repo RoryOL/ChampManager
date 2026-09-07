@@ -1030,13 +1030,19 @@ html.native-app .device {
 }
 
 .training-table-wrap {
-  overflow-x: auto;
+  overflow: auto;
+  max-height: min(58vh, 520px);
   margin: 8px 0 4px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
 }
 
 .training-table {
-  width: 100%;
-  border-collapse: collapse;
+  width: max-content;
+  min-width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: 12px;
 }
 
@@ -1047,12 +1053,17 @@ html.native-app .device {
   white-space: nowrap;
   border-bottom: 1px solid var(--line);
   vertical-align: top;
+  background: var(--surface);
 }
 
 .training-table th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
   color: var(--muted);
   font-weight: 600;
   font-size: 11px;
+  background: var(--surface-2);
 }
 
 .training-table td strong {
@@ -1069,10 +1080,63 @@ html.native-app .device {
 .training-table td small {
   display: block;
   font-size: 10px;
+  font-weight: 700;
+}
+
+.training-table .col-check,
+.training-table .col-player {
+  position: sticky;
+  z-index: 2;
+  background: var(--surface);
+}
+
+.training-table .col-check {
+  left: 0;
+  width: 36px;
+  min-width: 36px;
+  max-width: 36px;
+  padding-left: 8px;
+  padding-right: 4px;
+}
+
+.training-table .col-player {
+  left: 36px;
+  min-width: 118px;
+  box-shadow: 8px 0 10px -8px rgba(0, 0, 0, 0.65);
+}
+
+.training-table thead .col-check,
+.training-table thead .col-player {
+  z-index: 4;
+  background: var(--surface-2);
 }
 
 .training-table tr.is-selected td {
-  background: var(--you);
+  background: #2a3344;
+}
+
+.training-table td.is-lift-up {
+  background: rgba(125, 206, 138, 0.12);
+}
+
+.training-table td.is-lift-down {
+  background: rgba(224, 90, 90, 0.12);
+}
+
+.training-table td.is-lift-up small {
+  color: #7dce8a;
+}
+
+.training-table td.is-lift-down small {
+  color: #f0a3a3;
+}
+
+.training-table tr.is-selected td.is-lift-up {
+  background: #2c3d38;
+}
+
+.training-table tr.is-selected td.is-lift-down {
+  background: #3a2d33;
 }
 
 .squad-table-wrap {

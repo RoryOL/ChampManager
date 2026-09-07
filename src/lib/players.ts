@@ -389,8 +389,42 @@ export type SideProfile = {
   longFreeTaker: RatedPlayer | undefined;
   shortFreeTaker: RatedPlayer | undefined;
   sidelineTaker: RatedPlayer | undefined;
+  puckoutTarget: RatedPlayer | undefined;
   keeper: RatedPlayer | undefined;
 };
+
+/** Midfield (7–8) and half-forward (9–11) shirts that attacking puck-outs aim at. */
+export const PUCKOUT_TARGET_INDEXES = [7, 8, 9, 10, 11];
+
+export function aerialContestRating(highFielding: number, aerialReach: number, strength: number): number {
+  return highFielding * 0.42 + aerialReach * 0.38 + strength * 0.2;
+}
+
+export function puckoutTargetPool(xv: RatedPlayer[]): RatedPlayer[] {
+  return PUCKOUT_TARGET_INDEXES.map((index) => xv[index]).filter((player): player is RatedPlayer => Boolean(player));
+}
+
+export function pickPuckoutTarget(
+  xv: RatedPlayer[],
+  named?: string,
+  condition: Record<string, PlayerCondition> = {},
+): RatedPlayer | undefined {
+  const pool = puckoutTargetPool(xv);
+  if (pool.length === 0) return undefined;
+  if (named) {
+    const chosen = pool.find((player) => player.name === named);
+    if (chosen) return chosen;
+  }
+  const score = (player: RatedPlayer) => {
+    const form = conditionFor(player.name, condition);
+    return aerialContestRating(
+      matchStat(player.ratings.highFielding, form, "highFielding"),
+      matchStat(player.ratings.aerialReach, form, "aerialReach"),
+      matchStat(player.ratings.strength, form, "strength"),
+    );
+  };
+  return [...pool].sort((a, b) => score(b) - score(a))[0];
+}
 
 export function pickSpecialist(
   xv: RatedPlayer[],
@@ -426,12 +460,14 @@ export function designatedRoles(
   shortFreeTaker?: string;
   sidelineTaker?: string;
   puckoutKeeper?: string;
+  puckoutTarget?: string;
 } {
   return {
     longFreeTaker: pickNamedOrSpecialist(xv, tactics?.longFreeTaker, "frees")?.name,
     shortFreeTaker: pickNamedOrSpecialist(xv, tactics?.shortFreeTaker, "frees")?.name,
     sidelineTaker: pickNamedOrSpecialist(xv, tactics?.sidelineTaker, "sidelines")?.name,
     puckoutKeeper: xv[0]?.name,
+    puckoutTarget: pickPuckoutTarget(xv, tactics?.puckoutTarget)?.name,
   };
 }
 
@@ -486,6 +522,20 @@ export function sideProfile(
   const longFreeTaker = pickNamedOrSpecialist(xv, tactics.longFreeTaker, "frees", condition);
   const shortFreeTaker = pickNamedOrSpecialist(xv, tactics.shortFreeTaker, "frees", condition);
   const sidelineTaker = pickNamedOrSpecialist(xv, tactics.sidelineTaker, "sidelines", condition);
+  const puckoutTarget = pickPuckoutTarget(xv, tactics.puckoutTarget, condition);
+  const aerialOf = (player: RatedPlayer | undefined) => {
+    if (!player) return 12;
+    const form = conditionFor(player.name, condition);
+    return aerialContestRating(
+      matchStat(player.ratings.highFielding, form, "highFielding"),
+      matchStat(player.ratings.aerialReach, form, "aerialReach"),
+      matchStat(player.ratings.strength, form, "strength"),
+    );
+  };
+  const targetAerial = aerialOf(puckoutTarget);
+  const pack = puckoutTargetPool(xv);
+  const packAerial =
+    average(pack.filter((player) => player.name !== puckoutTarget?.name).map(aerialOf)) || targetAerial;
   const pressure =
     average(xv.map((player) => matchStat(player.ratings.underPressure, conditionFor(player.name, condition), "underPressure"))) ||
     12;
@@ -501,7 +551,9 @@ export function sideProfile(
   const direct = clampDial(tactics.build) / 100;
   const longPuck = clampDial(tactics.puckout) / 100;
   attack += direct * (0.4 + (aerial - 12) * 0.12) + (1 - direct) * (0.28 + (running - 12) * 0.14);
-  attack += longPuck * (puckout + aerial - 24) * 0.08 + (1 - longPuck) * (halfBackHands - 12) * 0.12;
+  attack +=
+    longPuck * (puckout * 0.35 + targetAerial * 0.7 + packAerial * 0.3 - 18) * 0.08 +
+    (1 - longPuck) * (halfBackHands - 12) * 0.12;
   defence += (1 - longPuck) * 0.22;
   if (tactics.shape === "sweeper" && xv.length >= 15) {
     defence += 1.6;
@@ -543,6 +595,7 @@ export function sideProfile(
     longFreeTaker,
     shortFreeTaker,
     sidelineTaker,
+    puckoutTarget,
     keeper,
   };
 }

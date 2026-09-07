@@ -565,6 +565,11 @@ export function useGame() {
           extras?.base?.tactics ?? base.tactics,
           ratedSquad(base.clubId, base.seed),
           current.user.events.some((event) => event.kind === "red" && event.teamId === base.clubId),
+          base.clubId === current.user.homeId
+            ? (current.user.homeChaseEffort ?? 0)
+            : base.clubId === current.user.awayId
+              ? (current.user.awayChaseEffort ?? 0)
+              : 0,
         ),
         trainingDue: true,
       };
@@ -906,7 +911,7 @@ export function useGame() {
         trainingDue: result.trainingDue,
         lastSheet: result.lastSheet ?? save.lastSheet,
         sessionsDone: result.sessionsDone,
-        trainingDeltas: result.visibleDeltas,
+        trainingDeltas: result.deltas,
         weekDeltas: result.weekComplete ? {} : result.weekDeltas,
       };
       const items: NewsItem[] = result.recovered.map((name) => recoveryNews({ name, date, seed: save.seed }));

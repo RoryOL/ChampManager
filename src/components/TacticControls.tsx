@@ -82,7 +82,7 @@ export function TacticControls({ tactics, onChange, compact = false, xv = [] }: 
       <section className="card">
         <h3>Puck-out</h3>
         <p className="tactic-copy">
-          Short to the half-backs on the left, long contest on the right. Currently{" "}
+          Short to the half-backs on the left, long to a midfielder or half-forward on the right. Currently{" "}
           <strong>{puckoutLabel(tactics.puckout)}</strong>.
         </p>
         <label className="dial">
@@ -96,6 +96,14 @@ export function TacticControls({ tactics, onChange, compact = false, xv = [] }: 
           />
           <span>Long</span>
         </label>
+        {xv.length > 0 ? (
+          <TakerSelect
+            label="Puck-out target"
+            value={tactics.puckoutTarget}
+            players={xv.slice(7, 12)}
+            onChange={(name) => onChange({ ...tactics, puckoutTarget: name || undefined })}
+          />
+        ) : null}
       </section>
       <section className="card">
         <h3>Aggression</h3>
@@ -183,6 +191,12 @@ export function TacticControls({ tactics, onChange, compact = false, xv = [] }: 
           <p className="tactic-copy">
             The extra defender makes a goal a rare look. Five forwards cover more ground — their match fitness drops
             faster. A send-off drops you to 6-2-5 and you lose the sweeper.
+          </p>
+        ) : null}
+        {tactics.mentality === "contain" || tactics.shape === "sweeper" || (tactics.pressure ?? 48) < 30 ? (
+          <p className="tactic-copy">
+            Sitting in or sitting off the press keeps the score down. Fewer scores mean more randomness — the better
+            side is less sure of the win.
           </p>
         ) : null}
       </section>
