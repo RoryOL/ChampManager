@@ -30,6 +30,7 @@ import {
   setPieceConversion,
   shotDistanceM,
 } from "./shooting";
+import { scoreTotal } from "./scoring";
 import { conditionFor, matchStat } from "./training";
 import { climateOf, passCompleteChance, puckoutWindAdjust, rollClimate, withWindFor } from "./weather";
 
@@ -130,6 +131,68 @@ export function targetedPuckoutWinChance(
   const attack = fielder * weight + support * (1 - weight);
   const spill = foundTarget ? 0 : -0.05;
   return Math.min(0.78, Math.max(0.22, 0.5 + (attack - marker * 1.05) * 0.032 + spill + wind));
+}
+
+/** 0 before the closing spell, 1 at the full-time whistle. */
+export function latePhase(minute: number): number {
+  if (minute < 48) return 0;
+  return Math.min(1, (minute - 47) / 15);
+}
+
+export type ChaseState = {
+  chasing: boolean;
+  huntGoals: boolean;
+  deficit: number;
+  energy: number;
+};
+
+const IDLE_CHASE: ChaseState = { chasing: false, huntGoals: false, deficit: 0, energy: 0 };
+
+/** Losing sides empty the tank after the 48th minute. Multiple points down means hunt a goal. */
+export function chaseState(us: Score, them: Score, minute: number): ChaseState {
+  const late = latePhase(minute);
+  const deficit = scoreTotal(them) - scoreTotal(us);
+  if (late <= 0 || deficit <= 0) return { ...IDLE_CHASE, deficit: Math.max(0, deficit) };
+  const energy = Math.min(1, late * (0.48 + Math.min(deficit, 9) * 0.07));
+  return {
+    chasing: true,
+    huntGoals: deficit >= 2,
+    deficit,
+    energy,
+  };
+}
+
+export function withChaseTactics(tactics: Tactics, chase: ChaseState): Tactics {
+  if (!chase.chasing) return tactics;
+  const lift = 0.35 + chase.energy * 0.65;
+  return {
+    ...tactics,
+    mentality: "attacking",
+    pressure: Math.min(100, (tactics.pressure ?? 48) + 16 * lift),
+    aggression: Math.min(100, (tactics.aggression ?? 46) + 12 * lift),
+    shooting: chase.huntGoals
+      ? Math.max(6, (tactics.shooting ?? 50) - 30)
+      : Math.max(14, (tactics.shooting ?? 50) - 8),
+    shape: chase.huntGoals ? "traditional" : tactics.shape,
+  };
+}
+
+/** Trailing by a point in the last few minutes: a soft free that can level it. */
+export function lateSoftFreeChance(minute: number, margin: number): number {
+  if (Math.abs(margin) !== 1 || minute < 51) return 0;
+  const late = latePhase(minute);
+  if (late <= 0) return 0;
+  return 0.05 + late * 0.07;
+}
+
+/** One-point games in the last few minutes: the trailer throws another look at the posts. */
+export function lateEqualizerLookChance(minute: number, margin: number): number {
+  if (Math.abs(margin) !== 1 || minute < 56) return 0;
+  return 0.12 + latePhase(minute) * 0.1;
+}
+
+export function chaseEffortFromAcc(accumulated: number): number {
+  return Math.min(1, Math.max(0, accumulated / 10));
 }
 
 export type TackleRole = "back" | "mid" | "forward";
@@ -402,6 +465,8 @@ export function simulateMatch(options: {
 
   let homeScore: Score = options.startHome ?? { goals: 0, points: 0 };
   let awayScore: Score = options.startAway ?? { goals: 0, points: 0 };
+  let homeChaseAcc = 0;
+  let awayChaseAcc = 0;
   let momentum = options.startMomentum ?? 50;
   const events: MatchEvent[] = [];
   const homeOut = new Set((options.sentOff ?? []).filter((name) => homeSheet.starters.includes(name) || homeSheet.subs.includes(name)));
@@ -575,6 +640,14 @@ export function simulateMatch(options: {
   };
 
   const tacticsFor = (teamId: string) => (teamId === options.homeId ? homeLiveTactics : awayLiveTactics);
+  const chaseOf = (teamId: string, minute: number) =>
+    chaseState(
+      teamId === options.homeId ? homeScore : awayScore,
+      teamId === options.homeId ? awayScore : homeScore,
+      minute,
+    );
+  let homeEffTactics: Tactics = homeLiveTactics;
+  let awayEffTactics: Tactics = awayLiveTactics;
   const pressWeightOf = (sideId: string, sideNames: string[], index: number) => {
     const player = playerOf(sideId, sideNames[index] ?? "");
     const lineBoost = index <= 11 ? 1.35 : 0.85;
@@ -976,7 +1049,8 @@ export function simulateMatch(options: {
               random,
             ).name
         : pickForward(names, random);
-    const tactics = tacticsFor(teamId);
+    const chase = chaseOf(teamId, minute);
+    const tactics = withChaseTactics(tacticsFor(teamId), chase);
     const shooting = clampDial(tactics.shooting ?? 50);
     const hops = origin === "press" ? 1 : 1 + Math.floor((1 - direct) * 2) + (shooting > 62 ? 1 : 0);
     const teamwork = teamId === options.homeId ? homeTeamwork : awayTeamwork;
@@ -1015,10 +1089,12 @@ export function simulateMatch(options: {
       ? Math.max(10, Math.min(36, 15 + random() * 18 - (finishing - 12) * 0.35))
       : shotDistanceM(shooting, striking, random);
     let distanceM = distanceM0;
-    if (origin !== "press" && direct > 0.62 && random() < 0.18 + (profile.aerial - 12) * 0.012) {
+    if (chase.huntGoals) {
+      distanceM = Math.max(10, Math.min(30, 11 + random() * 16));
+    } else if (origin !== "press" && direct > 0.62 && random() < 0.18 + (profile.aerial - 12) * 0.012) {
       distanceM = 10 + random() * 14;
     }
-    if (shooting >= 78 && distanceM > 42 && random() < 0.28) {
+    if (shooting >= 78 && distanceM > 42 && random() < 0.28 && !chase.huntGoals) {
       pendingCredits.push(...moved.credits);
       return;
     }
@@ -1043,14 +1119,16 @@ export function simulateMatch(options: {
       ),
       matchChaos(tacticsFor(options.homeId), tacticsFor(options.awayId)),
       random,
-    );
+    ) * (chase.huntGoals ? 0.36 : chase.chasing ? 1.1 : 1);
     const goalChance =
       goalChanceFromDistance(distanceM, sweeperCut) *
         fiveForwardCut *
         (direct > 0.6 ? 1.2 : 1) *
-        (origin === "press" ? 1.65 : 1) +
+        (origin === "press" ? 1.65 : 1) *
+        (chase.huntGoals ? 2.15 : chase.chasing ? 1.12 : 1) +
       (direct > 0.62 && distanceM < 22 ? 0.05 : 0) +
-      (origin === "press" && distanceM < 24 ? 0.06 : 0);
+      (origin === "press" && distanceM < 24 ? 0.06 : 0) +
+      (chase.huntGoals && distanceM < 26 ? 0.08 : 0);
     const flush = (extra: StatCredit[]) =>
       mergeCredits([...pendingCredits.splice(0, pendingCredits.length), ...moved.credits, ...intoShooter, ...extra]);
     const record = (kind: ShotAttempt["kind"], scored: boolean) => {
@@ -1141,8 +1219,8 @@ export function simulateMatch(options: {
     const homeOnBall = random() < 0.5 + (momentum - 50) / 220;
     const defendingId = homeOnBall ? options.awayId : options.homeId;
     const attackingId = homeOnBall ? options.homeId : options.awayId;
-    const defTactics = homeOnBall ? awayLiveTactics : homeLiveTactics;
-    const attTactics = homeOnBall ? homeLiveTactics : awayLiveTactics;
+    const defTactics = homeOnBall ? awayEffTactics : homeEffTactics;
+    const attTactics = homeOnBall ? homeEffTactics : awayEffTactics;
     const defProfile = homeOnBall ? away : home;
     const attProfile = homeOnBall ? home : away;
     const defNames = homeOnBall ? awayNames : homeNames;
@@ -1276,20 +1354,37 @@ export function simulateMatch(options: {
       if (!fieldNames(rolled.event.teamId).includes(rolled.name)) continue;
       replaceInjured(rolled.event.teamId, rolled.name, minute, rolled);
     }
+    const homeChase = chaseOf(options.homeId, minute);
+    const awayChase = chaseOf(options.awayId, minute);
+    homeEffTactics = withChaseTactics(homeLiveTactics, homeChase);
+    awayEffTactics = withChaseTactics(awayLiveTactics, awayChase);
+    if (homeChase.chasing) homeChaseAcc += homeChase.energy;
+    if (awayChase.chasing) awayChaseAcc += awayChase.energy;
     playGroundContest(minute);
     if (random() < 0.55) playGroundContest(minute);
     const tilt = (momentum - 50) / 50;
-    const chaos = matchChaos(homeLiveTactics, awayLiveTactics);
+    const chaos = matchChaos(homeEffTactics, awayEffTactics);
     const homeLooks =
-      (random() < attackLookChance(home.attack, away.defence, tilt, chaos, defensiveSit(homeLiveTactics)) ? 1 : 0) +
-      (random() < luckyLookChance(chaos) ? 1 : 0);
+      (random() <
+        attackLookChance(
+          home.attack + homeChase.energy * (homeChase.huntGoals ? 0.85 : 1.05),
+          away.defence - awayChase.energy * (awayChase.huntGoals ? 1.15 : 0.38),
+          tilt,
+          chaos,
+          defensiveSit(homeEffTactics),
+        )
+        ? 1
+        : 0) +
+      (random() < luckyLookChance(chaos) ? 1 : 0) +
+      (homeChase.chasing && random() < 0.07 + homeChase.energy * (homeChase.huntGoals ? 0.12 : 0.16) ? 1 : 0) +
+      (awayChase.chasing && random() < (awayChase.huntGoals ? 0.12 : 0.025) * awayChase.energy ? 1 : 0);
     for (let look = 0; look < homeLooks; look += 1) {
       tryScore(
         options.homeId,
         homeNames,
         home,
         away,
-        awayLiveTactics,
+        awayEffTactics,
         awayNames,
         minute,
         homeDirect,
@@ -1297,23 +1392,80 @@ export function simulateMatch(options: {
       );
     }
     const awayLooks =
-      (random() < attackLookChance(away.attack, home.defence, -tilt, chaos, defensiveSit(awayLiveTactics)) ? 1 : 0) +
-      (random() < luckyLookChance(chaos) ? 1 : 0);
+      (random() <
+        attackLookChance(
+          away.attack + awayChase.energy * (awayChase.huntGoals ? 0.85 : 1.05),
+          home.defence - homeChase.energy * (homeChase.huntGoals ? 1.15 : 0.38),
+          -tilt,
+          chaos,
+          defensiveSit(awayEffTactics),
+        )
+        ? 1
+        : 0) +
+      (random() < luckyLookChance(chaos) ? 1 : 0) +
+      (awayChase.chasing && random() < 0.07 + awayChase.energy * (awayChase.huntGoals ? 0.12 : 0.16) ? 1 : 0) +
+      (homeChase.chasing && random() < (homeChase.huntGoals ? 0.12 : 0.025) * homeChase.energy ? 1 : 0);
     for (let look = 0; look < awayLooks; look += 1) {
       tryScore(
         options.awayId,
         awayNames,
         away,
         home,
-        homeLiveTactics,
+        homeEffTactics,
         homeNames,
         minute,
         awayDirect,
         awayLongPuck,
       );
     }
+    const margin = scoreTotal(homeScore) - scoreTotal(awayScore);
+    if (random() < lateEqualizerLookChance(minute, margin)) {
+      const trailingIsHome = margin < 0;
+      if (trailingIsHome) {
+        tryScore(
+          options.homeId,
+          homeNames,
+          home,
+          away,
+          awayEffTactics,
+          awayNames,
+          minute,
+          homeDirect,
+          homeLongPuck,
+        );
+      } else {
+        tryScore(
+          options.awayId,
+          awayNames,
+          away,
+          home,
+          homeEffTactics,
+          homeNames,
+          minute,
+          awayDirect,
+          awayLongPuck,
+        );
+      }
+    }
+    const marginAfter = scoreTotal(homeScore) - scoreTotal(awayScore);
+    if (random() < lateSoftFreeChance(minute, marginAfter)) {
+      const trailingId = marginAfter > 0 ? options.awayId : options.homeId;
+      const leadingId = marginAfter > 0 ? options.homeId : options.awayId;
+      const trailing = marginAfter > 0 ? away : home;
+      const leadingNames = marginAfter > 0 ? homeNames : awayNames;
+      attemptSetPiece(trailingId, random() < 0.64 ? "shortFree" : "longFree", trailing, minute);
+      const last = events.at(-1);
+      const culprit = pickIndexed(leadingNames, backAndMidIndices(leadingNames), random);
+      if (last) {
+        last.credits = mergeCredits([
+          ...(last.credits ?? []),
+          { name: culprit.name, teamId: leadingId, freesConceded: 1 },
+        ]);
+      }
+    }
     if (options.clubId) {
-      const tip = liveCoachTip(events, tacticsFor(options.clubId), options.clubId, minute);
+      const ourChase = chaseOf(options.clubId, minute);
+      const tip = liveCoachTip(events, tacticsFor(options.clubId), options.clubId, minute, ourChase);
       if (tip) {
         push({
           minute,
@@ -1337,6 +1489,8 @@ export function simulateMatch(options: {
     });
   }
 
+  const homeChaseEffort = chaseEffortFromAcc(homeChaseAcc);
+  const awayChaseEffort = chaseEffortFromAcc(awayChaseAcc);
   const tallied = statsFromEvents(events, {
     homeId: options.homeId,
     awayId: options.awayId,
@@ -1347,6 +1501,8 @@ export function simulateMatch(options: {
     homeTactics,
     awayTactics,
     gameSeed: options.gameSeed,
+    homeChaseEffort,
+    awayChaseEffort,
   });
   const coachReport = buildCoachReport({
     clubId: options.clubId,
@@ -1392,6 +1548,8 @@ export function simulateMatch(options: {
     gameSeed: options.gameSeed,
     climate,
     shots,
+    homeChaseEffort,
+    awayChaseEffort,
     matchInjuries: matchInjuries.map((item) => ({
       name: item.name,
       teamId: item.event.teamId,

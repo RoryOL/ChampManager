@@ -37,6 +37,7 @@ export function liveCoachTip(
   tactics: Tactics,
   clubId: string,
   minute: number,
+  chase?: { chasing: boolean; huntGoals: boolean },
 ): string | null {
   if (![14, 23, 41, 52].includes(minute)) return null;
   if (events.some((event) => event.kind === "coach" && event.minute === minute)) return null;
@@ -51,6 +52,13 @@ export function liveCoachTip(
   const already = new Set(events.filter((event) => event.kind === "coach").map((event) => event.text));
 
   const tips: string[] = [];
+  if (chase?.chasing && minute === 52) {
+    tips.push(
+      chase.huntGoals
+        ? "We need a goal. Stop taking points and commit bodies forward."
+        : "Empty the tank. Push up and hunt the next score.",
+    );
+  }
   if (tactics.puckout >= 62 && broken >= won + 2) {
     tips.push("Those long puck-outs are being broken up. Go short or mix the restart.");
   }

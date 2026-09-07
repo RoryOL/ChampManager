@@ -390,6 +390,8 @@ export type SimulatedMatch = {
   gameSeed?: number;
   climate: MatchClimate;
   shots: ShotAttempt[];
+  homeChaseEffort?: number;
+  awayChaseEffort?: number;
   matchInjuries?: {
     name: string;
     teamId: string;
