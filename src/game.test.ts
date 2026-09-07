@@ -40,7 +40,7 @@ import { matchPlayed, scoreTotal } from "./lib/scoring";
 import { ATTRIBUTE_KEYS } from "./lib/attributes";
 import { applyMatchFatigue, applyTeamwork, applyTraining, applyWeekSession, averageMatchOverall, bankedLift, boostTotal, defaultCondition, fitnessOf, formatBoostDelta, isOvertrained, matchFatigueDelta, matchStat, sessionForSlot, tableLift, trainedStat, trainingDelta, trainingGainFactor, weekCoachCopy } from "./lib/training";
 import { buildPreMatchBriefing } from "./lib/briefing";
-import type { PlayerMatchStats, Tactics } from "./types";
+import type { PlayerMatchStats, Score, Tactics } from "./types";
 import { nextSwapPick } from "./components/SwapConfirmBar";
 
 describe("new game championship", () => {
@@ -1012,8 +1012,35 @@ describe("match engine", () => {
   });
 
   it("gives the trailing side late frees when a point splits the teams", () => {
+    const onePointLateFrees = (
+      result: { events: { minute: number; kind: string; teamId: string }[] },
+      teamId: string,
+      startHome: Score,
+      startAway: Score,
+      homeId: string,
+    ) => {
+      let home = { ...startHome };
+      let away = { ...startAway };
+      let count = 0;
+      for (const event of result.events) {
+        const margin = scoreTotal(home) - scoreTotal(away);
+        if (event.minute >= 51 && event.kind === "free" && event.teamId === teamId && Math.abs(margin) === 1) {
+          count += 1;
+        }
+        if (event.kind === "goal") {
+          if (event.teamId === homeId) home = { ...home, goals: home.goals + 1 };
+          else away = { ...away, goals: away.goals + 1 };
+        } else if (event.kind === "point" || event.kind === "free" || event.kind === "sixtyFive" || event.kind === "sideline") {
+          if (event.teamId === homeId) home = { ...home, points: home.points + 1 };
+          else away = { ...away, points: away.points + 1 };
+        }
+      }
+      return count;
+    };
     let closeFrees = 0;
     let blowoutFrees = 0;
+    const closeStart = { home: { goals: 1, points: 12 }, away: { goals: 1, points: 11 } };
+    const blowoutStart = { home: { goals: 2, points: 16 }, away: { goals: 0, points: 8 } };
     for (let seed = 1; seed <= 24; seed += 1) {
       const close = simulateMatch({
         matchId: "g1-r1-a",
@@ -1022,8 +1049,8 @@ describe("match engine", () => {
         climate: { sky: "sunny", windStrength: 8, windAngle: 12 },
         seed,
         period: "second",
-        startHome: { goals: 1, points: 12 },
-        startAway: { goals: 1, points: 11 },
+        startHome: closeStart.home,
+        startAway: closeStart.away,
       });
       const blowout = simulateMatch({
         matchId: "g1-r1-a",
@@ -1032,11 +1059,11 @@ describe("match engine", () => {
         climate: { sky: "sunny", windStrength: 8, windAngle: 12 },
         seed,
         period: "second",
-        startHome: { goals: 2, points: 16 },
-        startAway: { goals: 0, points: 8 },
+        startHome: blowoutStart.home,
+        startAway: blowoutStart.away,
       });
-      closeFrees += close.events.filter((event) => event.kind === "free" && event.minute >= 51 && event.teamId === "inagh-kilnamona").length;
-      blowoutFrees += blowout.events.filter((event) => event.kind === "free" && event.minute >= 51 && event.teamId === "inagh-kilnamona").length;
+      closeFrees += onePointLateFrees(close, "inagh-kilnamona", closeStart.home, closeStart.away, "ballyea");
+      blowoutFrees += onePointLateFrees(blowout, "inagh-kilnamona", blowoutStart.home, blowoutStart.away, "ballyea");
     }
     expect(closeFrees).toBeGreaterThan(0);
     expect(closeFrees).toBeGreaterThan(blowoutFrees);
@@ -1050,7 +1077,7 @@ describe("match engine", () => {
       const homeId = match.home.type === "team" ? match.home.teamId : "";
       const awayId = match.away.type === "team" ? match.away.teamId : "";
       if (!homeId || !awayId) continue;
-      for (let seed = 1; seed <= 5; seed += 1) {
+      for (let seed = 1; seed <= 8; seed += 1) {
         const result = simulateMatch({
           matchId: match.id,
           homeId,
