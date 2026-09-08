@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_TACTICS, defaultSheet, ratedSquad } from "./players";
-import { defaultCondition } from "./training";
+import { averageFitness, defaultCondition, fitnessOf } from "./training";
 import {
   createManagedClub,
   pairChallengeMatches,
   pickCpuHalfPlan,
   pickCpuSheet,
   pickCpuTactics,
+  restAndPrepManagedClub,
   seedRivals,
   tickManagedPreseasonWeek,
 } from "./aiManager";
@@ -230,7 +231,7 @@ describe("computer club manager", () => {
 
   it("puts rival runtimes on a new save and migrates old saves to version 11", () => {
     const fresh = newSave("ballyea");
-    expect(fresh.version).toBe(11);
+    expect(fresh.version).toBe(12);
     expect(fresh.difficulty).toBe("intermediate");
     expect(Object.keys(fresh.rivals)).toHaveLength(15);
     expect(fresh.rivals.ballyea).toBeUndefined();
@@ -245,8 +246,37 @@ describe("computer club manager", () => {
       matches: [],
       inbox: [],
     });
-    expect(migrated?.version).toBe(11);
+    expect(migrated?.version).toBe(12);
     expect(migrated?.difficulty).toBe("senior");
     expect(Object.keys(migrated?.rivals ?? {})).toHaveLength(15);
+  });
+
+  it("never trains computer clubs intensely and rests them before championship day", () => {
+    for (const id of ["eire-og", "sixmilebridge", "clonlara", "cratloe", "wolfe-tones"]) {
+      expect(createManagedClub(id, 4).intensity).not.toBe("intense");
+    }
+    const rivals = seedRivals("ballyea", 8);
+    const ids = Object.keys(rivals);
+    let next = rivals;
+    for (let week = 1; week <= 6; week += 1) {
+      next = tickManagedPreseasonWeek(next, ids, { seed: 8, week, remainingWeeks: 10 });
+    }
+    const sample = next["eire-og"]!;
+    const names = Object.keys(sample.condition);
+    expect(averageFitness(sample.condition, names)).toBeGreaterThanOrEqual(90);
+    expect(sample.trainingDue).toBe(true);
+    const tired = {
+      ...sample,
+      condition: Object.fromEntries(names.map((name) => [name, { ...defaultCondition(), fatigue: 88 }])),
+      trainingDue: true,
+    };
+    const prepped = restAndPrepManagedClub(tired, "eire-og", {
+      seed: 8,
+      opponentId: "ballyea",
+      matchKey: "g1",
+    });
+    expect(averageFitness(prepped.condition, names)).toBeGreaterThanOrEqual(90);
+    expect(["puckout", "shooting", "marking", "running"]).toContain(prepped.nextMatchPrep);
+    expect(names.some((name) => fitnessOf(prepped.condition[name] ?? defaultCondition()) === 0)).toBe(false);
   });
 });

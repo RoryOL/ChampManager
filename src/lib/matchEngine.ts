@@ -2,6 +2,7 @@ import type {
   MatchClimate,
   MatchEvent,
   MatchEventKind,
+  MatchPrep,
   PlayerCondition,
   RatedPlayer,
   Score,
@@ -36,7 +37,7 @@ import {
 } from "./shooting";
 import { scoreTotal } from "./scoring";
 import { liftSquadRatings } from "./difficulty";
-import { conditionFor, matchStat } from "./training";
+import { conditionFor, liftSquadForPrep, matchStat } from "./training";
 import { climateOf, passCompleteChance, puckoutWindAdjust, rollClimate, withWindFor } from "./weather";
 
 const POINT_KINDS: ReadonlySet<MatchEventKind> = new Set(["point", "free", "sixtyFive", "sideline"]);
@@ -455,6 +456,8 @@ export function simulateMatch(options: {
   injuryBudget?: { total: number; home: number; away: number };
   forcedRemovals?: { minute: number; teamId: string; name: string; kind: "red" | "injury" }[];
   performanceBoost?: { clubIds: string[]; amount: number };
+  homePrep?: MatchPrep;
+  awayPrep?: MatchPrep;
 }): SimulatedMatch {
   const period = options.period ?? "full";
   const seedKey = period === "second" ? `${options.seed}:${options.matchId}:second` : `${options.seed}:${options.matchId}`;
@@ -495,8 +498,8 @@ export function simulateMatch(options: {
     options.performanceBoost?.clubIds.includes(options.awayId) ? (options.performanceBoost.amount ?? 0) : 0;
   const rawHomeRoster = options.homeSquad ?? sheetPlayers(options.homeId, homeSheet, options.gameSeed);
   const rawAwayRoster = options.awaySquad ?? sheetPlayers(options.awayId, awaySheet, options.gameSeed);
-  const homeRoster = liftSquadRatings(rawHomeRoster, homeLift);
-  const awayRoster = liftSquadRatings(rawAwayRoster, awayLift);
+  const homeRoster = liftSquadForPrep(liftSquadRatings(rawHomeRoster, homeLift), options.homePrep);
+  const awayRoster = liftSquadForPrep(liftSquadRatings(rawAwayRoster, awayLift), options.awayPrep);
   let home = sideProfile(
     options.homeId,
     { starters: homeNames, subs: homeSubs },

@@ -5,6 +5,7 @@ import type {
   Difficulty,
   HalfPlan,
   MatchClimate,
+  MatchPrep,
   MatchReport,
   PlayerCondition,
   RatedPlayer,
@@ -46,6 +47,7 @@ import {
   applyMatchFatigue,
   applyTeamwork,
   applyWeekSession,
+  averageFitness,
   DEFAULT_INTENSITY,
   defaultCondition,
   ensureCondition,
@@ -53,6 +55,8 @@ import {
   isOvertrained,
   PRESEASON_DATES,
   PRESEASON_WEEKS,
+  recoverBetweenMatches,
+  recoverAfterMatch,
   squadNames,
 } from "./training";
 import { rollClimate } from "./weather";
@@ -70,10 +74,46 @@ export type ChallengePair = {
 };
 
 function cpuIntensity(clubId: string): ClubRuntime["intensity"] {
-  const roll = seedFrom(clubId) % 5;
-  if (roll === 0) return "intense";
-  if (roll === 1) return "light";
-  return "balanced";
+  return seedFrom(clubId) % 4 === 0 ? "light" : "balanced";
+}
+
+function managedSessionIntensity(club: ClubRuntime, clubId: string, seed: number): ClubRuntime["intensity"] {
+  const names = squadNames(clubId, seed);
+  if (averageFitness(club.condition, names) < 62) return "light";
+  return club.intensity === "intense" ? "balanced" : (club.intensity ?? DEFAULT_INTENSITY);
+}
+
+export function pickCpuMatchPrep(options: {
+  clubId: string;
+  opponentId?: string;
+  seed: number;
+  matchKey?: string;
+}): MatchPrep {
+  const tactics = clubTactics(options.clubId);
+  const noise = createRng(seedFrom(`${options.seed}:${options.clubId}:${options.matchKey ?? "prep"}:aspect`));
+  const scored: { prep: MatchPrep; score: number }[] = [
+    { prep: "puckout", score: tactics.puckout + noise() * 18 },
+    { prep: "shooting", score: 100 - tactics.shooting + noise() * 18 },
+    { prep: "marking", score: tactics.pressure + noise() * 18 },
+    { prep: "running", score: 100 - tactics.build + noise() * 18 },
+  ];
+  scored.sort((a, b) => b.score - a.score);
+  return scored[0]?.prep ?? "marking";
+}
+
+export function restAndPrepManagedClub(
+  club: ClubRuntime,
+  clubId: string,
+  options: { seed: number; opponentId?: string; matchKey?: string },
+): ClubRuntime {
+  const squad = ratedSquad(clubId, options.seed);
+  return {
+    ...club,
+    condition: recoverBetweenMatches(club.condition, squad),
+    nextMatchPrep: pickCpuMatchPrep({ ...options, clubId }),
+    trainingDue: false,
+    sessionsDone: 0,
+  };
 }
 
 export function createManagedClub(clubId: string, seed = 1): ClubRuntime {
@@ -403,6 +443,9 @@ export function trainManagedClub(
     session?: "mixed" | "challenge" | "recovery";
   },
 ): ClubRuntime {
+  if (options.phase === "season") {
+    return restAndPrepManagedClub(club, clubId, { seed: options.seed, matchKey: options.date });
+  }
   const squad = ratedSquad(clubId, options.seed);
   const sessionsDone = club.sessionsDone ?? 0;
   const result = applyWeekSession({
@@ -414,7 +457,7 @@ export function trainManagedClub(
     phase: options.phase,
     preseasonWeek: options.preseasonWeek,
     sessionsDone,
-    intensity: club.intensity ?? DEFAULT_INTENSITY,
+    intensity: managedSessionIntensity(club, clubId, options.seed),
     weekShape: options.phase === "preseason" ? "triple" : (club.weekShape ?? "challenge"),
     requestedSession: options.session ?? "mixed",
     seed: options.seed,
@@ -494,6 +537,10 @@ export function applySimToClub(
     if (item.teamId !== clubId) continue;
     condition = applyInjury(condition, item.name, item.injury);
   }
+  if (kind === "competitive") {
+    const rested = recoverAfterMatch(condition, squad);
+    condition = rested.condition;
+  }
   return {
     ...club,
     tactics,
@@ -503,6 +550,7 @@ export function applySimToClub(
     trainingDue: true,
     sessionsDone: 0,
     weekDeltas: {},
+    nextMatchPrep: kind === "competitive" ? undefined : club.nextMatchPrep,
   };
 }
 
@@ -641,11 +689,15 @@ export function tickManagedPreseasonWeek(
   for (const clubId of managedIds) {
     const club = next[clubId];
     if (!club) continue;
+    const championshipWeek = options.week >= PRESEASON_WEEKS;
+    const squad = championshipWeek ? ratedSquad(clubId, options.seed) : [];
     next[clubId] = {
       ...club,
+      condition: championshipWeek ? recoverBetweenMatches(club.condition, squad) : club.condition,
       sessionsDone: 0,
-      trainingDue: options.week >= PRESEASON_WEEKS ? false : true,
+      trainingDue: true,
       weekDeltas: {},
+      nextMatchPrep: championshipWeek ? undefined : club.nextMatchPrep,
     };
   }
   return next;
@@ -707,12 +759,12 @@ export function prepareRivalsForMatches(options: {
   for (const clubId of involved) {
     let club = rivals[clubId] ?? createManagedClub(clubId, options.seed);
     if (club.trainingDue) {
-      club = trainManagedClub(club, clubId, {
+      const match = options.matches.find((item) => item.homeId === clubId || item.awayId === clubId);
+      const opponentId = match ? (match.homeId === clubId ? match.awayId : match.homeId) : undefined;
+      club = restAndPrepManagedClub(club, clubId, {
         seed: options.seed,
-        phase: "season",
-        preseasonWeek: options.preseasonWeek,
-        date: options.date,
-        remainingWeeks: options.remainingWeeks,
+        opponentId,
+        matchKey: match?.id ?? options.date,
       });
     }
     rivals[clubId] = club;
@@ -776,12 +828,9 @@ export function tickRivalsMidweek(
   const next = { ...rivals };
   for (const [clubId, club] of Object.entries(next)) {
     if (!club.trainingDue) continue;
-    next[clubId] = trainManagedClub(club, clubId, {
+    next[clubId] = restAndPrepManagedClub(club, clubId, {
       seed: options.seed,
-      phase: "season",
-      preseasonWeek: options.preseasonWeek,
-      date: options.date,
-      remainingWeeks: options.remainingWeeks,
+      matchKey: options.date,
     });
   }
   return next;
