@@ -35,7 +35,10 @@ import {
 import { momentumAt, sentOffNamesFromEvents, simulateMatch } from "../matchEngine";
 import {
   applyInjury,
+  closingSheetOf,
   injuredNamesFromEvents,
+  keepClubSheet,
+  remainingInjuryBudget,
   sitInjuredPlayers,
   type RolledInjury,
 } from "../injuries";
@@ -883,10 +886,11 @@ function simulateSides(
     startMomentum: first ? momentumAt(first.events) : undefined,
     remainingSubs: first
       ? {
-          home: remainingMatchSubs(first.events, homeId, first.homeSheet, extras?.homeSheet ?? first.homeSheet),
-          away: remainingMatchSubs(first.events, awayId, first.awaySheet, extras?.awaySheet ?? first.awaySheet),
+          home: remainingMatchSubs(first.events, homeId, first.homeSheet, extras?.homeSheet ?? first.homeClosingSheet ?? first.homeSheet),
+          away: remainingMatchSubs(first.events, awayId, first.awaySheet, extras?.awaySheet ?? first.awayClosingSheet ?? first.awaySheet),
         }
       : undefined,
+    injuryBudget: first ? remainingInjuryBudget(first.events, homeId, awayId) : undefined,
     performanceBoost: performanceBoostFor(
       campaignDifficulty(campaign),
       campaign.seats.map((seat) => seat.clubId),
@@ -929,9 +933,9 @@ function finishSim(
     const theirScore = ours ? sim.awayScore : sim.homeScore;
     const result =
       scoreTotal(ourScore) > scoreTotal(theirScore) ? "win" : scoreTotal(ourScore) < scoreTotal(theirScore) ? "loss" : "draw";
-    const closing = ours ? sim.homeSheet : sim.awaySheet;
-    const tactics = ours ? sim.homeTactics : sim.awayTactics;
     const squad = ratedSquad(clubId, campaign.seed);
+    const closing = keepClubSheet(closingSheetOf(sim, clubId), squad);
+    const tactics = ours ? sim.homeTactics : sim.awayTactics;
     const rolled = injuriesByClub[clubId] ?? [];
     let condition = applyMatchFatigue(
       club.condition,
@@ -1167,9 +1171,10 @@ export function submitSecondHalf(
   const side = live.first.homeId === clubId ? "home" : live.first.awayId === clubId ? "away" : null;
   if (!side) return campaign;
   const club = campaign.clubs[clubId] ?? newClub(clubId, campaign.seed);
+  const squad = ratedSquad(clubId, campaign.seed);
   const seated = sitInjuredPlayers(
-    sheet,
-    ratedSquad(clubId, campaign.seed),
+    keepClubSheet(sheet, squad),
+    squad,
     club.condition,
     injuredNamesFromEvents(live.first.events, clubId),
   );

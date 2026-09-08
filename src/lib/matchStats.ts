@@ -444,8 +444,8 @@ export function combineHalves(
   const tallied = statsFromEvents(events, {
     homeId: second.homeId,
     awayId: second.awayId,
-    homeSheet: second.homeSheet,
-    awaySheet: second.awaySheet,
+    homeSheet: first.homeSheet,
+    awaySheet: first.awaySheet,
     homeCondition,
     awayCondition,
     homeTactics: second.homeTactics,
@@ -469,8 +469,8 @@ export function combineHalves(
     players: tallied.players,
     events,
     climate: first.climate,
-    homeTeamwork: sideTeamwork(second.homeId, second.homeSheet, homeCondition ?? {}, first.gameSeed ?? second.gameSeed),
-    awayTeamwork: sideTeamwork(second.awayId, second.awaySheet, awayCondition ?? {}, first.gameSeed ?? second.gameSeed),
+    homeTeamwork: sideTeamwork(second.homeId, first.homeSheet, homeCondition ?? {}, first.gameSeed ?? second.gameSeed),
+    awayTeamwork: sideTeamwork(second.awayId, first.awaySheet, awayCondition ?? {}, first.gameSeed ?? second.gameSeed),
     condition: names.condition,
   });
   return {
@@ -478,6 +478,10 @@ export function combineHalves(
     events,
     homeScore: second.homeScore,
     awayScore: second.awayScore,
+    homeSheet: first.homeSheet,
+    awaySheet: first.awaySheet,
+    homeClosingSheet: second.homeClosingSheet ?? second.homeSheet,
+    awayClosingSheet: second.awayClosingSheet ?? second.awaySheet,
     homeStats: tallied.homeStats,
     awayStats: tallied.awayStats,
     players: tallied.players,

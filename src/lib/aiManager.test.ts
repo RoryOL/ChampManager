@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_TACTICS, defaultSheet } from "./players";
+import { DEFAULT_TACTICS, defaultSheet, ratedSquad } from "./players";
 import { defaultCondition } from "./training";
 import {
   createManagedClub,
@@ -39,6 +39,21 @@ describe("computer club manager", () => {
     });
     expect(picked.starters).not.toContain(name);
     expect(picked.starters).toHaveLength(15);
+    expect(picked.subs).toContain(name);
+    const squad = ratedSquad("ballyea", 4);
+    expect(picked.starters.length + picked.subs.length).toBe(squad.length);
+  });
+
+  it("names a full fifteen and the rest of the panel on the bench", () => {
+    const squad = ratedSquad("ballyea", 4);
+    const picked = pickCpuSheet({
+      teamId: "ballyea",
+      seed: 4,
+      matchKey: "panel-test",
+      condition: {},
+    });
+    expect(picked.starters).toHaveLength(15);
+    expect(picked.starters.length + picked.subs.length).toBe(squad.length);
   });
 
   it("changes setup against a sweeper and against a long-ball side", () => {

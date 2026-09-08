@@ -59,6 +59,8 @@ import { formatScore, matchPlayed, scoreTotal, stageLabel } from "../lib/scoring
 import {
   applyInjury,
   injuredNamesFromEvents,
+  keepClubSheet,
+  remainingInjuryBudget,
   sitInjuredPlayers,
   type RolledInjury,
 } from "../lib/injuries";
@@ -479,8 +481,8 @@ export function useGame() {
             matchId: match.id,
             homeId,
             awayId,
-            homeSheet: homeId === save.clubId ? userSheet : (homeClub?.sheet ?? defaultSheet(homeId)),
-            awaySheet: awayId === save.clubId ? userSheet : (awayClub?.sheet ?? defaultSheet(awayId)),
+            homeSheet: homeId === save.clubId ? userSheet : expandSheetToPanel(homeId, homeClub?.sheet ?? defaultSheet(homeId), save.seed),
+            awaySheet: awayId === save.clubId ? userSheet : expandSheetToPanel(awayId, awayClub?.sheet ?? defaultSheet(awayId), save.seed),
             homeTactics: homeId === save.clubId ? save.tactics : (homeClub?.tactics ?? clubTactics(homeId)),
             awayTactics: awayId === save.clubId ? save.tactics : (awayClub?.tactics ?? clubTactics(awayId)),
             homeCondition: homeId === save.clubId ? save.condition : homeClub?.condition,
@@ -572,7 +574,8 @@ export function useGame() {
       }
       const base = extras?.base ?? save;
       if (!base) return;
-      const sheet = extras?.sheet ?? base.sheet;
+      const squad = ratedSquad(base.clubId, base.seed);
+      const sheet = keepClubSheet(extras?.sheet ?? base.sheet, squad);
       const existing = championship.matches.find((match) => match.id === current.user.matchId);
       if (existing && matchPlayed(existing)) {
         setLive({ ...current, cursor: current.user.events.length, phase: "finished" });
@@ -618,7 +621,6 @@ export function useGame() {
         sides.homeId === base.clubId ? current.user.awayScore : current.user.homeScore;
       const result =
         scoreTotal(ourScore) > scoreTotal(theirScore) ? "win" : scoreTotal(ourScore) < scoreTotal(theirScore) ? "loss" : "draw";
-      const squad = ratedSquad(base.clubId, base.seed);
       next = {
         ...next,
         condition: applyMatchForm(
@@ -818,15 +820,16 @@ export function useGame() {
             first.events,
             homeId,
             first.homeSheet,
-            homeId === save.clubId ? workingSheet : first.homeSheet,
+            homeId === save.clubId ? workingSheet : (cpuPlan?.sheet ?? first.homeClosingSheet ?? first.homeSheet),
           ),
           away: remainingMatchSubs(
             first.events,
             awayId,
             first.awaySheet,
-            awayId === save.clubId ? workingSheet : first.awaySheet,
+            awayId === save.clubId ? workingSheet : (cpuPlan?.sheet ?? first.awayClosingSheet ?? first.awaySheet),
           ),
         },
+        injuryBudget: remainingInjuryBudget(first.events, homeId, awayId),
         performanceBoost: performanceBoostFor(save.difficulty, [save.clubId]),
       });
       const decorated = decorateUserMatch(second, save);
