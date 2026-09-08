@@ -129,6 +129,8 @@ export type LiveMatch = {
   cursor: number;
   phase: LivePhase;
   openingSheet: TeamSheet;
+  openingHomeSheet: TeamSheet;
+  openingAwaySheet: TeamSheet;
   injuries: RolledInjury[];
 };
 
@@ -518,6 +520,8 @@ export function useGame() {
           cursor: 0,
           phase: "finished" as const,
           openingSheet: userSheet,
+          openingHomeSheet: simulated[0].homeSheet,
+          openingAwaySheet: simulated[0].awaySheet,
           injuries,
         };
       }
@@ -530,6 +534,8 @@ export function useGame() {
         cursor: 0,
         phase: mode === "first" ? "first" : "finished",
         openingSheet: userSheet,
+        openingHomeSheet: user.homeSheet,
+        openingAwaySheet: user.awaySheet,
         injuries,
       };
     },
@@ -558,6 +564,8 @@ export function useGame() {
         cursor: startSecond ? Math.max(halfIndex, 1) : 0,
         phase: startSecond ? "second" : "first",
         openingSheet: save.sheet,
+        openingHomeSheet: row.first.homeSheet,
+        openingAwaySheet: row.first.awaySheet,
         injuries: row.injuries?.[activeSeat.clubId] ?? [],
       });
       return;

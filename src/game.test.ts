@@ -2218,6 +2218,8 @@ describe("match shirts and swap confirmation", () => {
     expect(events[0]?.replacedName).toBe(outgoing);
     expect(appearanceOf(events, "ballyea", incoming, sheet, next)).toEqual({ onMinute: 32 });
     expect(appearanceOf(events, "ballyea", outgoing, sheet, next)).toEqual({ offMinute: 32, offKind: "sub" });
+    expect(appearanceOf([], "ballyea", incoming, sheet, next)).toEqual({ onMinute: 32 });
+    expect(appearanceOf([], "ballyea", outgoing, sheet, next)).toEqual({ offMinute: 32, offKind: "sub" });
     expect(sheetChangeSubEvents(sheet, sheet, "ballyea", 32)).toEqual([]);
   });
 

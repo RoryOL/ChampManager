@@ -138,10 +138,22 @@ export function MatchScreen({
       awaySquad={awaySquad}
       homeCondition={homeId === save.clubId ? save.condition : undefined}
       awayCondition={awayId === save.clubId ? save.condition : undefined}
-      homeSheet={homeId === save.clubId && atHalfTime ? htSheet : live.user.homeSheet}
-      awaySheet={awayId === save.clubId && atHalfTime ? htSheet : live.user.awaySheet}
-      numberHomeSheet={live.user.homeSheet}
-      numberAwaySheet={live.user.awaySheet}
+      homeSheet={
+        homeId === save.clubId && atHalfTime
+          ? htSheet
+          : live.phase === "finished"
+            ? (live.user.homeClosingSheet ?? live.user.homeSheet)
+            : live.user.homeSheet
+      }
+      awaySheet={
+        awayId === save.clubId && atHalfTime
+          ? htSheet
+          : live.phase === "finished"
+            ? (live.user.awayClosingSheet ?? live.user.awaySheet)
+            : live.user.awaySheet
+      }
+      numberHomeSheet={live.openingHomeSheet}
+      numberAwaySheet={live.openingAwaySheet}
       events={live.user.events.slice(0, live.cursor)}
       compact={live.phase !== "finished" && !atHalfTime}
       interactive={atHalfTime}
