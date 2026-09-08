@@ -1,4 +1,5 @@
 import { seedChampionship } from "../data/championship";
+import { createManagedClub, seedRivals } from "./aiManager";
 import { DEFAULT_TACTICS, defaultSheet, expandSheetToPanel } from "./players";
 import { ATTRIBUTE_KEYS, clampDial } from "./attributes";
 import { ambitionFor, migrateNewsItem } from "./news";
@@ -16,6 +17,7 @@ import type {
   AttributeBoosts,
   CalendarPhase,
   Championship,
+  ClubRuntime,
   GameSave,
   MatchReport,
   NewsItem,
@@ -27,6 +29,8 @@ import type {
   TrainingPlans,
   WeekShape,
 } from "../types";
+
+export const SAVE_VERSION = 10;
 
 const STORAGE_KEY = "champ-manager:game-v1";
 
@@ -122,6 +126,48 @@ function migrateWeekShape(raw: unknown): WeekShape {
   return raw === "triple" || raw === "challenge" ? raw : DEFAULT_WEEK_SHAPE;
 }
 
+function isSheet(value: unknown): value is TeamSheet {
+  if (!value || typeof value !== "object") return false;
+  const sheet = value as TeamSheet;
+  return Array.isArray(sheet.starters) && Array.isArray(sheet.subs);
+}
+
+function migrateClubRuntime(clubId: string, raw: unknown, seed: number): ClubRuntime {
+  const created = createManagedClub(clubId, seed);
+  if (!raw || typeof raw !== "object") return created;
+  const parsed = raw as Partial<ClubRuntime>;
+  const names = squadNames(clubId, seed);
+  return {
+    tactics: parsed.tactics ? migrateTactics(parsed.tactics) : created.tactics,
+    sheet: isSheet(parsed.sheet) ? parsed.sheet : created.sheet,
+    condition: withStartingForm(
+      clampConditionBoosts(ensureCondition(names, parsed.condition ?? created.condition, defaultCondition())),
+      names,
+      seed,
+    ),
+    inbox: Array.isArray(parsed.inbox) ? parsed.inbox : [],
+    trainingDue: typeof parsed.trainingDue === "boolean" ? parsed.trainingDue : created.trainingDue,
+    plans: parsed.plans ?? {},
+    lastSheet: isSheet(parsed.lastSheet) ? parsed.lastSheet : created.lastSheet,
+    intensity: migrateIntensity(parsed.intensity),
+    weekShape: migrateWeekShape(parsed.weekShape),
+    sessionsDone:
+      typeof parsed.sessionsDone === "number" ? Math.max(0, Math.min(3, Math.round(parsed.sessionsDone))) : 0,
+    trainingDeltas: parsed.trainingDeltas ?? {},
+    weekDeltas: parsed.weekDeltas ?? {},
+  };
+}
+
+function migrateRivals(clubId: string, seed: number, raw: unknown): Record<string, ClubRuntime> {
+  const parsed = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  const rivals: Record<string, ClubRuntime> = {};
+  for (const team of seedChampionship.teams) {
+    if (team.id === clubId) continue;
+    rivals[team.id] = migrateClubRuntime(team.id, parsed[team.id], seed);
+  }
+  return rivals;
+}
+
 export function migrateSave(raw: unknown): GameSave | null {
   if (!raw || typeof raw !== "object") return null;
   const parsed = raw as {
@@ -145,6 +191,7 @@ export function migrateSave(raw: unknown): GameSave | null {
     sessionsDone?: unknown;
     trainingDeltas?: unknown;
     weekDeltas?: unknown;
+    rivals?: unknown;
   };
   if (!parsed.clubId || !parsed.sheet || !Array.isArray(parsed.matches)) return null;
   if (
@@ -156,7 +203,8 @@ export function migrateSave(raw: unknown): GameSave | null {
     parsed.version !== 6 &&
     parsed.version !== 7 &&
     parsed.version !== 8 &&
-    parsed.version !== 9
+    parsed.version !== 9 &&
+    parsed.version !== 10
   ) {
     return null;
   }
@@ -183,7 +231,7 @@ export function migrateSave(raw: unknown): GameSave | null {
       ? (parsed.weekDeltas as Record<string, AttributeBoosts>)
       : {};
   return {
-    version: 9,
+    version: SAVE_VERSION,
     clubId: parsed.clubId,
     seed,
     tactics: migrateTactics(parsed.tactics),
@@ -218,6 +266,7 @@ export function migrateSave(raw: unknown): GameSave | null {
     sessionsDone: typeof parsed.sessionsDone === "number" ? Math.max(0, Math.min(3, Math.round(parsed.sessionsDone))) : 0,
     trainingDeltas,
     weekDeltas,
+    rivals: migrateRivals(parsed.clubId, seed, parsed.rivals),
   };
 }
 
@@ -243,7 +292,7 @@ export function newSave(clubId: string): GameSave {
   const seed = Math.floor(Math.random() * 1_000_000_000);
   const names = squadNames(clubId, seed);
   return {
-    version: 9,
+    version: SAVE_VERSION,
     clubId,
     seed,
     tactics: DEFAULT_TACTICS,
@@ -266,6 +315,7 @@ export function newSave(clubId: string): GameSave {
     sessionsDone: 0,
     trainingDeltas: {},
     weekDeltas: {},
+    rivals: seedRivals(clubId, seed),
   };
 }
 

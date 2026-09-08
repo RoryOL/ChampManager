@@ -406,7 +406,7 @@ export type TeamSheet = {
 };
 
 export type GameSave = {
-  version: 9;
+  version: 10;
   clubId: string;
   seed: number;
   tactics: Tactics;
@@ -426,6 +426,7 @@ export type GameSave = {
   sessionsDone: number;
   trainingDeltas: Record<string, AttributeBoosts>;
   weekDeltas: Record<string, AttributeBoosts>;
+  rivals: Record<string, ClubRuntime>;
 };
 
 export type LivePhase = "first" | "half-time" | "half-wait" | "second" | "finished";

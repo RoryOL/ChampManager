@@ -42,6 +42,8 @@ export function buildPreMatchBriefing(options: {
   sheet: TeamSheet;
   condition: Record<string, PlayerCondition>;
   seed?: number;
+  opponentSheet?: TeamSheet;
+  opponentTactics?: Tactics;
 }): { title: string; notes: string[] } {
   const { homeId, awayId } = resolveMatchSides(options.championship, options.match);
   const usHome = homeId === options.clubId;
@@ -49,8 +51,8 @@ export function buildPreMatchBriefing(options: {
   const us = teamById(options.championship, options.clubId);
   const them = opponentId ? teamById(options.championship, opponentId) : undefined;
   const venue = usHome ? "at home" : "away";
-  const theirTactics = opponentId ? clubTactics(opponentId) : options.tactics;
-  const theirSheet = opponentId ? defaultSheet(opponentId) : options.sheet;
+  const theirTactics = options.opponentTactics ?? (opponentId ? clubTactics(opponentId) : options.tactics);
+  const theirSheet = options.opponentSheet ?? (opponentId ? defaultSheet(opponentId) : options.sheet);
   const theirProfile = opponentId
     ? sideProfile(opponentId, theirSheet, theirTactics, {}, options.seed)
     : sideProfile(options.clubId, options.sheet, options.tactics, {}, options.seed);
@@ -134,6 +136,8 @@ export function briefingNews(options: {
   sheet: TeamSheet;
   condition: Record<string, PlayerCondition>;
   seed: number;
+  opponentSheet?: TeamSheet;
+  opponentTactics?: Tactics;
 }): NewsItem {
   const built = buildPreMatchBriefing(options);
   return newsItem({
@@ -155,6 +159,9 @@ export function ensureMatchBriefing(save: GameSave, championship: Championship):
   if (!match || matchPlayed(match)) return save;
   const id = `briefing-${match.id}-${save.clubId}`;
   if (save.inbox.some((item) => item.id === id)) return save;
+  const { homeId, awayId } = resolveMatchSides(championship, match);
+  const opponentId = homeId === save.clubId ? awayId : homeId;
+  const rival = opponentId ? save.rivals[opponentId] : undefined;
   return {
     ...save,
     inbox: [
@@ -166,6 +173,8 @@ export function ensureMatchBriefing(save: GameSave, championship: Championship):
         sheet: save.sheet,
         condition: save.condition,
         seed: save.seed,
+        opponentSheet: rival?.sheet,
+        opponentTactics: rival?.tactics,
       }),
       ...save.inbox,
     ].slice(0, 80),
