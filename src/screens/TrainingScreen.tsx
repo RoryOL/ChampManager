@@ -50,7 +50,7 @@ function liftClass(value: number): string {
 }
 
 export function TrainingScreen({ save, onBack, onTrain, onMatchPrep, onSetPlans, onSetIntensity, onSetWeekShape }: Props) {
-  const squad = ratedSquad(save.clubId, save.seed);
+  const squad = ratedSquad(save.clubId, save);
   const [selected, setSelected] = useState<string[]>([]);
   const [templateId, setTemplateId] = useState<SquadTemplateId>("position");
   const [prep, setPrep] = useState<MatchPrep>(save.nextMatchPrep ?? "puckout");

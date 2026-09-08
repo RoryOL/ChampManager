@@ -170,7 +170,7 @@ function PlayerDetail({
 
 export function SquadScreen({ save, teams, viewTeamId, onViewTeam, picked, onTapPlayer, onOpenTraining }: Props) {
   const ownTeam = viewTeamId === save.clubId;
-  const squad = ratedSquad(viewTeamId, save.seed);
+  const squad = ratedSquad(viewTeamId, save);
   const byName = new Map(squad.map((player) => [player.name, player]));
   const sheet = ownTeam
     ? expandSheetToPanel(viewTeamId, save.sheet, save.seed)

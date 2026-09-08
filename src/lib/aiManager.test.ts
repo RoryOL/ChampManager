@@ -231,8 +231,9 @@ describe("computer club manager", () => {
 
   it("puts rival runtimes on a new save and migrates old saves to version 11", () => {
     const fresh = newSave("ballyea");
-    expect(fresh.version).toBe(12);
+    expect(fresh.version).toBe(13);
     expect(fresh.difficulty).toBe("intermediate");
+    expect(fresh.balance).toBe("standard");
     expect(Object.keys(fresh.rivals)).toHaveLength(15);
     expect(fresh.rivals.ballyea).toBeUndefined();
     expect(fresh.rivals["eire-og"]?.sheet.starters).toHaveLength(15);
@@ -246,7 +247,7 @@ describe("computer club manager", () => {
       matches: [],
       inbox: [],
     });
-    expect(migrated?.version).toBe(12);
+    expect(migrated?.version).toBe(13);
     expect(migrated?.difficulty).toBe("senior");
     expect(Object.keys(migrated?.rivals ?? {})).toHaveLength(15);
   });

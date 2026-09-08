@@ -5,6 +5,7 @@ import { BottomNav } from "./components/BottomNav";
 import { teamById } from "./lib/resolve";
 import { compactName } from "./lib/display";
 import { difficultyTitle } from "./lib/difficulty";
+import { balanceTitle } from "./lib/balance";
 import { ClubBadge } from "./components/ClubBadge";
 import { ClubSelectScreen } from "./screens/ClubSelectScreen";
 import { LobbyScreen } from "./screens/LobbyScreen";
@@ -94,6 +95,7 @@ export default function App() {
               <p>
                 {game.campaign ? `Together · ${game.campaign.code}` : "Clare SHC 2026"}
                 {game.save ? ` · ${difficultyTitle(game.save.difficulty)}` : ""}
+                {game.save && game.save.balance !== "standard" ? ` · ${balanceTitle(game.save.balance)}` : ""}
               </p>
               <h1>{managerLabel}</h1>
             </div>

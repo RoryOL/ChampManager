@@ -125,6 +125,7 @@ import type {
   WeekShape,
   Difficulty,
   MatchPrep,
+  SquadBalance,
 } from "../types";
 
 export type LiveMatch = {
@@ -150,7 +151,7 @@ function preparedRivals(save: GameSave, championship: Championship): GameSave["r
   const date =
     batch?.matches[0]?.date ?? championship.matches.find((match) => !matchPlayed(match))?.date ?? "";
   return prepareRivalsForMatches({
-    rivals: save.rivals ?? seedRivals(save.clubId, save.seed),
+    rivals: save.rivals ?? seedRivals(save.clubId, save.seed, save.balance),
     userClubId: save.clubId,
     userSheet: save.sheet,
     userTactics: save.tactics,
@@ -162,6 +163,7 @@ function preparedRivals(save: GameSave, championship: Championship): GameSave["r
     difficulty: save.difficulty,
     reports: save.reports,
     userCondition: save.condition,
+    balance: save.balance,
   });
 }
 
@@ -296,9 +298,9 @@ export function useGame() {
     });
   }, [campaign, live]);
 
-  const takeCharge = useCallback((clubId: string, difficulty = DEFAULT_DIFFICULTY) => {
+  const takeCharge = useCallback((clubId: string, difficulty = DEFAULT_DIFFICULTY, balance?: SquadBalance) => {
     const club = teamById(seedChampionship, clubId);
-    const started = newSave(clubId, difficulty);
+    const started = newSave(clubId, difficulty, balance);
     if (!club) {
       commitSolo(started);
       setLive(null);
@@ -314,7 +316,7 @@ export function useGame() {
   }, [commitSolo]);
 
   const hostCampaign = useCallback(
-    (payload: { name: string; clubId: string; waitHours: WaitHours; difficulty?: Difficulty }) => {
+    (payload: { name: string; clubId: string; waitHours: WaitHours; difficulty?: Difficulty; balance?: SquadBalance }) => {
       const self = setPlayerName(payload.name);
       setPlayer(self);
       rememberLocalSeat(self.id);
@@ -324,6 +326,7 @@ export function useGame() {
         clubId: payload.clubId,
         waitHours: payload.waitHours,
         difficulty: payload.difficulty,
+        balance: payload.balance,
       });
       commitCampaign(created);
       setActivePlayerId(self.id);
@@ -472,7 +475,7 @@ export function useGame() {
       const batch = nextBatch(championship, save.clubId);
       if (!batch) return null;
 
-      const squad = ratedSquad(save.clubId, save.seed);
+      const squad = ratedSquad(save.clubId, save);
       const userSheet = sitInjuredPlayers(expandSheetToPanel(save.clubId, save.sheet, save.seed), squad, save.condition);
       const rivals = preparedRivals(save, championship);
       let injuries: RolledInjury[] = [];
@@ -491,12 +494,12 @@ export function useGame() {
             awayId,
             homeSheet: homeId === save.clubId ? userSheet : expandSheetToPanel(homeId, homeClub?.sheet ?? defaultSheet(homeId), save.seed),
             awaySheet: awayId === save.clubId ? userSheet : expandSheetToPanel(awayId, awayClub?.sheet ?? defaultSheet(awayId), save.seed),
-            homeTactics: homeId === save.clubId ? save.tactics : (homeClub?.tactics ?? clubTactics(homeId)),
-            awayTactics: awayId === save.clubId ? save.tactics : (awayClub?.tactics ?? clubTactics(awayId)),
+            homeTactics: homeId === save.clubId ? save.tactics : (homeClub?.tactics ?? clubTactics(homeId, save.balance)),
+            awayTactics: awayId === save.clubId ? save.tactics : (awayClub?.tactics ?? clubTactics(awayId, save.balance)),
             homeCondition: homeId === save.clubId ? save.condition : homeClub?.condition,
             awayCondition: awayId === save.clubId ? save.condition : awayClub?.condition,
-            homeSquad: ratedSquad(homeId, save.seed),
-            awaySquad: ratedSquad(awayId, save.seed),
+            homeSquad: ratedSquad(homeId, save),
+            awaySquad: ratedSquad(awayId, save),
             remainingWeeks: remainingWeeks(save, championship, save.clubId),
             clubId: save.clubId,
             homeName: homeTeam ? compactName(homeTeam) : homeId,
@@ -504,6 +507,7 @@ export function useGame() {
             period: isUser && mode === "first" ? "first" : "full",
             seed: save.seed,
             gameSeed: save.seed,
+            balance: save.balance,
             performanceBoost: performanceBoostFor(save.difficulty, [save.clubId]),
             homePrep: homeId === save.clubId ? save.nextMatchPrep : homeClub?.nextMatchPrep,
             awayPrep: awayId === save.clubId ? save.nextMatchPrep : awayClub?.nextMatchPrep,
@@ -590,7 +594,7 @@ export function useGame() {
       }
       const base = extras?.base ?? save;
       if (!base) return;
-      const squad = ratedSquad(base.clubId, base.seed);
+      const squad = ratedSquad(base.clubId, base);
       const sheet = keepClubSheet(extras?.sheet ?? base.sheet, squad);
       const existing = championship.matches.find((match) => match.id === current.user.matchId);
       if (existing && matchPlayed(existing)) {
@@ -615,7 +619,7 @@ export function useGame() {
           sheet.starters,
           sheet.subs,
           extras?.base?.tactics ?? base.tactics,
-          ratedSquad(base.clubId, base.seed),
+          ratedSquad(base.clubId, base),
           current.user.events.some((event) => event.kind === "red" && event.teamId === base.clubId),
           base.clubId === current.user.homeId
             ? (current.user.homeChaseEffort ?? 0)
@@ -753,6 +757,7 @@ export function useGame() {
           [current.user, ...current.others],
           base.clubId,
           base.seed,
+          base.balance,
         ),
       };
       commitSolo(next);
@@ -796,7 +801,7 @@ export function useGame() {
         setLive({ ...live, phase: "half-wait" });
         return;
       }
-      const squad = ratedSquad(save.clubId, save.seed);
+      const squad = ratedSquad(save.clubId, save);
       const hurt = injuredNamesFromEvents(live.user.events, save.clubId);
       const workingSheet = sitInjuredPlayers(sheet, squad, save.condition, hurt);
       commitSolo(withSheet(withTactics(save, tactics), workingSheet));
@@ -816,6 +821,7 @@ export function useGame() {
             condition: cpuClub.condition,
             seed: save.seed,
             difficulty: save.difficulty,
+            balance: save.balance,
           })
         : null;
       const second = simulateMatch({
@@ -824,12 +830,12 @@ export function useGame() {
         awayId,
         homeSheet: homeId === save.clubId ? workingSheet : (cpuPlan?.sheet ?? defaultSheet(homeId)),
         awaySheet: awayId === save.clubId ? workingSheet : (cpuPlan?.sheet ?? defaultSheet(awayId)),
-        homeTactics: homeId === save.clubId ? tactics : (cpuPlan?.tactics ?? clubTactics(homeId)),
-        awayTactics: awayId === save.clubId ? tactics : (cpuPlan?.tactics ?? clubTactics(awayId)),
+        homeTactics: homeId === save.clubId ? tactics : (cpuPlan?.tactics ?? clubTactics(homeId, save.balance)),
+        awayTactics: awayId === save.clubId ? tactics : (cpuPlan?.tactics ?? clubTactics(awayId, save.balance)),
         homeCondition: homeId === save.clubId ? save.condition : cpuClub?.condition,
         awayCondition: awayId === save.clubId ? save.condition : cpuClub?.condition,
-        homeSquad: ratedSquad(homeId, save.seed),
-        awaySquad: ratedSquad(awayId, save.seed),
+        homeSquad: ratedSquad(homeId, save),
+        awaySquad: ratedSquad(awayId, save),
         remainingWeeks: remainingWeeks(save, championship, save.clubId),
         sentOff: sentOffNamesFromEvents(first.events),
         clubId: save.clubId,
@@ -841,6 +847,7 @@ export function useGame() {
         startMomentum: momentumAt(first.events),
         seed: save.seed,
         gameSeed: save.seed,
+        balance: save.balance,
         climate: first.climate,
         remainingSubs: {
           home: remainingMatchSubs(
@@ -988,7 +995,7 @@ export function useGame() {
         commitCampaign(trainClubPrep(campaign, activeSeat.clubId, prep));
         return;
       }
-      const squad = ratedSquad(save.clubId, save.seed);
+      const squad = ratedSquad(save.clubId, save);
       const date = championship.matches.find((match) => !matchPlayed(match))?.date ?? "";
       let next: GameSave = {
         ...save,
@@ -1021,7 +1028,7 @@ export function useGame() {
         commitCampaign(trainClub(campaign, activeSeat.clubId, session));
         return;
       }
-      const squad = ratedSquad(save.clubId, save.seed);
+      const squad = ratedSquad(save.clubId, save);
       const club = teamById(championship, save.clubId);
       const date =
         save.phase === "preseason"
@@ -1166,7 +1173,7 @@ export function useGame() {
         commitCampaign(trainClubWeek(campaign, activeSeat.clubId, weekShape));
         return;
       }
-      const squad = ratedSquad(save.clubId, save.seed);
+      const squad = ratedSquad(save.clubId, save);
       const club = teamById(championship, save.clubId);
       const date =
         save.phase === "preseason"

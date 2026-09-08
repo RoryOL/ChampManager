@@ -41,8 +41,8 @@ export function MatchDetailScreen({ championship, save, match, report, onBack, o
   const { homeId, awayId } = resolveMatchSides(championship, match);
   const home = homeId ? teamById(championship, homeId) : undefined;
   const away = awayId ? teamById(championship, awayId) : undefined;
-  const homeTactics = report?.homeTactics ?? (homeId === save.clubId ? save.tactics : homeId ? clubTactics(homeId) : save.tactics);
-  const awayTactics = report?.awayTactics ?? (awayId === save.clubId ? save.tactics : awayId ? clubTactics(awayId) : save.tactics);
+  const homeTactics = report?.homeTactics ?? (homeId === save.clubId ? save.tactics : homeId ? clubTactics(homeId, save.balance) : save.tactics);
+  const awayTactics = report?.awayTactics ?? (awayId === save.clubId ? save.tactics : awayId ? clubTactics(awayId, save.balance) : save.tactics);
   const played = matchPlayed(match) && match.homeScore && match.awayScore;
 
   return (
@@ -108,8 +108,8 @@ export function MatchDetailScreen({ championship, save, match, report, onBack, o
               homeStats={report.homeStats}
               awayStats={report.awayStats}
               players={report.players}
-              homeSquad={homeId ? ratedSquad(homeId, save.seed) : []}
-              awaySquad={awayId ? ratedSquad(awayId, save.seed) : []}
+              homeSquad={homeId ? ratedSquad(homeId, save) : []}
+              awaySquad={awayId ? ratedSquad(awayId, save) : []}
               homeSheet={report.homeClosingSheet ?? report.homeSheet}
               awaySheet={report.awayClosingSheet ?? report.awaySheet}
               numberHomeSheet={report.homeSheet}
@@ -144,6 +144,7 @@ export function MatchDetailScreen({ championship, save, match, report, onBack, o
               sheet: save.sheet,
               condition: save.condition,
               seed: save.seed,
+              balance: save.balance,
             }).notes.map((note) => (
               <p key={note} className="tactic-copy">
                 {note}

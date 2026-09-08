@@ -4,6 +4,7 @@ import type {
   PlayerCondition,
   PlayerMatchStats,
   SimulatedMatch,
+  SquadBalance,
   StatCredit,
   Tactics,
   TeamMatchStats,
@@ -264,6 +265,7 @@ export function statsFromEvents(
     awayTactics?: Tactics;
     upTo?: number;
     gameSeed?: number;
+    balance?: SquadBalance;
     homeChaseEffort?: number;
     awayChaseEffort?: number;
   },
@@ -294,8 +296,8 @@ export function statsFromEvents(
     }
   }
 
-  const homeSquad = ratedSquad(options.homeId, options.gameSeed);
-  const awaySquad = ratedSquad(options.awayId, options.gameSeed);
+  const homeSquad = ratedSquad(options.homeId, { seed: options.gameSeed, balance: options.balance });
+  const awaySquad = ratedSquad(options.awayId, { seed: options.gameSeed, balance: options.balance });
   const byName = new Map(
     [...homeSquad.map((player) => [player.name, { player, teamId: options.homeId }] as const),
      ...awaySquad.map((player) => [player.name, { player, teamId: options.awayId }] as const)],
@@ -454,6 +456,7 @@ export function combineHalves(
     homeTactics: second.homeTactics,
     awayTactics: second.awayTactics,
     gameSeed: first.gameSeed ?? second.gameSeed,
+    balance: first.balance ?? second.balance,
     homeChaseEffort: Math.min(1, (first.homeChaseEffort ?? 0) + (second.homeChaseEffort ?? 0)),
     awayChaseEffort: Math.min(1, (first.awayChaseEffort ?? 0) + (second.awayChaseEffort ?? 0)),
   });
@@ -472,8 +475,8 @@ export function combineHalves(
     players: tallied.players,
     events,
     climate: first.climate,
-    homeTeamwork: sideTeamwork(second.homeId, first.homeSheet, homeCondition ?? {}, first.gameSeed ?? second.gameSeed),
-    awayTeamwork: sideTeamwork(second.awayId, first.awaySheet, awayCondition ?? {}, first.gameSeed ?? second.gameSeed),
+    homeTeamwork: sideTeamwork(second.homeId, first.homeSheet, homeCondition ?? {}, { seed: first.gameSeed ?? second.gameSeed, balance: first.balance ?? second.balance }),
+    awayTeamwork: sideTeamwork(second.awayId, first.awaySheet, awayCondition ?? {}, { seed: first.gameSeed ?? second.gameSeed, balance: first.balance ?? second.balance }),
     condition: names.condition,
   });
   return {
@@ -515,6 +518,7 @@ export function liveStats(
     awayTactics: sim.awayTactics,
     upTo: cursor,
     gameSeed: sim.gameSeed,
+    balance: sim.balance,
     homeChaseEffort: sim.homeChaseEffort,
     awayChaseEffort: sim.awayChaseEffort,
   });

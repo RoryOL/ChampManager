@@ -6,10 +6,14 @@ import type {
   PositionFamiliarity,
   PositionLine,
   RatedPlayer,
+  RatingsContext,
+  SquadBalance,
   Tactics,
   TeamSheet,
 } from "../types";
+import { seedChampionship } from "../data/championship";
 import { profileFor } from "../data/playerProfiles";
+import { parseRatings } from "./balance";
 import {
   ADJACENT_LINES,
   ATTRIBUTE_KEYS,
@@ -278,7 +282,7 @@ export function computeOverall(
   return clampStat(Math.round(weighted / Math.max(total, 1)));
 }
 
-export function ratedSquad(teamId: string, gameSeed?: number): RatedPlayer[] {
+export function buildRatedSquad(teamId: string, gameSeed?: number): RatedPlayer[] {
   const lineup = latestLineup(teamId);
   const order = [
     ...(lineup?.starters.map((player) => player.name) ?? []),
@@ -299,9 +303,133 @@ export function ratedSquad(teamId: string, gameSeed?: number): RatedPlayer[] {
   });
 }
 
+function nudgeOverall(player: RatedPlayer, target: number): RatedPlayer {
+  const ratings = { ...player.ratings };
+  const familiarity = player.ratings.familiarity;
+  const keys = roleKeys(player.position);
+  const pool = keys.length > 0 ? keys : ATTRIBUTE_KEYS;
+  for (let step = 0; step < 24; step += 1) {
+    const overall = computeOverall(ratings, familiarity, player.position);
+    if (overall === target) break;
+    if (overall < target) {
+      const key = [...pool].filter((item) => ratings[item] < 18).sort((a, b) => ratings[a] - ratings[b])[0];
+      if (!key) break;
+      ratings[key] = clampStat(ratings[key] + 1);
+    } else {
+      const key = [...pool].filter((item) => ratings[item] > 6).sort((a, b) => ratings[b] - ratings[a])[0];
+      if (!key) break;
+      ratings[key] = clampStat(ratings[key] - 1);
+    }
+  }
+  return {
+    ...player,
+    ratings: {
+      ...ratings,
+      familiarity,
+      overall: computeOverall(ratings, familiarity, player.position),
+    },
+  };
+}
+
+function shiftPlayer(player: RatedPlayer, delta: number): RatedPlayer {
+  if (Math.abs(delta) < 0.05) return player;
+  const ratings = { ...player.ratings, familiarity: player.ratings.familiarity };
+  for (const key of ATTRIBUTE_KEYS) {
+    ratings[key] = clampStat(Math.round(player.ratings[key] + delta));
+  }
+  ratings.overall = computeOverall(ratings, ratings.familiarity, player.position);
+  const target = clampStat(Math.round(player.ratings.overall + delta));
+  return target === ratings.overall ? { ...player, ratings } : nudgeOverall({ ...player, ratings }, target);
+}
+
+/** Soft-cap the very top overalls so a 19 becomes about 18. Order on the same panel stays. */
+function compressStar(player: RatedPlayer): RatedPlayer {
+  const overall = player.ratings.overall;
+  if (overall <= 16) return player;
+  const target = clampStat(Math.round(16 + (overall - 16) * 0.5));
+  return target >= overall ? player : nudgeOverall(player, target);
+}
+
+export function clubXvOverall(teamId: string, squad: RatedPlayer[]): number {
+  const byName = new Map(squad.map((player) => [player.name, player]));
+  const values = defaultSheet(teamId)
+    .starters.map((name) => byName.get(name)?.ratings.overall ?? 0)
+    .filter((value) => value > 0);
+  if (values.length === 0) return 0;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+const balancedPacks = new Map<string, Map<string, RatedPlayer[]>>();
+
+function replacePlayer(squad: RatedPlayer[], next: RatedPlayer): RatedPlayer[] {
+  return squad.map((player) => (player.name === next.name ? next : player));
+}
+
+function fineTuneXv(teamId: string, squad: RatedPlayer[], target: number): RatedPlayer[] {
+  let next = squad;
+  const starName = [...next].sort((a, b) => b.ratings.overall - a.ratings.overall)[0]?.name;
+  for (let step = 0; step < 20; step += 1) {
+    const current = clubXvOverall(teamId, next);
+    if (Math.abs(current - target) < 0.12) return next;
+    const byName = new Map(next.map((player) => [player.name, player]));
+    const xv = defaultSheet(teamId)
+      .starters.map((name) => byName.get(name))
+      .filter((player): player is RatedPlayer => Boolean(player));
+    const wantUp = current < target;
+    const candidates = xv
+      .filter((player) =>
+        wantUp ? player.ratings.overall < 18 : player.name !== starName && player.ratings.overall > 8,
+      )
+      .sort((a, b) =>
+        wantUp ? a.ratings.overall - b.ratings.overall : b.ratings.overall - a.ratings.overall,
+      );
+    const pick = candidates[0];
+    if (!pick) return next;
+    const nudged = nudgeOverall(pick, pick.ratings.overall + (wantUp ? 1 : -1));
+    if (nudged.ratings.overall === pick.ratings.overall) return next;
+    next = replacePlayer(next, nudged);
+  }
+  return next;
+}
+
+function equalizeChampionship(gameSeed?: number): Map<string, RatedPlayer[]> {
+  const raw = new Map<string, RatedPlayer[]>();
+  const means: { id: string; mean: number }[] = [];
+  for (const team of seedChampionship.teams) {
+    const squad = buildRatedSquad(team.id, gameSeed).map(compressStar);
+    raw.set(team.id, squad);
+    means.push({ id: team.id, mean: clubXvOverall(team.id, squad) });
+  }
+  const target = means.reduce((sum, row) => sum + row.mean, 0) / Math.max(means.length, 1);
+  const result = new Map<string, RatedPlayer[]>();
+  for (const row of means) {
+    const shifted = (raw.get(row.id) ?? []).map((player) => shiftPlayer(player, target - row.mean));
+    result.set(row.id, fineTuneXv(row.id, shifted, target));
+  }
+  return result;
+}
+
+function balancedPack(gameSeed?: number): Map<string, RatedPlayer[]> {
+  const key = gameSeed == null ? "static" : String(gameSeed);
+  let pack = balancedPacks.get(key);
+  if (!pack) {
+    pack = equalizeChampionship(gameSeed);
+    balancedPacks.set(key, pack);
+  }
+  return pack;
+}
+
+export function ratedSquad(teamId: string, ctx?: number | RatingsContext): RatedPlayer[] {
+  const { seed, balance } = parseRatings(ctx);
+  if (balance === "balanced") {
+    return balancedPack(seed).get(teamId) ?? buildRatedSquad(teamId, seed);
+  }
+  return buildRatedSquad(teamId, seed);
+}
+
 /** Fifteen starters plus the rest of the panel on the bench. */
-export function expandSheetToPanel(teamId: string, sheet: TeamSheet, gameSeed?: number): TeamSheet {
-  const squad = ratedSquad(teamId, gameSeed);
+export function expandSheetToPanel(teamId: string, sheet: TeamSheet, ctx?: number | RatingsContext): TeamSheet {
+  const squad = ratedSquad(teamId, ctx);
   const names = squad.map((player) => player.name);
   const known = new Set(names);
   const starters = sheet.starters.filter((name) => known.has(name)).slice(0, 15);
@@ -319,7 +447,7 @@ export function expandSheetToPanel(teamId: string, sheet: TeamSheet, gameSeed?: 
   return { starters, subs: [...keptSubs, ...rest] };
 }
 
-export function defaultSheet(teamId: string, gameSeed?: number): TeamSheet {
+export function defaultSheet(teamId: string, ctx?: number | RatingsContext): TeamSheet {
   const lineup = latestLineup(teamId);
   return expandSheetToPanel(
     teamId,
@@ -327,7 +455,7 @@ export function defaultSheet(teamId: string, gameSeed?: number): TeamSheet {
       starters: (lineup?.starters ?? []).map((player) => player.name).slice(0, 15),
       subs: (lineup?.subs ?? []).map((player) => player.name),
     },
-    gameSeed,
+    ctx,
   );
 }
 
@@ -373,8 +501,8 @@ export function coachPickSheet(
   return { starters, subs };
 }
 
-export function sheetPlayers(teamId: string, sheet: TeamSheet, gameSeed?: number): RatedPlayer[] {
-  const squad = ratedSquad(teamId, gameSeed);
+export function sheetPlayers(teamId: string, sheet: TeamSheet, ctx?: number | RatingsContext): RatedPlayer[] {
+  const squad = ratedSquad(teamId, ctx);
   const byName = new Map(squad.map((player) => [player.name, player]));
   return sheet.starters
     .map((name) => byName.get(name))
@@ -537,15 +665,15 @@ export function designatedRoles(
 function xvFromSquad(
   teamId: string,
   sheet: TeamSheet,
-  gameSeed?: number,
+  ctx?: number | RatingsContext,
   squad?: RatedPlayer[],
 ): RatedPlayer[] {
-  if (!squad?.length) return sheetPlayers(teamId, sheet, gameSeed);
+  if (!squad?.length) return sheetPlayers(teamId, sheet, ctx);
   const byName = new Map(squad.map((player) => [player.name, player]));
   const xv = sheet.starters
     .map((name) => byName.get(name))
     .filter((player): player is RatedPlayer => Boolean(player));
-  return xv.length === sheet.starters.length ? xv : sheetPlayers(teamId, sheet, gameSeed);
+  return xv.length === sheet.starters.length ? xv : sheetPlayers(teamId, sheet, ctx);
 }
 
 export function sideProfile(
@@ -553,11 +681,11 @@ export function sideProfile(
   sheet: TeamSheet,
   tactics: Tactics,
   condition: Record<string, PlayerCondition> = {},
-  gameSeed?: number,
+  ctx?: number | RatingsContext,
   climate?: MatchClimate,
   squad?: RatedPlayer[],
 ): SideProfile {
-  const xv = xvFromSquad(teamId, sheet, gameSeed, squad);
+  const xv = xvFromSquad(teamId, sheet, ctx, squad);
   const scaled = (index: number, keys: AttributeKey[]) => {
     const player = xv[index];
     if (!player) return 12;
@@ -682,9 +810,9 @@ export function sideStrength(
   teamId: string,
   sheet: TeamSheet,
   tactics: Tactics,
-  gameSeed?: number,
+  ctx?: number | RatingsContext,
 ): { attack: number; defence: number } {
-  const profile = sideProfile(teamId, sheet, tactics, {}, gameSeed);
+  const profile = sideProfile(teamId, sheet, tactics, {}, ctx);
   return { attack: profile.attack, defence: profile.defence };
 }
 
@@ -692,10 +820,10 @@ export function sideTeamwork(
   teamId: string,
   sheet: TeamSheet,
   condition: Record<string, PlayerCondition> = {},
-  gameSeed?: number,
+  ctx?: number | RatingsContext,
   squad?: RatedPlayer[],
 ): number {
-  const xv = xvFromSquad(teamId, sheet, gameSeed, squad);
+  const xv = xvFromSquad(teamId, sheet, ctx, squad);
   if (xv.length === 0) return 12;
   const total = xv.reduce(
     (sum, player) => sum + matchStat(player.ratings.teamwork, conditionFor(player.name, condition), "teamwork"),
@@ -704,7 +832,8 @@ export function sideTeamwork(
   return Math.round((total / xv.length) * 10) / 10;
 }
 
-export function clubTactics(teamId: string): Tactics {
+export function clubTactics(teamId: string, balance?: SquadBalance): Tactics {
+  if (balance === "balanced") return { ...DEFAULT_TACTICS };
   const value = hash(teamId);
   const mentalities: Tactics["mentality"][] = ["contain", "balanced", "balanced", "attacking"];
   return {

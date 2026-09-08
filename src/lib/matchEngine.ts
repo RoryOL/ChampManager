@@ -8,6 +8,7 @@ import type {
   Score,
   ShotAttempt,
   SimulatedMatch,
+  SquadBalance,
   StatCredit,
   Tactics,
   TeamSheet,
@@ -447,6 +448,7 @@ export function simulateMatch(options: {
   seed: number;
   /** Career seed for player attributes. Omit in tests so ratings stay name-stable. */
   gameSeed?: number;
+  balance?: SquadBalance;
   climate?: MatchClimate;
   sentOff?: string[];
   homeSquad?: RatedPlayer[];
@@ -465,10 +467,11 @@ export function simulateMatch(options: {
   const statRng = createRng(seedFrom(`${seedKey}:stats`));
   const climate = climateOf(options.climate ?? rollClimate(options.seed, options.matchId));
   const shots: ShotAttempt[] = [];
-  const homeSheet = expandSheetToPanel(options.homeId, options.homeSheet ?? defaultSheet(options.homeId), options.gameSeed);
-  const awaySheet = expandSheetToPanel(options.awayId, options.awaySheet ?? defaultSheet(options.awayId), options.gameSeed);
-  const homeTactics = options.homeTactics ?? clubTactics(options.homeId);
-  const awayTactics = options.awayTactics ?? clubTactics(options.awayId);
+  const ratings = { seed: options.gameSeed, balance: options.balance };
+  const homeSheet = expandSheetToPanel(options.homeId, options.homeSheet ?? defaultSheet(options.homeId), ratings);
+  const awaySheet = expandSheetToPanel(options.awayId, options.awaySheet ?? defaultSheet(options.awayId), ratings);
+  const homeTactics = options.homeTactics ?? clubTactics(options.homeId, options.balance);
+  const awayTactics = options.awayTactics ?? clubTactics(options.awayId, options.balance);
   const homeDirect = clampDial(homeTactics.build) / 100;
   const awayDirect = clampDial(awayTactics.build) / 100;
   const homeLongPuck = clampDial(homeTactics.puckout) / 100;
@@ -496,8 +499,8 @@ export function simulateMatch(options: {
     options.performanceBoost?.clubIds.includes(options.homeId) ? (options.performanceBoost.amount ?? 0) : 0;
   const awayLift =
     options.performanceBoost?.clubIds.includes(options.awayId) ? (options.performanceBoost.amount ?? 0) : 0;
-  const rawHomeRoster = options.homeSquad ?? sheetPlayers(options.homeId, homeSheet, options.gameSeed);
-  const rawAwayRoster = options.awaySquad ?? sheetPlayers(options.awayId, awaySheet, options.gameSeed);
+  const rawHomeRoster = options.homeSquad ?? sheetPlayers(options.homeId, homeSheet, ratings);
+  const rawAwayRoster = options.awaySquad ?? sheetPlayers(options.awayId, awaySheet, ratings);
   const homeRoster = liftSquadForPrep(liftSquadRatings(rawHomeRoster, homeLift), options.homePrep);
   const awayRoster = liftSquadForPrep(liftSquadRatings(rawAwayRoster, awayLift), options.awayPrep);
   let home = sideProfile(
@@ -505,7 +508,7 @@ export function simulateMatch(options: {
     { starters: homeNames, subs: homeSubs },
     homeLiveTactics,
     options.homeCondition,
-    options.gameSeed,
+    ratings,
     climate,
     homeRoster,
   );
@@ -514,7 +517,7 @@ export function simulateMatch(options: {
     { starters: awayNames, subs: awaySubs },
     awayLiveTactics,
     options.awayCondition,
-    options.gameSeed,
+    ratings,
     climate,
     awayRoster,
   );
@@ -522,19 +525,19 @@ export function simulateMatch(options: {
     options.homeId,
     { starters: homeNames, subs: homeSubs },
     options.homeCondition,
-    options.gameSeed,
+    ratings,
     homeRoster,
   );
   const awayTeamwork = sideTeamwork(
     options.awayId,
     { starters: awayNames, subs: awaySubs },
     options.awayCondition,
-    options.gameSeed,
+    ratings,
     awayRoster,
   );
   const playerOf = (teamId: string, name: string) =>
     (teamId === options.homeId ? homeRoster : awayRoster).find((player) => player.name === name)
-    ?? sheetPlayers(teamId, { starters: teamId === options.homeId ? homeNames : awayNames, subs: [] }, options.gameSeed).find(
+    ?? sheetPlayers(teamId, { starters: teamId === options.homeId ? homeNames : awayNames, subs: [] }, ratings).find(
       (player) => player.name === name,
     );
   const conditionOf = (teamId: string, name: string) =>
@@ -573,7 +576,7 @@ export function simulateMatch(options: {
         { starters: homeNames, subs: homeSubs },
         homeLiveTactics,
         options.homeCondition,
-        options.gameSeed,
+        ratings,
         climate,
         homeRoster,
       );
@@ -585,7 +588,7 @@ export function simulateMatch(options: {
         { starters: awayNames, subs: awaySubs },
         awayLiveTactics,
         options.awayCondition,
-        options.gameSeed,
+        ratings,
         climate,
         awayRoster,
       );
@@ -1576,6 +1579,7 @@ export function simulateMatch(options: {
     homeTactics,
     awayTactics,
     gameSeed: options.gameSeed,
+    balance: options.balance,
     homeChaseEffort,
     awayChaseEffort,
   });
@@ -1626,6 +1630,7 @@ export function simulateMatch(options: {
     players: tallied.players,
     coachReport,
     gameSeed: options.gameSeed,
+    balance: options.balance,
     climate,
     shots,
     homeChaseEffort,

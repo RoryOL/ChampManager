@@ -76,9 +76,9 @@ export function MatchScreen({
     if (live.phase === "finished") setPane("stats");
   }, [live.phase]);
 
-  const homeSquad = useMemo(() => (homeId ? ratedSquad(homeId, save.seed) : []), [homeId, save.seed]);
-  const awaySquad = useMemo(() => (awayId ? ratedSquad(awayId, save.seed) : []), [awayId, save.seed]);
-  const htXv = useMemo(() => sheetPlayers(save.clubId, htSheet, save.seed), [htSheet, save.clubId, save.seed]);
+  const homeSquad = useMemo(() => (homeId ? ratedSquad(homeId, save) : []), [homeId, save]);
+  const awaySquad = useMemo(() => (awayId ? ratedSquad(awayId, save) : []), [awayId, save]);
+  const htXv = useMemo(() => sheetPlayers(save.clubId, htSheet, save), [htSheet, save.clubId, save]);
 
   useEffect(() => {
     if (live.phase !== "half-time") return;

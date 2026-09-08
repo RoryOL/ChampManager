@@ -101,6 +101,21 @@ describe("multiplayer campaign", () => {
     expect(twoPlayerLobby().difficulty).toBe("intermediate");
   });
 
+  it("stores the host's panel mode on a new championship", () => {
+    const balanced = createCampaign({
+      hostPlayerId: "host",
+      hostName: "Rory",
+      clubId: "ballyea",
+      waitHours: 24,
+      now: NOW,
+      seed: 42,
+      code: "EVEN01",
+      balance: "balanced",
+    });
+    expect(balanced.balance).toBe("balanced");
+    expect(twoPlayerLobby().balance).toBe("standard");
+  });
+
   it("holds preseason until every manager finishes that week's sessions", () => {
     let campaign = startedCampaign();
     campaign = trainClub(campaign, "ballyea", "skills", NOW + 10);

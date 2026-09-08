@@ -214,6 +214,15 @@ export type CalendarPhase = "preseason" | "season";
 
 export type Difficulty = "junior" | "intermediate" | "senior" | "intercounty";
 
+/** How panels are generated when a season starts. */
+export type SquadBalance = "standard" | "balanced";
+
+/** Career seed plus panel mode, accepted by `ratedSquad` and friends. */
+export type RatingsContext = {
+  seed?: number;
+  balance?: SquadBalance;
+};
+
 export type NewsKind = "chairman" | "match" | "press" | "injury" | "training" | "recovery" | "briefing";
 
 export type NewsTone = "positive" | "negative" | "neutral";
@@ -400,6 +409,7 @@ export type SimulatedMatch = {
   players: PlayerMatchStats[];
   coachReport: string[];
   gameSeed?: number;
+  balance?: SquadBalance;
   climate: MatchClimate;
   shots: ShotAttempt[];
   homeChaseEffort?: number;
@@ -418,10 +428,11 @@ export type TeamSheet = {
 };
 
 export type GameSave = {
-  version: 12;
+  version: 13;
   clubId: string;
   seed: number;
   difficulty: Difficulty;
+  balance: SquadBalance;
   tactics: Tactics;
   sheet: TeamSheet;
   matches: { id: string; homeScore: Score | null; awayScore: Score | null }[];
@@ -502,6 +513,7 @@ export type Campaign = {
   hostPlayerId: string;
   waitHours: WaitHours;
   difficulty: Difficulty;
+  balance: SquadBalance;
   createdAt: number;
   seats: Seat[];
   phase: "lobby" | "preseason" | "season";

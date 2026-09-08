@@ -20,17 +20,17 @@ type Props = {
 };
 
 export function TacticsScreen({ save, onChange, onSwap, onSetSheet }: Props) {
-  const squad = useMemo(() => ratedSquad(save.clubId, save.seed), [save.clubId, save.seed]);
+  const squad = useMemo(() => ratedSquad(save.clubId, save), [save]);
   const byName = useMemo(() => new Map(squad.map((player) => [player.name, player])), [squad]);
   const [first, setFirst] = useState<string | null>(null);
   const [second, setSecond] = useState<string | null>(null);
-  const sheet = expandSheetToPanel(save.clubId, save.sheet, save.seed);
-  const xv = sheetPlayers(save.clubId, sheet, save.seed);
+  const sheet = expandSheetToPanel(save.clubId, save.sheet, save);
+  const xv = sheetPlayers(save.clubId, sheet, save);
   const names = [...sheet.starters, ...sheet.subs];
   const matchIds = save.matches.map((match) => match.id);
 
   useEffect(() => {
-    const full = expandSheetToPanel(save.clubId, save.sheet, save.seed);
+    const full = expandSheetToPanel(save.clubId, save.sheet, save);
     if (full.subs.length === save.sheet.subs.length && full.starters.length === save.sheet.starters.length) return;
     onSetSheet(full);
   }, [onSetSheet, save.clubId, save.seed, save.sheet]);

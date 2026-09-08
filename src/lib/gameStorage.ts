@@ -1,6 +1,7 @@
 import { seedChampionship } from "../data/championship";
 import { createManagedClub, seedRivals } from "./aiManager";
 import { DEFAULT_DIFFICULTY, migrateDifficulty } from "./difficulty";
+import { DEFAULT_BALANCE, migrateBalance } from "./balance";
 import { DEFAULT_TACTICS, defaultSheet, expandSheetToPanel } from "./players";
 import { ATTRIBUTE_KEYS, clampDial } from "./attributes";
 import { ambitionFor, migrateNewsItem } from "./news";
@@ -27,6 +28,7 @@ import type {
   NewsItem,
   PlayerCondition,
   Score,
+  SquadBalance,
   Tactics,
   TeamSheet,
   TrainingIntensity,
@@ -34,7 +36,7 @@ import type {
   WeekShape,
 } from "../types";
 
-export const SAVE_VERSION = 12;
+export const SAVE_VERSION = 13;
 
 const STORAGE_KEY = "champ-manager:game-v1";
 
@@ -202,6 +204,7 @@ export function migrateSave(raw: unknown): GameSave | null {
     weekDeltas?: unknown;
     rivals?: unknown;
     difficulty?: unknown;
+    balance?: unknown;
     nextMatchPrep?: unknown;
   };
   if (!parsed.clubId || !parsed.sheet || !Array.isArray(parsed.matches)) return null;
@@ -217,7 +220,8 @@ export function migrateSave(raw: unknown): GameSave | null {
     parsed.version !== 9 &&
     parsed.version !== 10 &&
     parsed.version !== 11 &&
-    parsed.version !== 12
+    parsed.version !== 12 &&
+    parsed.version !== 13
   ) {
     return null;
   }
@@ -281,6 +285,7 @@ export function migrateSave(raw: unknown): GameSave | null {
     weekDeltas,
     rivals: migrateRivals(parsed.clubId, seed, parsed.rivals),
     difficulty: migrateDifficulty(parsed.difficulty),
+    balance: migrateBalance(parsed.balance),
     nextMatchPrep: migrateMatchPrep(parsed.nextMatchPrep),
   };
 }
@@ -302,7 +307,11 @@ function clampConditionBoosts(condition: Record<string, PlayerCondition>): Recor
   return next;
 }
 
-export function newSave(clubId: string, difficulty: Difficulty = DEFAULT_DIFFICULTY): GameSave {
+export function newSave(
+  clubId: string,
+  difficulty: Difficulty = DEFAULT_DIFFICULTY,
+  balance: SquadBalance = DEFAULT_BALANCE,
+): GameSave {
   const championship = structuredClone(seedChampionship);
   const seed = Math.floor(Math.random() * 1_000_000_000);
   const names = squadNames(clubId, seed);
@@ -311,6 +320,7 @@ export function newSave(clubId: string, difficulty: Difficulty = DEFAULT_DIFFICU
     clubId,
     seed,
     difficulty: migrateDifficulty(difficulty),
+    balance: migrateBalance(balance),
     tactics: DEFAULT_TACTICS,
     sheet: defaultSheet(clubId),
     matches: championship.matches.map((match) => ({
@@ -331,7 +341,7 @@ export function newSave(clubId: string, difficulty: Difficulty = DEFAULT_DIFFICU
     sessionsDone: 0,
     trainingDeltas: {},
     weekDeltas: {},
-    rivals: seedRivals(clubId, seed),
+    rivals: seedRivals(clubId, seed, migrateBalance(balance)),
   };
 }
 

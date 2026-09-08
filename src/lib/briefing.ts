@@ -4,6 +4,7 @@ import type {
   Match,
   NewsItem,
   PlayerCondition,
+  SquadBalance,
   Tactics,
   TeamSheet,
 } from "../types";
@@ -17,8 +18,8 @@ import { aggressionLabel, buildLabel, pressureLabel } from "./attributes";
 import { shootingLabel } from "./shooting";
 import { conditionFor, matchStat } from "./training";
 
-function threatLine(teamId: string, sheet: TeamSheet, gameSeed?: number): string {
-  const xv = sheetPlayers(teamId, sheet, gameSeed);
+function threatLine(teamId: string, sheet: TeamSheet, ctx?: number | { seed?: number; balance?: SquadBalance }): string {
+  const xv = sheetPlayers(teamId, sheet, ctx);
   const scored = [...xv].sort((a, b) => b.ratings.overall - a.ratings.overall);
   const star = scored[0];
   const shooter = [...xv].sort((a, b) => b.ratings.shooting + b.ratings.strikingDistance - (a.ratings.shooting + a.ratings.strikingDistance))[0];
@@ -42,21 +43,23 @@ export function buildPreMatchBriefing(options: {
   sheet: TeamSheet;
   condition: Record<string, PlayerCondition>;
   seed?: number;
+  balance?: SquadBalance;
   opponentSheet?: TeamSheet;
   opponentTactics?: Tactics;
 }): { title: string; notes: string[] } {
+  const ratings = { seed: options.seed, balance: options.balance };
   const { homeId, awayId } = resolveMatchSides(options.championship, options.match);
   const usHome = homeId === options.clubId;
   const opponentId = usHome ? awayId : homeId;
   const us = teamById(options.championship, options.clubId);
   const them = opponentId ? teamById(options.championship, opponentId) : undefined;
   const venue = usHome ? "at home" : "away";
-  const theirTactics = options.opponentTactics ?? (opponentId ? clubTactics(opponentId) : options.tactics);
+  const theirTactics = options.opponentTactics ?? (opponentId ? clubTactics(opponentId, options.balance) : options.tactics);
   const theirSheet = options.opponentSheet ?? (opponentId ? defaultSheet(opponentId) : options.sheet);
   const theirProfile = opponentId
-    ? sideProfile(opponentId, theirSheet, theirTactics, {}, options.seed)
-    : sideProfile(options.clubId, options.sheet, options.tactics, {}, options.seed);
-  const ourProfile = sideProfile(options.clubId, options.sheet, options.tactics, options.condition, options.seed);
+    ? sideProfile(opponentId, theirSheet, theirTactics, {}, ratings)
+    : sideProfile(options.clubId, options.sheet, options.tactics, {}, ratings);
+  const ourProfile = sideProfile(options.clubId, options.sheet, options.tactics, options.condition, ratings);
   const notes: string[] = [];
   const themName = them ? compactName(them) : "the opposition";
   notes.push(
@@ -69,7 +72,7 @@ export function buildPreMatchBriefing(options: {
   );
 
   if (opponentId) {
-    notes.push(`Threats: ${threatLine(opponentId, theirSheet, options.seed)}`);
+    notes.push(`Threats: ${threatLine(opponentId, theirSheet, ratings)}`);
   }
 
   if (theirProfile.attack > ourProfile.defence + 0.8) {
@@ -112,7 +115,7 @@ export function buildPreMatchBriefing(options: {
     );
   }
 
-  const xv = sheetPlayers(options.clubId, options.sheet, options.seed);
+  const xv = sheetPlayers(options.clubId, options.sheet, ratings);
   const teamwork =
     xv.reduce((sum, player) => sum + matchStat(player.ratings.teamwork, conditionFor(player.name, options.condition), "teamwork"), 0) /
     Math.max(1, xv.length);
@@ -136,6 +139,7 @@ export function briefingNews(options: {
   sheet: TeamSheet;
   condition: Record<string, PlayerCondition>;
   seed: number;
+  balance?: SquadBalance;
   opponentSheet?: TeamSheet;
   opponentTactics?: Tactics;
 }): NewsItem {
@@ -173,6 +177,7 @@ export function ensureMatchBriefing(save: GameSave, championship: Championship):
         sheet: save.sheet,
         condition: save.condition,
         seed: save.seed,
+        balance: save.balance,
         opponentSheet: rival?.sheet,
         opponentTactics: rival?.tactics,
       }),

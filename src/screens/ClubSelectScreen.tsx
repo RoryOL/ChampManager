@@ -12,13 +12,19 @@ import {
   WELCOME_STORAGE_KEY,
   difficultyCopy,
 } from "../lib/difficulty";
-import type { Difficulty, WaitHours } from "../types";
+import {
+  BALANCE_OPTIONS,
+  DEFAULT_BALANCE,
+  balanceCopy,
+} from "../lib/balance";
+import type { Difficulty, SquadBalance, WaitHours } from "../types";
 
 export type HostPayload = {
   name: string;
   clubId: string;
   waitHours: WaitHours;
   difficulty: Difficulty;
+  balance: SquadBalance;
 };
 
 export type JoinPayload = {
@@ -29,7 +35,7 @@ export type JoinPayload = {
 };
 
 type Props = {
-  onTakeCharge: (clubId: string, difficulty: Difficulty) => void;
+  onTakeCharge: (clubId: string, difficulty: Difficulty, balance: SquadBalance) => void;
   onHost: (payload: HostPayload) => void;
   onJoin: (payload: JoinPayload) => Promise<{ ok: true } | { ok: false; error: string }> | { ok: true } | { ok: false; error: string };
   onPreviewTaken?: (code: string, snapshot?: string) => Promise<string[]> | string[];
@@ -41,16 +47,18 @@ function ClubList({
   taken,
   action,
   onPick,
+  balance,
 }: {
   taken: string[];
   action: string;
   onPick: (clubId: string) => void;
+  balance: SquadBalance;
 }) {
   return (
     <ul className="club-pick">
       {seedChampionship.teams.map((team) => {
         const group = teamGroup(seedChampionship, team.id);
-        const stars = [...ratedSquad(team.id)].sort((a, b) => b.ratings.overall - a.ratings.overall);
+        const stars = [...ratedSquad(team.id, { balance })].sort((a, b) => b.ratings.overall - a.ratings.overall);
         const best = stars[0];
         const claimed = taken.includes(team.id);
         return (
@@ -89,6 +97,7 @@ export function ClubSelectScreen({ onTakeCharge, onHost, onJoin, onPreviewTaken 
   const [snapshot, setSnapshot] = useState("");
   const [waitHours, setWaitHours] = useState<WaitHours>(24);
   const [difficulty, setDifficulty] = useState<Difficulty>(DEFAULT_DIFFICULTY);
+  const [balance, setBalance] = useState<SquadBalance>(DEFAULT_BALANCE);
   const [error, setError] = useState<string | null>(null);
   const [taken, setTaken] = useState<string[]>([]);
   const [looking, setLooking] = useState(false);
@@ -156,7 +165,30 @@ export function ClubSelectScreen({ onTakeCharge, onHost, onJoin, onPreviewTaken 
       </header>
 
       <section className="difficulty-picker">
-        <p className="kicker">Standard</p>
+        <p className="kicker">Panels</p>
+        <div className="difficulty-grid">
+          {BALANCE_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              className={balance === option.value ? "is-active" : ""}
+              onClick={() => setBalance(option.value)}
+              disabled={mode === "join"}
+            >
+              <strong>{option.title}</strong>
+              <em>{option.subtitle}</em>
+            </button>
+          ))}
+        </div>
+        <p className="hint">
+          {mode === "join"
+            ? "The host already set the panels for this championship."
+            : balanceCopy(balance)}
+        </p>
+      </section>
+
+      <section className="difficulty-picker">
+        <p className="kicker">Difficulty</p>
         <div className="difficulty-grid">
           {DIFFICULTY_OPTIONS.map((option) => (
             <button
@@ -243,24 +275,26 @@ export function ClubSelectScreen({ onTakeCharge, onHost, onJoin, onPreviewTaken 
       )}
 
       {mode === "solo" ? (
-        <ClubList taken={[]} action="Take charge" onPick={(clubId) => onTakeCharge(clubId, difficulty)} />
+        <ClubList taken={[]} action="Take charge" balance={balance} onPick={(clubId) => onTakeCharge(clubId, difficulty, balance)} />
       ) : mode === "host" ? (
         <ClubList
           taken={[]}
           action="Host"
+          balance={balance}
           onPick={(clubId) => {
             if (!hostReady) {
               setError("Put your name in first.");
               return;
             }
             setError(null);
-            onHost({ name, clubId, waitHours, difficulty });
+            onHost({ name, clubId, waitHours, difficulty, balance });
           }}
         />
       ) : (
         <ClubList
           taken={taken}
           action="Join"
+          balance={balance}
           onPick={async (clubId) => {
             if (!joinReady) {
               setError("Name and an invite code or snapshot are required.");
