@@ -150,8 +150,56 @@ export function chaoticConvert(convert: number, chaos: number, random: () => num
   return Math.min(0.9, Math.max(0.16, mixed + jitter));
 }
 
-export function puckoutFindTargetChance(puckoutReach: number, passing: number): number {
-  return Math.min(0.9, Math.max(0.16, 0.12 + puckoutReach * 0.02 + passing * 0.018));
+export function puckoutFindTargetChance(puckoutReach: number, passing: number, vision = passing): number {
+  return Math.min(0.9, Math.max(0.16, 0.1 + puckoutReach * 0.018 + passing * 0.014 + vision * 0.012));
+}
+
+/** Chance a direct attack plays a long ball into the forwards rather than running it. */
+export function longBallDeliveryChance(direct: number): number {
+  return Math.min(0.74, Math.max(0, (direct - 0.45) * 1.35));
+}
+
+export function longBallFindChance(passing: number, vision: number): number {
+  return Math.min(0.84, Math.max(0.12, 0.06 + passing * 0.022 + vision * 0.02));
+}
+
+export function longBallWinChance(fielder: number, marker: number, found: boolean): number {
+  const spill = found ? 0.05 : -0.06;
+  return Math.min(0.82, Math.max(0.16, 0.48 + (fielder - marker) * 0.038 + spill + (found ? 0.05 : 0)));
+}
+
+/** Full-back 1–3 mark full-forwards 12–14; half-backs 4–6 mark half-forwards 9–11. */
+export function markerSlot(forwardIndex: number): number {
+  if (forwardIndex >= 12) return Math.min(3, Math.max(1, forwardIndex - 11));
+  if (forwardIndex >= 9) return Math.min(6, Math.max(4, forwardIndex - 5));
+  if (forwardIndex >= 7) return forwardIndex === 7 ? 4 : 6;
+  return Math.max(1, Math.min(6, forwardIndex));
+}
+
+export function paceMismatch(
+  speed: number,
+  acceleration: number,
+  markerSpeed: number,
+  markerAcceleration: number,
+  manMarking: number,
+): number {
+  const attack = speed * 0.46 + acceleration * 0.54;
+  const cover = markerSpeed * 0.36 + markerAcceleration * 0.36 + manMarking * 0.28;
+  return attack - cover;
+}
+
+export function runningLookBoost(mismatch: number, fullForward: boolean): {
+  closer: number;
+  goal: number;
+  convert: number;
+} {
+  const extra = Math.max(0, mismatch - 2.4);
+  const ff = fullForward ? 1 : 0.4;
+  return {
+    closer: Math.min(0.52, extra * 0.075) * ff,
+    goal: Math.min(0.13, extra * 0.02) * (fullForward ? 1 : 0.32),
+    convert: Math.min(0.11, extra * 0.016) * ff,
+  };
 }
 
 export function targetedPuckoutWinChance(
@@ -424,11 +472,6 @@ export function nextMomentum(
   }
   const drifted = current + (50 - current) * 0.05 + towardHome * delta;
   return Math.max(4, Math.min(96, Math.round(drifted)));
-}
-
-function pickForward(names: string[], random: () => number): string {
-  const pool = names.slice(Math.max(0, names.length - 8));
-  return pool[Math.floor(random() * Math.max(pool.length, 1))] ?? "a substitute";
 }
 
 function pickName(names: string[], random: () => number): string {
@@ -1055,6 +1098,7 @@ export function simulateMatch(options: {
             ? matchStat(keeper.ratings.puckoutReach, keeperForm, "puckoutReach")
             : 12,
           keeper && keeperForm ? matchStat(keeper.ratings.passing, keeperForm, "passing") : 11,
+          keeper && keeperForm ? matchStat(keeper.ratings.vision, keeperForm, "vision") : 11,
         ) + puckoutWindAdjust(climate, withWind) * 0.35,
         keeper ? formOf(teamId, keeper.name) : 50,
       );
@@ -1307,32 +1351,171 @@ export function simulateMatch(options: {
       }
     }
 
-    const playerName =
-      origin === "press"
-        ? random() < 0.58 && names.includes(carrier)
+    const chase = chaseOf(teamId, minute);
+    const tactics = withChaseTactics(tacticsFor(teamId), chase);
+    const shooting = clampDial(tactics.shooting ?? 50);
+    const teamwork = teamId === options.homeId ? homeTeamwork : awayTeamwork;
+    const baseComplete = passCompleteChance(climate, direct, teamwork);
+    const contestAerial = (sideId: string, name: string) => {
+      const player = playerOf(sideId, name);
+      if (!player) return 12;
+      const form = conditionOf(sideId, name);
+      return aerialContestRating(
+        matchStat(player.ratings.highFielding, form, "highFielding"),
+        matchStat(player.ratings.aerialReach, form, "aerialReach"),
+        matchStat(player.ratings.strength, form, "strength"),
+      );
+    };
+
+    let playerName = carrier;
+    let gatheredLong = false;
+    let gatheredFullForward = false;
+    let moved: { credits: StatCredit[]; carrier: string; retained: boolean; copy?: string } = {
+      credits: [],
+      carrier,
+      retained: true,
+    };
+
+    if (origin === "press") {
+      playerName =
+        random() < 0.58 && names.includes(carrier)
           ? carrier
           : pickIndexed(
               names,
               forwardIndices(names).length > 0 ? forwardIndices(names) : names.map((_, index) => index),
               random,
-            ).name
-        : pickForward(names, random);
-    const chase = chaseOf(teamId, minute);
-    const tactics = withChaseTactics(tacticsFor(teamId), chase);
-    const shooting = clampDial(tactics.shooting ?? 50);
-    const hops = origin === "press" ? 1 : 1 + Math.floor((1 - direct) * 2) + (shooting > 62 ? 1 : 0);
-    const teamwork = teamId === options.homeId ? homeTeamwork : awayTeamwork;
-    const baseComplete = passCompleteChance(climate, direct, teamwork);
-    const chainPool = origin === "press" && names.length > 9 ? names.slice(9) : names.slice(6, 15);
-    const moved = passChain(
-      chainPool,
-      teamId,
-      statRng,
-      hops,
-      carrier,
-      (name) => applyFormChance(baseComplete, formOf(teamId, name), 0.28),
-      (name) => fumbleChance(playerOf(teamId, name)?.ratings.firstTouch ?? 12, formOf(teamId, name)),
-    );
+            ).name;
+      const hops = 1;
+      const chainPool = names.length > 9 ? names.slice(9) : names.slice(6, 15);
+      moved = passChain(
+        chainPool,
+        teamId,
+        statRng,
+        hops,
+        carrier,
+        (name) => applyFormChance(baseComplete, formOf(teamId, name), 0.28),
+        (name) => fumbleChance(playerOf(teamId, name)?.ratings.firstTouch ?? 12, formOf(teamId, name)),
+      );
+    } else if (random() < longBallDeliveryChance(direct)) {
+      const kickerPool = indicesWhere(names, (index) => index >= 6 && index <= 11);
+      const kickerPick = pickIndexed(names, kickerPool.length > 0 ? kickerPool : names.map((_, i) => i), random, (index) => {
+        const player = playerOf(teamId, names[index] ?? "");
+        return (player?.ratings.passing ?? 11) * 0.52 + (player?.ratings.vision ?? 11) * 0.48;
+      });
+      const kicker = playerOf(teamId, kickerPick.name);
+      const targetPick = pickIndexed(names, forwardIndices(names), random, (index) => {
+        const player = playerOf(teamId, names[index] ?? "");
+        const aerial = aerialContestRating(
+          player?.ratings.highFielding ?? 11,
+          player?.ratings.aerialReach ?? 11,
+          player?.ratings.strength ?? 11,
+        );
+        const ff = index >= 12 ? 0.92 + direct * 0.7 : 0.7;
+        return Math.max(0.14, aerial) * ff;
+      });
+      const found = random() <
+        applyFormChance(
+          longBallFindChance(kicker?.ratings.passing ?? 11, kicker?.ratings.vision ?? 11),
+          formOf(teamId, kickerPick.name),
+        );
+      const fielderPick = found ? targetPick : pickIndexed(names, forwardIndices(names), random);
+      const markerName =
+        oppNames[markerSlot(fielderPick.index)] ?? pickName(oppNames.slice(1, 7), random);
+      const win =
+        random() < longBallWinChance(contestAerial(teamId, fielderPick.name), contestAerial(defendingId, markerName), found);
+      pendingCredits.push({
+        name: kickerPick.name,
+        teamId,
+        passesAttempted: 1,
+        passesCompleted: found ? 1 : 0,
+        possessions: 1,
+        sequences: 1,
+      });
+      if (!win) {
+        push({
+          minute,
+          teamId,
+          playerName: fielderPick.name,
+          kind: "turnover",
+          text: found
+            ? `Long ball broken — ${fielderPick.name} loses the aerial contest.`
+            : `Long ball spilled — ${fielderPick.name} cannot gather.`,
+          credits: mergeCredits([
+            ...pendingCredits.splice(0, pendingCredits.length),
+            { name: fielderPick.name, teamId, highFieldingAttempted: 1 },
+            {
+              name: markerName,
+              teamId: defendingId,
+              highFieldingAttempted: 1,
+              highFieldingWon: 1,
+              possessions: 1,
+              sequences: 1,
+            },
+          ]),
+        });
+        return;
+      }
+      gatheredLong = true;
+      gatheredFullForward = fielderPick.index >= 12;
+      playerName = fielderPick.name;
+      moved = {
+        credits: [
+          {
+            name: fielderPick.name,
+            teamId,
+            highFieldingAttempted: 1,
+            highFieldingWon: 1,
+            possessions: 1,
+          },
+        ],
+        carrier: fielderPick.name,
+        retained: true,
+      };
+      if (random() < 0.55) {
+        push({
+          minute,
+          teamId,
+          playerName: fielderPick.name,
+          kind: "play",
+          text: gatheredFullForward
+            ? found
+              ? `${fielderPick.name} gathers the long ball in the square.`
+              : `Breaking ball in the square — ${fielderPick.name} gathers.`
+            : found
+              ? `${kickerPick.name} finds ${fielderPick.name} with the long ball.`
+              : `Breaking ball — ${fielderPick.name} gathers the long delivery.`,
+          credits: mergeCredits([...pendingCredits.splice(0, pendingCredits.length), ...moved.credits]),
+        });
+        moved = { credits: [], carrier: fielderPick.name, retained: true };
+      }
+    } else {
+      const runPool = indicesWhere(names, (index) => index >= 7);
+      playerName = pickIndexed(names, runPool.length > 0 ? runPool : names.map((_, i) => i), random, (index) => {
+        const player = playerOf(teamId, names[index] ?? "");
+        const run =
+          (player?.ratings.acceleration ?? 11) * 0.42 +
+          (player?.ratings.offTheBall ?? 11) * 0.42 +
+          (player?.ratings.speed ?? 11) * 0.16;
+        const aerial = aerialContestRating(
+          player?.ratings.highFielding ?? 11,
+          player?.ratings.aerialReach ?? 11,
+          player?.ratings.strength ?? 11,
+        );
+        const line = index >= 12 ? 1.08 : 1;
+        return Math.max(0.12, run * (1 - direct) + aerial * direct * 0.35) * line;
+      }).name;
+      const hops = 1 + Math.floor((1 - direct) * 2) + (shooting > 62 ? 1 : 0);
+      const chainPool = names.slice(6, 15);
+      moved = passChain(
+        chainPool,
+        teamId,
+        statRng,
+        hops,
+        carrier,
+        (name) => applyFormChance(baseComplete, formOf(teamId, name), 0.28),
+        (name) => fumbleChance(playerOf(teamId, name)?.ratings.firstTouch ?? 12, formOf(teamId, name)),
+      );
+    }
     if (!moved.retained) {
       push({
         minute,
@@ -1350,53 +1533,82 @@ export function simulateMatch(options: {
       return;
     }
     const shooter = playerOf(teamId, playerName);
+    const shooterIndex = Math.max(0, names.indexOf(playerName));
     const striking = shooter?.ratings.strikingDistance ?? 12;
     const composure = shooter?.ratings.composure ?? 12;
     const finishing = shooter?.ratings.shooting ?? striking;
+    const markerName = oppNames[markerSlot(shooterIndex)] ?? "";
+    const marker = playerOf(defendingId, markerName);
+    const mismatch = paceMismatch(
+      shooter?.ratings.speed ?? 11,
+      shooter?.ratings.acceleration ?? 11,
+      marker?.ratings.speed ?? 11,
+      marker?.ratings.acceleration ?? 11,
+      marker?.ratings.manMarking ?? 12,
+    );
+    const paceBoost = origin === "press" ? { closer: 0, goal: 0, convert: 0 } : runningLookBoost(mismatch, shooterIndex >= 12);
+    const runShare = origin === "press" ? 0 : 1 - direct;
     const distanceM0 = origin === "press"
       ? Math.max(10, Math.min(36, 15 + random() * 18 - (finishing - 12) * 0.35))
-      : shotDistanceM(shooting, striking, random);
+      : gatheredLong
+        ? gatheredFullForward
+          ? Math.max(7, Math.min(16, 8 + random() * 8))
+          : Math.max(12, Math.min(28, 16 + random() * 12))
+        : shotDistanceM(shooting, striking, random);
     let distanceM = distanceM0;
     if (chase.huntGoals) {
       distanceM = Math.max(10, Math.min(30, 11 + random() * 16));
-    } else if (origin !== "press" && direct > 0.62 && random() < 0.18 + (profile.aerial - 12) * 0.012) {
-      distanceM = 10 + random() * 14;
+    } else if (gatheredLong && gatheredFullForward) {
+      distanceM = Math.min(distanceM, 16);
+    } else if (origin !== "press" && random() < paceBoost.closer * runShare) {
+      distanceM = Math.max(8, Math.min(distanceM, 10 + random() * 12));
     }
-    if (shooting >= 78 && distanceM > 42 && random() < 0.28 && !chase.huntGoals) {
+    if (shooting >= 78 && distanceM > 42 && random() < 0.28 && !chase.huntGoals && !gatheredLong) {
       pendingCredits.push(...moved.credits);
       return;
     }
     const intoShooter = deliverTo(teamId, moved.carrier, playerName);
-    const sweeperCut =
-      oppNames.length >= 15 && oppTactics.shape === "sweeper" ? (origin === "press" ? 0.55 : 0.32) : 1;
+    const sweeperOn = oppNames.length >= 15 && oppTactics.shape === "sweeper";
+    const sweeperCut = !sweeperOn
+      ? 1
+      : origin === "press"
+        ? 0.55
+        : gatheredLong && gatheredFullForward
+          ? 0.78
+          : 0.32;
     const fiveForwardCut = names.length < 15 || tactics.shape === "sweeper" ? 0.82 : 1;
     const wind = conversionContext(climate, teamId, options.homeId, period);
-    const convert = chaoticConvert(
-      applyFormChance(
-        openPlayConversion({
-          strikingDistance: striking,
-          composure,
-          shooting,
-          finishing,
-          distanceM,
-          withWind: wind.withWind,
-          crossWind: wind.crossWind,
-          wet: wind.wet,
-        }),
-        formOf(teamId, playerName),
-      ),
-      matchChaos(tacticsFor(options.homeId), tacticsFor(options.awayId)),
-      random,
-    ) * (chase.huntGoals ? 0.36 : chase.chasing ? 1.1 : 1);
+    const convert =
+      chaoticConvert(
+        applyFormChance(
+          openPlayConversion({
+            strikingDistance: striking,
+            composure,
+            shooting,
+            finishing,
+            distanceM,
+            withWind: wind.withWind,
+            crossWind: wind.crossWind,
+            wet: wind.wet,
+          }),
+          formOf(teamId, playerName),
+        ),
+        matchChaos(tacticsFor(options.homeId), tacticsFor(options.awayId)),
+        random,
+      ) *
+        (chase.huntGoals ? 0.36 : chase.chasing ? 1.1 : 1) +
+      paceBoost.convert * runShare;
     const goalChance =
       goalChanceFromDistance(distanceM, sweeperCut) *
         fiveForwardCut *
-        (direct > 0.6 ? 1.2 : 1) *
+        (gatheredLong && gatheredFullForward ? 1.45 : direct > 0.6 ? 1.2 : 1) *
         (origin === "press" ? 1.65 : 1) *
         (chase.huntGoals ? 2.15 : chase.chasing ? 1.12 : 1) +
+      (gatheredLong && gatheredFullForward ? 0.12 : 0) +
       (direct > 0.62 && distanceM < 22 ? 0.05 : 0) +
       (origin === "press" && distanceM < 24 ? 0.06 : 0) +
-      (chase.huntGoals && distanceM < 26 ? 0.08 : 0);
+      (chase.huntGoals && distanceM < 26 ? 0.08 : 0) +
+      paceBoost.goal * runShare;
     const flush = (extra: StatCredit[]) =>
       mergeCredits([...pendingCredits.splice(0, pendingCredits.length), ...moved.credits, ...intoShooter, ...extra]);
     const record = (kind: ShotAttempt["kind"], scored: boolean) => {
@@ -1442,7 +1654,12 @@ export function simulateMatch(options: {
         teamId,
         playerName,
         kind: "goal",
-        text: origin === "press" ? `GOAL! ${playerName} punishes the turnover.` : `GOAL! ${playerName} finds the net.`,
+        text:
+          origin === "press"
+            ? `GOAL! ${playerName} punishes the turnover.`
+            : gatheredLong && gatheredFullForward
+              ? `GOAL! ${playerName} gathers the long ball and finishes.`
+              : `GOAL! ${playerName} finds the net.`,
         credits: flush([{ name: playerName, teamId, shots: 1, scores: 1 }]),
       });
       record("goal", true);
@@ -1469,9 +1686,11 @@ export function simulateMatch(options: {
     const fromPlay =
       origin === "press"
         ? `${playerName} points from the turnover.`
-        : distanceM >= 50
-          ? `${playerName} points from distance.`
-          : `${playerName} points from play, worked through midfield.`;
+        : gatheredLong && gatheredFullForward
+          ? `${playerName} points after gathering the long ball.`
+          : distanceM >= 50
+            ? `${playerName} points from distance.`
+            : `${playerName} points from play, worked through midfield.`;
     push({
       minute,
       teamId,

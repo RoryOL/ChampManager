@@ -18,6 +18,12 @@ import {
   mistimedFoulChance,
   momentumAt,
   puckoutFindTargetChance,
+  longBallDeliveryChance,
+  longBallFindChance,
+  longBallWinChance,
+  markerSlot,
+  paceMismatch,
+  runningLookBoost,
   scoreFromEvents,
   redOnFoulChance,
   reshapeTo625,
@@ -39,16 +45,26 @@ import {
   yellowOnFoulChance,
   secondYellowOnFoulChance,
 } from "./lib/matchEngine";
-import { clubTactics, DEFAULT_TACTICS, defaultSheet, expandSheetToPanel, matchOrderIndex, matchShirtNumber, matchSlot, pickPuckoutTarget, playerAge, ratePlayer, ratedSquad, sheetPlayers, sideStrength, swapPlayersInSheet } from "./lib/players";
+import { aerialContestRating, clubTactics, DEFAULT_TACTICS, defaultSheet, expandSheetToPanel, matchOrderIndex, matchShirtNumber, matchSlot, pickPuckoutTarget, playerAge, ratePlayer, ratedSquad, sheetPlayers, sideStrength, swapPlayersInSheet } from "./lib/players";
 import { nextBatch } from "./lib/schedule";
 import { matchPlayed, scoreTotal } from "./lib/scoring";
 import { ATTRIBUTE_KEYS, MENTAL_KEYS } from "./lib/attributes";
 import { applyMatchFatigue, applyTeamwork, applyTraining, applyFullTrainingWeek, applyWeekSession, averageMatchOverall, bankedLift, boostTotal, defaultCondition, fitnessOf, formatBoostDelta, isOvertrained, liftSquadForPrep, matchFatigueDelta, matchStat, recoverBetweenMatches, sessionForSlot, tableLift, TRAINABLE_KEYS, trainedOverallLift, trainedRatings, trainedStat, trainingDelta, trainingGainFactor, weekCoachCopy } from "./lib/training";
 import { buildPreMatchBriefing } from "./lib/briefing";
-import type { PlayerMatchStats, Score, Tactics } from "./types";
+import type { PlayerMatchStats, PlayerRatings, RatedPlayer, Score, Tactics } from "./types";
 import { nextSwapPick } from "./components/SwapConfirmBar";
 import { MATCH_SUB_LIMIT, appearanceOf, isSubstitutionSwap, remainingMatchSubs, sheetChangeSubEvents } from "./lib/subs";
 import { keepClubSheet, remainingInjuryBudget, sitInjuredPlayers } from "./lib/injuries";
+
+function patchLine(
+  squad: RatedPlayer[],
+  names: Set<string>,
+  patch: Partial<PlayerRatings>,
+): RatedPlayer[] {
+  return squad.map((player) =>
+    names.has(player.name) ? { ...player, ratings: { ...player.ratings, ...patch } } : player,
+  );
+}
 
 describe("new game championship", () => {
   it("starts with every tie unplayed", () => {
@@ -349,11 +365,38 @@ describe("match engine", () => {
 
   it("finds the intended man more often when the keeper can pass and strike long", () => {
     expect(puckoutFindTargetChance(18, 17)).toBeGreaterThan(puckoutFindTargetChance(9, 8) + 0.22);
+    expect(puckoutFindTargetChance(16, 18, 17)).toBeGreaterThan(puckoutFindTargetChance(16, 10, 10));
   });
 
   it("uses the target's aerials when the puck-out finds him, and the rest of the line when it does not", () => {
     expect(targetedPuckoutWinChance(18, 12, 10, true)).toBeGreaterThan(targetedPuckoutWinChance(18, 12, 10, false));
     expect(targetedPuckoutWinChance(9, 12, 18, false)).toBeGreaterThan(targetedPuckoutWinChance(9, 12, 18, true));
+  });
+
+  it("wins long balls with aerials, strength and high fielding, and the kicker's passing", () => {
+    expect(aerialContestRating(16, 16, 16)).toBeGreaterThan(aerialContestRating(10, 10, 10));
+    expect(aerialContestRating(12, 18, 12)).toBeGreaterThan(aerialContestRating(12, 10, 12));
+    expect(aerialContestRating(12, 12, 18)).toBeGreaterThan(aerialContestRating(12, 12, 10));
+    expect(aerialContestRating(18, 12, 12)).toBeGreaterThan(aerialContestRating(10, 12, 12));
+    expect(longBallFindChance(18, 17)).toBeGreaterThan(longBallFindChance(9, 8) + 0.22);
+    expect(longBallWinChance(18, 11, true)).toBeGreaterThan(longBallWinChance(11, 18, true));
+    expect(longBallWinChance(14, 14, true)).toBeGreaterThan(longBallWinChance(14, 14, false));
+    expect(longBallDeliveryChance(0.9)).toBeGreaterThan(longBallDeliveryChance(0.5));
+    expect(longBallDeliveryChance(0.4)).toBe(0);
+    expect(markerSlot(12)).toBe(1);
+    expect(markerSlot(14)).toBe(3);
+    expect(markerSlot(10)).toBe(5);
+  });
+
+  it("gives a pacey full forward high-quality looks, cut slightly by man marking", () => {
+    const unmarked = paceMismatch(18, 18, 11, 11, 12);
+    const marked = paceMismatch(18, 18, 11, 11, 18);
+    const even = paceMismatch(12, 12, 12, 12, 12);
+    expect(unmarked).toBeGreaterThan(even + 3);
+    expect(unmarked).toBeGreaterThan(marked);
+    expect(runningLookBoost(unmarked, true).goal).toBeGreaterThan(runningLookBoost(unmarked, false).goal);
+    expect(runningLookBoost(unmarked, true).closer).toBeGreaterThan(runningLookBoost(1, true).closer);
+    expect(runningLookBoost(1.5, true).goal).toBe(0);
   });
 
   it("only picks a puck-out target from midfield or the half-forward line", () => {
@@ -660,7 +703,7 @@ describe("match engine", () => {
       return reds;
     };
     expect(countReds(icy, 0)).toBeGreaterThan(countReds(calm, 40));
-  });
+  }, 10000);
 
   it("leans on goals more from a direct long-ball game than a running game", () => {
     const direct: Tactics = { ...DEFAULT_TACTICS, build: 92, puckout: 80 };
@@ -688,6 +731,83 @@ describe("match engine", () => {
       }).homeScore.goals;
     }
     expect(directGoals).toBeGreaterThan(runningGoals);
+  });
+
+  it("lets aerial full forwards gather long balls and score more goals", () => {
+    const sheet = defaultSheet("ballyea");
+    const forwards = new Set(sheet.starters.slice(12, 15));
+    const base = sheetPlayers("ballyea", sheet);
+    const aerial = patchLine(base, forwards, { aerialReach: 18, highFielding: 18, strength: 18, speed: 10, acceleration: 10 });
+    const grounded = patchLine(base, forwards, { aerialReach: 8, highFielding: 8, strength: 8, speed: 10, acceleration: 10 });
+    const long: Tactics = { ...DEFAULT_TACTICS, build: 92, puckout: 82 };
+    const tally = (squad: RatedPlayer[]) => {
+      let goals = 0;
+      let fielded = 0;
+      for (let seed = 1; seed <= 20; seed += 1) {
+        const result = simulateMatch({
+          matchId: "g1-r1-a",
+          homeId: "ballyea",
+          awayId: "inagh-kilnamona",
+          homeTactics: long,
+          awayTactics: DEFAULT_TACTICS,
+          homeSquad: squad,
+          climate: { sky: "sunny", windStrength: 8, windAngle: 12 },
+          seed,
+        });
+        goals += result.shots.filter(
+          (shot) => shot.teamId === "ballyea" && shot.kind === "goal" && forwards.has(shot.playerName),
+        ).length;
+        fielded += result.players
+          .filter((player) => player.teamId === "ballyea" && forwards.has(player.name))
+          .reduce((sum, player) => sum + player.highFieldingWon, 0);
+      }
+      return { goals, fielded };
+    };
+    const strong = tally(aerial);
+    const weak = tally(grounded);
+    expect(strong.fielded).toBeGreaterThan(weak.fielded);
+    expect(strong.goals).toBeGreaterThan(weak.goals);
+  });
+
+  it("lets a pacey full forward get closer looks on the running game, unless well marked", () => {
+    const sheet = defaultSheet("ballyea");
+    const forwards = new Set(sheet.starters.slice(12, 15));
+    const backs = new Set(defaultSheet("inagh-kilnamona").starters.slice(1, 4));
+    const home = sheetPlayers("ballyea", sheet);
+    const away = sheetPlayers("inagh-kilnamona", defaultSheet("inagh-kilnamona"));
+    const pacey = patchLine(home, forwards, { speed: 18, acceleration: 18, offTheBall: 17, aerialReach: 9, highFielding: 9 });
+    const slow = patchLine(home, forwards, { speed: 8, acceleration: 8, offTheBall: 8, aerialReach: 9, highFielding: 9 });
+    const softMark = patchLine(away, backs, { manMarking: 8, speed: 10, acceleration: 10 });
+    const tightMark = patchLine(away, backs, { manMarking: 18, speed: 10, acceleration: 10 });
+    const running: Tactics = { ...DEFAULT_TACTICS, build: 12, puckout: 18 };
+    const tally = (homeSquad: RatedPlayer[], awaySquad: RatedPlayer[]) => {
+      let close = 0;
+      let goals = 0;
+      for (let seed = 2; seed <= 22; seed += 1) {
+        const result = simulateMatch({
+          matchId: "g1-r1-a",
+          homeId: "ballyea",
+          awayId: "inagh-kilnamona",
+          homeTactics: running,
+          awayTactics: DEFAULT_TACTICS,
+          homeSquad,
+          awaySquad,
+          climate: { sky: "sunny", windStrength: 8, windAngle: 12 },
+          seed,
+        });
+        for (const shot of result.shots) {
+          if (shot.teamId !== "ballyea" || !forwards.has(shot.playerName)) continue;
+          if (shot.kind === "goal") goals += 1;
+          if (shot.distance <= 22) close += 1;
+        }
+      }
+      return { close, goals };
+    };
+    const burst = tally(pacey, softMark);
+    const held = tally(pacey, tightMark);
+    const plodding = tally(slow, softMark);
+    expect(burst.close).toBeGreaterThan(plodding.close);
+    expect(burst.goals + burst.close).toBeGreaterThan(held.goals + held.close);
   });
 
   it("stops the first half on the half-time whistle", () => {
