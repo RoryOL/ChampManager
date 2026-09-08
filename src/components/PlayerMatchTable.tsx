@@ -1,6 +1,5 @@
 import type { MatchEvent, PlayerCondition, PlayerMatchStats, RatedPlayer, TeamSheet } from "../types";
-import { ATTRIBUTE_LABELS } from "../lib/attributes";
-import { CHART_RATING_KEYS, CHART_RATING_SHORT, formatPair } from "../lib/matchStats";
+import { formatPair } from "../lib/matchStats";
 import { matchOrderIndex, matchShirtNumber, matchSlot } from "../lib/players";
 import { appearanceOf } from "../lib/subs";
 import { conditionFor, matchRatings, toneClass } from "../lib/training";
@@ -13,7 +12,6 @@ type Props = {
   numberSheet?: TeamSheet;
   events?: MatchEvent[];
   condition?: Record<string, PlayerCondition>;
-  showAttributes?: boolean;
   interactive?: boolean;
   picked?: string[];
   onTap?: (name: string) => void;
@@ -50,7 +48,6 @@ export function PlayerMatchTable({
   numberSheet,
   events = [],
   condition = {},
-  showAttributes = true,
   interactive = false,
   picked = [],
   onTap,
@@ -85,16 +82,7 @@ export function PlayerMatchTable({
             <th>Pref</th>
             <th>Pos</th>
             <th>On/Off</th>
-            {showAttributes ? (
-              <>
-                <th className="ovr">Ovr</th>
-                {CHART_RATING_KEYS.map((key) => (
-                  <th key={key} title={ATTRIBUTE_LABELS[key]}>
-                    {CHART_RATING_SHORT[key]}
-                  </th>
-                ))}
-              </>
-            ) : null}
+            <th className="ovr">Ovr</th>
             <th>Fit</th>
             <th>Rt</th>
             <th>Min</th>
@@ -130,19 +118,7 @@ export function PlayerMatchTable({
                 <td className="sub-cell">
                   <SubMarks mark={mark} />
                 </td>
-                {showAttributes ? (
-                  <>
-                    <td className={`ovr ${toneClass(overallDelta)}`}>{ratings?.overall ?? row.overall}</td>
-                    {CHART_RATING_KEYS.map((key) => {
-                      const delta = ratings && player ? ratings[key] - player.ratings[key] : 0;
-                      return (
-                        <td key={key} className={toneClass(delta)}>
-                          {ratings?.[key] ?? "–"}
-                        </td>
-                      );
-                    })}
-                  </>
-                ) : null}
+                <td className={`ovr ${toneClass(overallDelta)}`}>{ratings?.overall ?? row.overall}</td>
                 <td>{row.fitness}</td>
                 <td>{row.rating}</td>
                 <td>{row.minutes}</td>

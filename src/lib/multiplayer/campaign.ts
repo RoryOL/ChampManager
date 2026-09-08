@@ -33,7 +33,7 @@ import {
   restAndPrepManagedClub,
   tickManagedPreseasonWeek,
 } from "../aiManager";
-import { momentumAt, sentOffNamesFromEvents, simulateMatch } from "../matchEngine";
+import { momentumAt, bookedNamesFromEvents, sentOffNamesFromEvents, simulateMatch } from "../matchEngine";
 import {
   applyInjury,
   closingSheetOf,
@@ -910,6 +910,7 @@ function simulateSides(
     awaySquad: ratedSquad(awayId, campaign.seed),
     remainingWeeks: remainingWeeks(saveFromCampaign(campaign, homeClub ? homeId : awayId), championship, homeClub ? homeId : awayId),
     sentOff: first ? sentOffNamesFromEvents(first.events) : undefined,
+    booked: first ? bookedNamesFromEvents(first.events) : undefined,
     clubId: homeClub ? homeId : awayClub ? awayId : homeId,
     homeName: homeTeam ? compactName(homeTeam) : homeId,
     awayName: awayTeam ? compactName(awayTeam) : awayId,
