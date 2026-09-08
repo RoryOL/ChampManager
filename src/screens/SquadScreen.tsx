@@ -279,8 +279,8 @@ export function SquadScreen({
         <table className="squad-table">
           <thead>
             <tr>
-              <th>#</th>
-              <th>Player</th>
+              <th className="num">#</th>
+              <th className="name">Player</th>
               <th>Pos</th>
               <th>Age</th>
               <th className="ovr">Ovr</th>
