@@ -40,7 +40,7 @@ import { clubTactics, DEFAULT_TACTICS, defaultSheet, expandSheetToPanel, matchOr
 import { nextBatch } from "./lib/schedule";
 import { matchPlayed, scoreTotal } from "./lib/scoring";
 import { ATTRIBUTE_KEYS, MENTAL_KEYS } from "./lib/attributes";
-import { applyMatchFatigue, applyTeamwork, applyTraining, applyFullTrainingWeek, applyWeekSession, averageMatchOverall, bankedLift, boostTotal, defaultCondition, fitnessOf, formatBoostDelta, isOvertrained, liftSquadForPrep, matchFatigueDelta, matchStat, recoverBetweenMatches, sessionForSlot, tableLift, TRAINABLE_KEYS, trainedOverallLift, trainedRatings, trainedStat, trainingDelta, trainingGainFactor, weekCoachCopy } from "./lib/training";
+import { applyMatchFatigue, applyTeamwork, applyTraining, applyFullTrainingWeek, applyWeekSession, averageMatchOverall, bankedLift, boostTotal, clampFatigue, defaultCondition, fitnessOf, formatBoostDelta, isOvertrained, liftSquadForPrep, matchFatigueDelta, matchStat, MIN_MATCH_FITNESS, recoverBetweenMatches, sessionForSlot, tableLift, TRAINABLE_KEYS, trainedOverallLift, trainedRatings, trainedStat, trainingDelta, trainingGainFactor, weekCoachCopy } from "./lib/training";
 import { buildPreMatchBriefing } from "./lib/briefing";
 import type { PlayerMatchStats, Score, Tactics } from "./types";
 import { nextSwapPick } from "./components/SwapConfirmBar";
@@ -614,6 +614,9 @@ describe("match engine", () => {
     expect(redOnFoulChance(70, 6)).toBeGreaterThan(redOnFoulChance(70, 18));
     expect(secondYellowOnFoulChance(70, 6)).toBeGreaterThan(secondYellowOnFoulChance(70, 18));
     expect(mistimedFoulChance(70, true)).toBeGreaterThan(mistimedFoulChance(70, false));
+    expect(mistimedFoulChance(70, false, 50)).toBeGreaterThan(mistimedFoulChance(70, false, 90));
+    expect(mistimedFoulChance(70, false, 70)).toBeGreaterThan(mistimedFoulChance(70, false, 90));
+    expect(mistimedFoulChance(70, false, 40)).toBe(mistimedFoulChance(70, false, 50));
     expect(yellowOnFoulChance(70, 12, true)).toBeGreaterThan(yellowOnFoulChance(70, 12, false));
   });
 
@@ -714,6 +717,7 @@ describe("match engine", () => {
   it("lets aggressive tackling win more hooks but concede more frees and yellows", () => {
     expect(tackleChance(12, 92)).toBeGreaterThan(tackleChance(12, 12));
     expect(mistimedFoulChance(92)).toBeGreaterThan(mistimedFoulChance(12));
+    expect(mistimedFoulChance(46, false, 50)).toBeGreaterThan(mistimedFoulChance(46, false, 100));
     expect(yellowOnFoulChance(92)).toBeGreaterThan(yellowOnFoulChance(12));
 
     const homeSheet = defaultSheet("ballyea");
@@ -2208,6 +2212,48 @@ describe("match fitness", () => {
     expect(hard[forward!.name]?.fatigue ?? 0).toBeGreaterThan(easy[forward!.name]?.fatigue ?? 0);
     expect(fitnessOf(hard[forward!.name] ?? defaultCondition())).toBeLessThan(fitnessOf(easy[forward!.name] ?? defaultCondition()));
     expect(isOvertrained({ fatigue: 80, sharpness: 50 })).toBe(true);
+    expect(fitnessOf({ fatigue: 80, sharpness: 50 })).toBe(MIN_MATCH_FITNESS);
+    expect(clampFatigue(80)).toBe(50);
+  });
+
+  it("slides match ratings from fitness 90 down to 50, then floors both fitness and the hit", () => {
+    const fresh = { fatigue: 10, sharpness: 50 };
+    const fading = { fatigue: 30, sharpness: 50 };
+    const gassed = { fatigue: 50, sharpness: 50 };
+    const beyond = { fatigue: 80, sharpness: 50 };
+    expect(fitnessOf(fresh)).toBe(90);
+    expect(matchStat(12, fresh, "shooting")).toBe(12);
+    expect(matchStat(12, fading, "shooting")).toBeLessThan(matchStat(12, fresh, "shooting"));
+    expect(matchStat(12, gassed, "shooting")).toBeLessThan(matchStat(12, fading, "shooting"));
+    expect(matchStat(12, gassed, "shooting")).toBe(8);
+    expect(matchStat(12, gassed, "hooking")).toBe(8);
+    expect(matchStat(12, gassed, "firstTouch")).toBe(8);
+    expect(matchStat(12, gassed, "speed")).toBe(10);
+    expect(matchStat(12, gassed, "passing")).toBe(10);
+    expect(matchStat(12, beyond, "shooting")).toBe(matchStat(12, gassed, "shooting"));
+    expect(matchStat(12, beyond, "speed")).toBe(matchStat(12, gassed, "speed"));
+  });
+
+  it("does not let match or training drain fitness below 50", () => {
+    const squad = ratedSquad("ballyea");
+    const sheet = defaultSheet("ballyea");
+    const starter = sheet.starters[0]!;
+    const gassed = Object.fromEntries(squad.map((player) => [player.name, { ...defaultCondition(), fatigue: 48 }]));
+    const afterMatch = applyMatchFatigue(
+      gassed,
+      sheet.starters,
+      sheet.subs,
+      { ...DEFAULT_TACTICS, pressure: 96, aggression: 96, shape: "sweeper" },
+      squad,
+      true,
+      1,
+    );
+    expect(fitnessOf(afterMatch[starter] ?? defaultCondition())).toBeGreaterThanOrEqual(MIN_MATCH_FITNESS);
+    expect(afterMatch[starter]?.fatigue ?? 0).toBeLessThanOrEqual(50);
+    const plans = Object.fromEntries(squad.map((player) => [player.name, { mix: { physical: 100, defensive: 0, attacking: 0, tactics: 0, setpieces: 0 }, recovery: false }]));
+    const afterTrain = applyTraining(squad, afterMatch, "mixed", plans, undefined, undefined, "intense");
+    expect(fitnessOf(afterTrain.condition[starter] ?? defaultCondition())).toBeGreaterThanOrEqual(MIN_MATCH_FITNESS);
+    expect(afterTrain.overtrained.length).toBeGreaterThan(0);
   });
 });
 

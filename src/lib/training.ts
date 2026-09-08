@@ -417,7 +417,7 @@ export function recoverBetweenMatches(
     if (isInjured(current)) {
       next[player.name] = {
         ...current,
-        fatigue: clampCondition(current.fatigue - 10 * factor),
+        fatigue: clampFatigue(current.fatigue - 10 * factor),
       };
       continue;
     }
@@ -468,8 +468,31 @@ export function midSeasonCondition(): PlayerCondition {
   return { fatigue: 28, sharpness: 58 };
 }
 
+/** Match fitness never drops below this. Below 90, performance slides down to this floor. */
+export const MIN_MATCH_FITNESS = 50;
+/** Fresh enough that tiredness does not take match ratings. */
+export const FRESH_FITNESS = 90;
+export const MAX_FATIGUE = 100 - MIN_MATCH_FITNESS;
+
+/** Tackling, shooting and first touch take the heaviest hit when the legs go. */
+export const TIRED_ATTRIBUTE_KEYS: AttributeKey[] = ["hooking", "shooting", "firstTouch"];
+
+const TIRED_STAT_HIT = 4;
+const GENERAL_STAT_HIT = 2;
+
 export function clampCondition(value: number): number {
   return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+export function clampFatigue(value: number): number {
+  return Math.max(0, Math.min(MAX_FATIGUE, Math.round(value)));
+}
+
+/** 0 while fitness is 90+, 1 once it is on the 50 floor. */
+export function fitnessTiredness(fitness: number): number {
+  if (fitness >= FRESH_FITNESS) return 0;
+  if (fitness <= MIN_MATCH_FITNESS) return 1;
+  return (FRESH_FITNESS - fitness) / (FRESH_FITNESS - MIN_MATCH_FITNESS);
 }
 
 export function snapBoost(value: number): number {
@@ -518,18 +541,18 @@ export function conditionFor(name: string, map: Record<string, PlayerCondition>)
 }
 
 export function fitnessOf(condition: PlayerCondition): number {
-  return clampCondition(100 - condition.fatigue);
+  return clampCondition(Math.max(MIN_MATCH_FITNESS, 100 - condition.fatigue));
 }
 
 export function isOvertrained(condition: PlayerCondition): boolean {
-  return fitnessOf(condition) <= 22;
+  return fitnessOf(condition) <= MIN_MATCH_FITNESS;
 }
 
-export function conditionAdjust(condition: PlayerCondition): number {
+export function conditionAdjust(condition: PlayerCondition, key?: AttributeKey): number {
   let adjust = 0;
-  const fitness = fitnessOf(condition);
-  if (fitness <= 28) adjust -= 2;
-  else if (fitness <= 50) adjust -= 1;
+  const tired = fitnessTiredness(fitnessOf(condition));
+  const maxHit = key && TIRED_ATTRIBUTE_KEYS.includes(key) ? TIRED_STAT_HIT : GENERAL_STAT_HIT;
+  adjust -= tired * maxHit;
   if (condition.sharpness >= 80) adjust += 1;
   else if (condition.sharpness < 28) adjust -= 1;
   if (condition.injury && condition.injury.weeksLeft > 0) adjust -= 5;
@@ -538,7 +561,7 @@ export function conditionAdjust(condition: PlayerCondition): number {
 
 export function matchStat(base: number, condition: PlayerCondition, key: AttributeKey): number {
   const boost = condition.boosts?.[key] ?? 0;
-  return clampStat(base + boost + conditionAdjust(condition));
+  return clampStat(base + boost + conditionAdjust(condition, key));
 }
 
 export function trainedStat(base: number, condition: PlayerCondition, key: AttributeKey): number {
@@ -880,9 +903,9 @@ export function applyTraining(
       }
     }
 
-    fatigue = clampCondition(fatigue);
+    fatigue = clampFatigue(fatigue);
     sharpness = clampCondition(sharpness);
-    if (fatigue >= 78) {
+    if (fatigue >= MAX_FATIGUE) {
       sharpness = clampCondition(sharpness - 6);
       overtrained.push(player.name);
     }
@@ -927,7 +950,7 @@ export function applyTraining(
         : " Balanced work lets the legs come back a little.";
   const summary =
     overtrained.length > 0
-      ? `${label} is done, but ${overtrained.length} player${overtrained.length === 1 ? " is" : "s are"} overtrained. The work is banked, yet match ratings look heavy until fitness recovers.`
+      ? `${label} is done, but ${overtrained.length} player${overtrained.length === 1 ? " is" : "s are"} overtrained. Fitness is on the floor: tackling, shooting and first touch are well down, and they are more liable to pick up a knock until the legs come back.`
       : session === "recovery"
         ? "Recovery week lands. Match fitness is back up, so banked ratings show through again."
         : session === "challenge"
@@ -1130,7 +1153,7 @@ export function applyMatchFatigue(
     const add = matchFatigueDelta(62, tactics, position, started, age, shortForwards, chaseEffort);
     const recover = 4 * ageResponse(age).recover;
     next[name] = {
-      fatigue: clampCondition(current.fatigue + add - recover),
+      fatigue: clampFatigue(current.fatigue + add - recover),
       sharpness: clampCondition(current.sharpness + (started ? 3 : 1)),
       form: current.form,
       mood: current.mood,

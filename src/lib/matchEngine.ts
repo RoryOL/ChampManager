@@ -38,7 +38,7 @@ import {
 } from "./shooting";
 import { scoreTotal } from "./scoring";
 import { liftSquadRatings } from "./difficulty";
-import { conditionFor, liftSquadForPrep, matchStat } from "./training";
+import { conditionFor, fitnessOf, fitnessTiredness, liftSquadForPrep, matchStat } from "./training";
 import { climateOf, passCompleteChance, puckoutWindAdjust, rollClimate, withWindFor } from "./weather";
 
 const POINT_KINDS: ReadonlySet<MatchEventKind> = new Set(["point", "free", "sixtyFive", "sideline"]);
@@ -251,9 +251,10 @@ function composureCardMul(composure: number, severity: "yellow" | "sendoff"): nu
   return Math.max(0.06, Math.min(2.2, 1.9 - t * 1.92));
 }
 
-export function mistimedFoulChance(aggression: number, wet = false): number {
+export function mistimedFoulChance(aggression: number, wet = false, fitness = 100): number {
   const base = Math.min(0.32, Math.max(0.03, 0.035 + (clampDial(aggression) / 100) * 0.22));
-  return Math.min(0.38, base * (wet ? 1.18 : 1));
+  const tired = fitnessTiredness(fitness);
+  return Math.min(0.52, base * (wet ? 1.18 : 1) * (1 + tired * 0.9));
 }
 
 export function yellowOnFoulChance(aggression: number, composure = 12, wet = false): number {
@@ -1122,7 +1123,12 @@ export function simulateMatch(options: {
         return;
       }
 
-      if (random() < mistimedFoulChance(oppTactics.aggression ?? 46, wet)) {
+      const defendingFitness =
+        oppNames.length === 0
+          ? 100
+          : oppNames.reduce((sum, name) => sum + fitnessOf(conditionOf(defendingId, name)), 0) /
+            oppNames.length;
+      if (random() < mistimedFoulChance(oppTactics.aggression ?? 46, wet, defendingFitness)) {
         const tackler = pickFouler(oppNames, yellows, random);
         const defender = tackler.name;
         const agg = oppTactics.aggression ?? 46;

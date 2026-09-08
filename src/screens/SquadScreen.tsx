@@ -97,7 +97,10 @@ function PlayerDetail({
           </div>
           {trainingLifts.length > 0 ? <p className="form-line">Profile stats: {trainingLifts.join(" · ")}</p> : null}
           {isOvertrained(condition) ? (
-            <p className="warn">Overtrained — match fitness is too low, so profile stats are down until you recover.</p>
+            <p className="warn">
+              Gassed — match fitness is on the floor and will not fall further. Tackling, shooting and first touch are
+              well down, he is more liable to concede frees, and a knock is more likely until you recover.
+            </p>
           ) : isInjured(condition) ? (
             <p className="warn">
               Injured — {condition.injury ? injuryLine(condition.injury) : "sidelined"}. He is out of the fifteen until

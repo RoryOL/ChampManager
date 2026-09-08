@@ -178,8 +178,8 @@ function slotScore(
   if (isInjured(condition)) score -= 1000;
   if (slotIndex !== 0 && condition) {
     if (isOvertrained(condition)) score -= 48;
-    else if (fitness <= 32) score -= 24;
-    else if (fitness <= 42) score -= 10;
+    else if (fitness <= 58) score -= 24;
+    else if (fitness <= 72) score -= 10;
   }
   return score;
 }

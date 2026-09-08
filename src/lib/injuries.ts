@@ -12,8 +12,18 @@ import { ADJACENT_LINES, XV_SLOTS } from "./attributes";
 import { clampForm, formValue } from "./form";
 import { pickOne, createRng, seedFrom } from "./rng";
 
+/** Keep in step with `MIN_MATCH_FITNESS` in training — avoid importing that module (cycle). */
+const MIN_MATCH_FITNESS = 50;
+const FRESH_FITNESS = 90;
+
 function fitnessOf(condition: PlayerCondition): number {
-  return Math.max(0, Math.min(100, Math.round(100 - condition.fatigue)));
+  return Math.max(MIN_MATCH_FITNESS, Math.min(100, Math.round(100 - condition.fatigue)));
+}
+
+function fitnessTiredness(fitness: number): number {
+  if (fitness >= FRESH_FITNESS) return 0;
+  if (fitness <= MIN_MATCH_FITNESS) return 1;
+  return (FRESH_FITNESS - fitness) / (FRESH_FITNESS - MIN_MATCH_FITNESS);
 }
 
 const SHORT_AILMENTS = ["corked thigh", "dead leg", "stinger", "jarred wrist"] as const;
@@ -63,7 +73,11 @@ export function injuryChance(
                 ? 0.028
                 : 0.032;
   const fitness = fitnessOf(condition);
+  const tired = fitnessTiredness(fitness);
   chance *= 0.45 + ((100 - fitness) / 100) * 1.9;
+  // On the 50 floor the number cannot fall further, so injury risk stays high.
+  chance *= 1 + tired * 0.55;
+  if (fitness <= MIN_MATCH_FITNESS) chance *= 1.28;
   if (player.age <= 21) chance *= 0.62;
   else if (player.age <= 24) chance *= 0.78;
   else if (player.age >= 36) chance *= 2.15;
@@ -82,8 +96,9 @@ export function rollInjuryWeeks(
   let roll = random();
   if (player.age >= 33) roll += 0.12;
   if (player.age >= 36) roll += 0.08;
-  if (fitnessOf(condition) <= 40) roll += 0.1;
-  if (fitnessOf(condition) <= 22) roll += 0.08;
+  const fitness = fitnessOf(condition);
+  if (fitness <= MIN_MATCH_FITNESS) roll += 0.18;
+  else if (fitness <= 70) roll += 0.06;
   let weeks: number;
   if (roll < 0.38) weeks = 1;
   else if (roll < 0.62) weeks = 2;
