@@ -1,6 +1,7 @@
 import type {
   AttributeBoosts,
   CalendarPhase,
+  MatchPrep,
   PlayerCondition,
   PlayerPlan,
   PositionLine,
@@ -86,6 +87,46 @@ export const SESSION_OPTIONS: { value: WeekSession; title: string; copy: string 
 
 export const IN_SEASON_SESSION_OPTIONS = SESSION_OPTIONS.filter((option) => option.value !== "recovery");
 
+export const MATCH_PREP_LIFT = 1;
+
+export const MATCH_PREP_OPTIONS: { value: MatchPrep; title: string; copy: string }[] = [
+  {
+    value: "puckout",
+    title: "Puckout strategy",
+    copy: "Restarts, targets and keeper reach. A slight lift on championship day.",
+  },
+  {
+    value: "shooting",
+    title: "Shot selection",
+    copy: "When to pull the trigger and how clean the strike is.",
+  },
+  {
+    value: "marking",
+    title: "Man marking",
+    copy: "Stay with your man, hooks and covering.",
+  },
+  {
+    value: "running",
+    title: "Running game",
+    copy: "Carry, support runs and first touch at pace.",
+  },
+];
+
+export const MATCH_PREP_KEYS: Record<MatchPrep, AttributeKey[]> = {
+  puckout: ["puckoutReach", "highFielding", "aerialReach", "passing"],
+  shooting: ["shooting", "strikingDistance", "composure", "offTheBall"],
+  marking: ["manMarking", "hooking", "strength", "workrate"],
+  running: ["speed", "acceleration", "firstTouch", "passing"],
+};
+
+export function isMatchPrep(value: unknown): value is MatchPrep {
+  return MATCH_PREP_OPTIONS.some((option) => option.value === value);
+}
+
+export function matchPrepTitle(prep: MatchPrep): string {
+  return MATCH_PREP_OPTIONS.find((option) => option.value === prep)?.title ?? "Match work";
+}
+
 export const INTENSITY_OPTIONS: { value: TrainingIntensity; title: string; copy: string }[] = [
   {
     value: "light",
@@ -95,7 +136,7 @@ export const INTENSITY_OPTIONS: { value: TrainingIntensity; title: string; copy:
   {
     value: "balanced",
     title: "Balanced",
-    copy: "A normal week. Lifts come through without costing match fitness, and without training injuries.",
+    copy: "A normal week. Legs come back a little. Lifts come through without dumping match fitness, and without training injuries.",
   },
   {
     value: "intense",
@@ -353,6 +394,64 @@ export function dominantType(mix: TrainingMix): TrainingType | null {
     }
   }
   return value > 0 ? best : null;
+}
+
+export function staminaRecoverFactor(stamina: number): number {
+  return 0.55 + Math.max(1, Math.min(20, stamina)) / 28;
+}
+
+export function recoverBetweenMatches(
+  condition: Record<string, PlayerCondition>,
+  squad: RatedPlayer[],
+): Record<string, PlayerCondition> {
+  const next: Record<string, PlayerCondition> = { ...condition };
+  for (const player of squad) {
+    const current = cloneCondition(next[player.name] ?? defaultCondition());
+    const factor = staminaRecoverFactor(player.ratings.stamina) * ageResponse(player.age).recover;
+    if (isInjured(current)) {
+      next[player.name] = {
+        ...current,
+        fatigue: clampCondition(current.fatigue - 10 * factor),
+      };
+      continue;
+    }
+    const leftover = Math.max(0, Math.round(8 - player.ratings.stamina * 0.35));
+    next[player.name] = {
+      ...current,
+      fatigue: leftover,
+      sharpness: clampCondition(current.sharpness + 4),
+    };
+  }
+  return next;
+}
+
+export function recoverAfterMatch(
+  condition: Record<string, PlayerCondition>,
+  squad: RatedPlayer[],
+): { condition: Record<string, PlayerCondition>; recovered: string[] } {
+  const ticked = tickInjuries(condition, squad);
+  return { condition: recoverBetweenMatches(ticked.condition, squad), recovered: ticked.recovered };
+}
+
+export function liftSquadKeys(squad: RatedPlayer[], keys: AttributeKey[], amount: number): RatedPlayer[] {
+  if (amount <= 0) return squad;
+  return squad.map((player) => {
+    const ratings = { ...player.ratings };
+    for (const key of keys) {
+      ratings[key] = clampStat((player.ratings[key] ?? 0) + amount);
+    }
+    ratings.overall = clampStat(player.ratings.overall + amount * 0.35);
+    return { ...player, ratings };
+  });
+}
+
+export function liftSquadForPrep(squad: RatedPlayer[], prep?: MatchPrep): RatedPlayer[] {
+  if (!prep) return squad;
+  return liftSquadKeys(squad, MATCH_PREP_KEYS[prep], MATCH_PREP_LIFT);
+}
+
+export function matchPrepSummary(prep: MatchPrep): string {
+  return `${matchPrepTitle(prep)} is in for the next championship day. The panel have their legs back; this work gives a slight lift on that aspect only.`;
 }
 
 export function defaultCondition(): PlayerCondition {
@@ -715,26 +814,27 @@ export function applyTraining(
     const inChallenge = session === "challenge" && used.has(player.name);
     const alreadyHeavy = fitnessOf(current) <= 50;
     const response = ageResponse(player.age);
+    const recoverMul = response.recover * staminaRecoverFactor(player.ratings.stamina);
     let fatigue = current.fatigue;
     let sharpness = current.sharpness;
     let boosts = current.boosts;
     const before = boosts;
 
     if (recovery) {
-      fatigue -= 24 * response.recover;
+      fatigue -= 28 * recoverMul;
       sharpness += 1 * response.train;
     } else if (inChallenge) {
       if (usedIntensity === "light") {
-        fatigue -= 8 * response.recover;
+        fatigue -= 8 * recoverMul;
       } else if (usedIntensity === "intense") {
         fatigue += (alreadyHeavy ? 26 : 18) * response.fatigue * loadMul;
       }
       sharpness += (alreadyHeavy ? -2 : 9) * response.train;
     } else if (session === "challenge") {
-      fatigue -= 12 * response.recover;
+      fatigue -= 12 * recoverMul;
       sharpness += 1 * response.train;
     } else if (usedIntensity === "light") {
-      fatigue -= 18 * response.recover;
+      fatigue -= 42 * recoverMul;
       sharpness += 1 * response.train;
       boosts = liftFromMix(boosts, plan.mix, usedIntensity, response.train, player.ratings);
       for (const key of ATTRIBUTE_KEYS) {
@@ -750,6 +850,7 @@ export function applyTraining(
       }
     } else {
       const load = sessionLoad(plan.mix, alreadyHeavy);
+      fatigue -= 10 * recoverMul;
       sharpness += load.sharpness * response.train;
       boosts = liftFromMix(boosts, plan.mix, usedIntensity, response.train, player.ratings);
       for (const key of ATTRIBUTE_KEYS) {
@@ -800,8 +901,8 @@ export function applyTraining(
     intensity === "intense"
       ? " Intense work lands harder on the legs."
       : intensity === "light"
-        ? " Light work puts fitness back into the legs; attributes only tick a little."
-        : " Balanced work does not cost match fitness.";
+        ? " Light work puts fitness back into the legs quickly; attributes only tick a little."
+        : " Balanced work lets the legs come back a little.";
   const summary =
     overtrained.length > 0
       ? `${label} is done, but ${overtrained.length} player${overtrained.length === 1 ? " is" : "s are"} overtrained. The work is banked, yet match ratings look heavy until fitness recovers.`
