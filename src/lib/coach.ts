@@ -32,6 +32,10 @@ function rate(made: number, attempted: number): number {
   return attempted > 0 ? made / attempted : 0;
 }
 
+function lostPuckouts(stats: TeamMatchStats): number {
+  return Math.max(0, (stats.puckoutsAttempted ?? 0) - stats.puckoutsWon);
+}
+
 export function liveCoachTip(
   events: MatchEvent[],
   tactics: Tactics,
@@ -43,7 +47,7 @@ export function liveCoachTip(
   if (events.some((event) => event.kind === "coach" && event.minute === minute)) return null;
   const ours = events.filter((event) => event.teamId === clubId);
   const broken = ours.filter((event) => event.kind === "puckout" && /broken|turned over/i.test(event.text)).length;
-  const won = ours.filter((event) => event.kind === "puckout" && /fields the puck-out/i.test(event.text)).length;
+  const won = ours.filter((event) => event.kind === "puckout" && /fields the puck-out|takes the short puck-out|starts the attack/i.test(event.text)).length;
   const wides = ours.filter((event) => event.kind === "wide").length;
   const scores = ours.filter((event) => event.kind === "point" || event.kind === "goal" || event.kind === "free").length;
   const yellows = events.filter(
@@ -113,11 +117,11 @@ export function buildCoachReport(input: CoachInput): string[] {
     notes.push(`The running game stalled — passes completed ${us.passesCompleted} to ${them.passesCompleted}. Look for a more direct option when the pocket is closed.`);
   }
 
-  if (ourTactics.puckout >= 62 && them.puckoutsWon > us.puckoutsWon) {
+  if (ourTactics.puckout >= 62 && (us.puckoutsAttempted ?? 0) >= 4 && us.puckoutsWon + 1 <= lostPuckouts(us)) {
     notes.push(
-      `Long puck-outs were the plan (${puckoutLabel(ourTactics.puckout).toLowerCase()}), yet ${they.toLowerCase()} won the restarts ${them.puckoutsWon}-${us.puckoutsWon}. Shorten a few to the half-backs.`,
+      `Long puck-outs were the plan (${puckoutLabel(ourTactics.puckout).toLowerCase()}), yet we lost the restarts ${us.puckoutsWon}-${lostPuckouts(us)}. Shorten a few to the half-backs.`,
     );
-  } else if (ourTactics.puckout <= 38 && us.puckoutsWon + 2 < them.puckoutsWon) {
+  } else if (ourTactics.puckout <= 38 && (us.puckoutsAttempted ?? 0) >= 4 && us.puckoutsWon + 2 < lostPuckouts(us)) {
     notes.push(`Short restarts were turned over. A few longer contests would at least ask a question.`);
   }
 

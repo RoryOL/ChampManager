@@ -93,7 +93,7 @@ export function PlayerMatchTable({
             <th title="65s scored / attempted">65</th>
             <th title="Frees conceded">FrC</th>
             <th>HF</th>
-            <th>POw</th>
+            <th title="Puck-outs won / attempted">PO</th>
             <th>Tck</th>
             <th>Km</th>
           </tr>
@@ -129,7 +129,7 @@ export function PlayerMatchTable({
                 <td>{formatPair(row.sixtyFivesScored ?? 0, row.sixtyFivesAttempted ?? 0)}</td>
                 <td>{row.freesConceded ?? 0}</td>
                 <td>{formatPair(row.highFieldingWon, row.highFieldingAttempted)}</td>
-                <td>{row.puckoutsWon}</td>
+                <td>{formatPair(row.puckoutsWon, row.puckoutsAttempted ?? 0)}</td>
                 <td>{formatPair(row.tacklesWon, row.tacklesAttempted)}</td>
                 <td>{row.groundCovered}</td>
               </tr>

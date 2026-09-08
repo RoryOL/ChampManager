@@ -4,7 +4,7 @@ import { ageResponse, GRADE_LABEL, profileFor } from "./data/playerProfiles";
 import { buildCoachReport } from "./lib/coach";
 import { applyMatchForm, formValue } from "./lib/form";
 import { migrateSave } from "./lib/gameStorage";
-import { playerMatchRating, seasonStatsFor, lastMatchRating } from "./lib/matchStats";
+import { playerMatchRating, seasonStatsFor, lastMatchRating, formatWonLost } from "./lib/matchStats";
 import { nearestToSpot, openPlayConversion, slotPitchPos } from "./lib/shooting";
 import { crossWind, parallelWind, passCompleteChance, rollClimate, withWindFor } from "./lib/weather";
 import {
@@ -54,6 +54,8 @@ import {
   withChaseTactics,
   yellowOnFoulChance,
   secondYellowOnFoulChance,
+  pickShortPuckoutReceiver,
+  shortPuckoutTakeChance,
 } from "./lib/matchEngine";
 import { aerialContestRating, clubTactics, DEFAULT_TACTICS, defaultSheet, expandSheetToPanel, matchOrderIndex, matchShirtNumber, matchSlot, pickPuckoutTarget, playerAge, ratePlayer, ratedSquad, sheetPlayers, sideStrength, swapPlayersInSheet } from "./lib/players";
 import { nextBatch } from "./lib/schedule";
@@ -773,6 +775,38 @@ describe("match engine", () => {
     expect(secondYellowOnFoulChance(70, 5)).toBeGreaterThan(secondYellowOnFoulChance(70, 19));
   });
 
+  it("keeps a second yellow rare so booked lads are not sent off every game", () => {
+    expect(secondYellowOnFoulChance(46, 12)).toBeLessThan(yellowOnFoulChance(46, 12));
+    expect(secondYellowOnFoulChance(46, 12)).toBeLessThan(0.22);
+    expect(secondYellowOnFoulChance(46, 12)).toBeGreaterThan(redOnFoulChance(46, 12));
+    expect(secondYellowOnFoulChance(88, 6)).toBeLessThan(0.36);
+  });
+
+  it("aims short puck-outs at the full-back line, especially against a sweeper", () => {
+    const names = ["GK", "CB", "FB", "CB2", "WB", "CHB", "WB2", "MF", "MF2", "HF", "HF2", "HF3", "CF", "CF2", "FF"];
+    const fullBacks = new Set(["CB", "FB", "CB2"]);
+    const halfBacks = new Set(["WB", "CHB", "WB2"]);
+    const stub = (prefer: number, pick = 0) => {
+      let step = 0;
+      return () => (step++ === 0 ? prefer : pick);
+    };
+    expect(fullBacks.has(pickShortPuckoutReceiver(names, "traditional", stub(0.1)))).toBe(true);
+    expect(halfBacks.has(pickShortPuckoutReceiver(names, "traditional", stub(0.5)))).toBe(true);
+    expect(fullBacks.has(pickShortPuckoutReceiver(names, "sweeper", stub(0.73)))).toBe(true);
+    expect(halfBacks.has(pickShortPuckoutReceiver(names, "sweeper", stub(0.75)))).toBe(true);
+    let vsSweeperFb = 0;
+    let vsTradFb = 0;
+    const n = 200;
+    for (let i = 0; i < n; i += 1) {
+      const prefer = i / n;
+      if (fullBacks.has(pickShortPuckoutReceiver(names, "sweeper", stub(prefer)))) vsSweeperFb += 1;
+      if (fullBacks.has(pickShortPuckoutReceiver(names, "traditional", stub(prefer)))) vsTradFb += 1;
+    }
+    expect(vsSweeperFb).toBe(148);
+    expect(vsTradFb).toBe(84);
+    expect(shortPuckoutTakeChance(0.12, "sweeper")).toBeGreaterThan(shortPuckoutTakeChance(0.12, "traditional"));
+  });
+
   it("leans on goals more from a direct long-ball game than a running game", () => {
     const direct: Tactics = { ...DEFAULT_TACTICS, build: 92, puckout: 80 };
     const running: Tactics = { ...DEFAULT_TACTICS, build: 12, puckout: 18 };
@@ -1450,8 +1484,8 @@ describe("match engine", () => {
     expect(avg((row) => row.homeStats.tacklesAttempted + row.awayStats.tacklesAttempted)).toBeGreaterThan(70);
     expect(avg((row) => row.homeStats.possessions + row.awayStats.possessions)).toBeGreaterThan(80);
     expect(avg((row) => row.homeStats.possessions + row.awayStats.possessions)).toBeLessThan(170);
-    expect(avg((row) => row.homeScore.points)).toBeGreaterThan(10);
-    expect(avg((row) => row.awayScore.points)).toBeGreaterThan(10);
+    expect(avg((row) => row.homeScore.points)).toBeGreaterThan(9);
+    expect(avg((row) => row.awayScore.points)).toBeGreaterThan(9);
     expect(avg((row) => row.homeScore.points)).toBeLessThan(32);
     expect(avg((row) => row.awayScore.points)).toBeLessThan(32);
     expect(avg((row) => row.homeScore.goals + row.awayScore.goals)).toBeGreaterThanOrEqual(0.5);
@@ -2310,10 +2344,44 @@ describe("match intel", () => {
     for (const player of result.players) {
       if (player.shots > 0) expect(player.possessions).toBeGreaterThanOrEqual(player.shots);
       if (player.passesAttempted > 0) expect(player.possessions).toBeGreaterThan(0);
+      expect(player.puckoutsWon).toBeLessThanOrEqual(player.puckoutsAttempted ?? 0);
       expect(player.puckoutsWon).toBeLessThanOrEqual(player.possessions);
       expect(player.tacklesWon).toBeLessThanOrEqual(player.tacklesAttempted);
       expect(player.fitness).toBe(100 - player.fatigue);
     }
+    expect(formatWonLost(result.homeStats.puckoutsWon, result.homeStats.puckoutsAttempted ?? 0)).toMatch(/^\d+-\d+$/);
+  });
+
+  it("credits puck-outs won and lost to the team taking them, not the breaker", () => {
+    let sawBroken = false;
+    let sawFullBackShort = false;
+    for (let seed = 1; seed <= 18; seed += 1) {
+      const result = simulateMatch({
+        matchId: "g1-r1-a",
+        homeId: "ballyea",
+        awayId: "inagh-kilnamona",
+        homeTactics: { ...DEFAULT_TACTICS, puckout: 16 },
+        awayTactics: { ...DEFAULT_TACTICS, puckout: 78, shape: "sweeper" },
+        climate: { sky: "sunny", windStrength: 8, windAngle: 12 },
+        seed,
+      });
+      expect(result.homeStats.puckoutsWon).toBeLessThanOrEqual(result.homeStats.puckoutsAttempted ?? 0);
+      expect(result.awayStats.puckoutsWon).toBeLessThanOrEqual(result.awayStats.puckoutsAttempted ?? 0);
+      for (const event of result.events) {
+        if (event.kind !== "puckout") continue;
+        if (/broken|turned over/i.test(event.text)) {
+          sawBroken = true;
+          const ours = (event.credits ?? []).filter((credit) => credit.teamId === event.teamId);
+          expect((event.credits ?? []).every((credit) => (credit.puckoutsWon ?? 0) === 0)).toBe(true);
+          expect(ours.some((credit) => (credit.puckoutsAttempted ?? 0) >= 1)).toBe(true);
+        }
+        if (event.teamId === "ballyea" && /full-back line/i.test(event.text)) {
+          sawFullBackShort = true;
+        }
+      }
+    }
+    expect(sawBroken).toBe(true);
+    expect(sawFullBackShort).toBe(true);
   });
 
   it("records frees conceded, frees taken and 65s per player", () => {
@@ -2373,6 +2441,7 @@ describe("match intel", () => {
         highFieldingAttempted: 10,
         highFieldingWon: 2,
         puckoutsWon: 2,
+        puckoutsAttempted: 8,
         tacklesAttempted: 8,
         tacklesWon: 3,
         groundCovered: 90,

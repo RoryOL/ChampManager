@@ -25,6 +25,7 @@ const STAT_FIELDS = [
   "highFieldingAttempted",
   "highFieldingWon",
   "puckoutsWon",
+  "puckoutsAttempted",
   "tacklesAttempted",
   "tacklesWon",
   "freesConceded",
@@ -49,6 +50,7 @@ function emptyPlayer(name: string, teamId: string, started: boolean): PlayerMatc
     highFieldingAttempted: 0,
     highFieldingWon: 0,
     puckoutsWon: 0,
+    puckoutsAttempted: 0,
     tacklesAttempted: 0,
     tacklesWon: 0,
     freesConceded: 0,
@@ -86,6 +88,7 @@ export function emptyTeamStats(teamId: string): TeamMatchStats {
     highFieldingAttempted: 0,
     highFieldingWon: 0,
     puckoutsWon: 0,
+    puckoutsAttempted: 0,
     tacklesAttempted: 0,
     tacklesWon: 0,
     freesConceded: 0,
@@ -113,6 +116,7 @@ export function sumTeamStats(teamId: string, players: PlayerMatchStats[], sequen
     stats.highFieldingAttempted += row.highFieldingAttempted;
     stats.highFieldingWon += row.highFieldingWon;
     stats.puckoutsWon += row.puckoutsWon;
+    stats.puckoutsAttempted = (stats.puckoutsAttempted ?? 0) + (row.puckoutsAttempted ?? 0);
     stats.tacklesAttempted += row.tacklesAttempted;
     stats.tacklesWon += row.tacklesWon;
     stats.freesConceded = (stats.freesConceded ?? 0) + (row.freesConceded ?? 0);
@@ -391,6 +395,7 @@ export function seasonStatsFor(
     combined.highFieldingAttempted += row.highFieldingAttempted;
     combined.highFieldingWon += row.highFieldingWon;
     combined.puckoutsWon += row.puckoutsWon ?? 0;
+    combined.puckoutsAttempted = (combined.puckoutsAttempted ?? 0) + (row.puckoutsAttempted ?? 0);
     combined.tacklesAttempted += row.tacklesAttempted ?? 0;
     combined.tacklesWon += row.tacklesWon ?? 0;
     combined.freesConceded = (combined.freesConceded ?? 0) + (row.freesConceded ?? 0);
@@ -433,6 +438,14 @@ export function formatMatchRating(value: number | undefined): string {
 export function formatPair(made: number, attempted: number): string {
   if (attempted <= 0) return `${made}`;
   return `${made}/${attempted}`;
+}
+
+export function puckoutsLost(won: number, attempted = 0): number {
+  return Math.max(0, attempted - won);
+}
+
+export function formatWonLost(won: number, attempted = 0): string {
+  return `${won}-${puckoutsLost(won, attempted)}`;
 }
 
 export function combineHalves(

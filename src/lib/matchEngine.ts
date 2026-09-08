@@ -406,13 +406,19 @@ export function yellowOnFoulChance(aggression: number, composure = 12, wet = fal
 }
 
 export function secondYellowOnFoulChance(aggression: number, composure = 12, wet = false): number {
-  const base = Math.min(0.82, Math.max(0.22, 0.5 + (clampDial(aggression) / 100) * 0.24));
-  return Math.min(0.9, base * composureCardMul(composure, "sendoff") * (wet ? 1.1 : 1));
+  const base = Math.min(0.28, Math.max(0.055, 0.09 + (clampDial(aggression) / 100) * 0.14));
+  return Math.min(0.34, base * composureCardMul(composure, "sendoff") * (wet ? 1.1 : 1));
 }
 
 export function redOnFoulChance(aggression: number, composure = 12, wet = false): number {
   const base = Math.min(0.07, Math.max(0.008, 0.023 + (clampDial(aggression) / 100) * 0.028));
   return Math.min(0.11, base * composureCardMul(composure, "sendoff") * (wet ? 1.08 : 1));
+}
+
+/** Chance a restart is taken short to the back line rather than as a long aerial or a generic start. */
+export function shortPuckoutTakeChance(longPuck: number, oppShape: Tactics["shape"] = "traditional"): number {
+  const vsSweeper = oppShape === "sweeper" ? 0.12 : 0;
+  return Math.min(0.74, 0.12 + (1 - longPuck) * 0.28 + vsSweeper);
 }
 
 /** After a send-off, play 6-2-5 regardless of who went: six backs, two midfielders, five forwards. */
@@ -545,6 +551,22 @@ export function nextMomentum(
 
 function pickName(names: string[], random: () => number): string {
   return names[Math.floor(random() * Math.max(names.length, 1))] ?? "a substitute";
+}
+
+/** Short puck-outs go to the full-back line (1–3) or half-backs (4–6); vs a sweeper, prefer the full-backs. */
+export function pickShortPuckoutReceiver(
+  names: string[],
+  oppShape: Tactics["shape"],
+  random: () => number,
+): string {
+  const fullBacks = names.slice(1, 4).filter(Boolean);
+  const halfBacks = names.slice(4, 7).filter(Boolean);
+  const pool = [...fullBacks, ...halfBacks];
+  if (pool.length === 0) return names[1] ?? names[0] ?? "a substitute";
+  const preferFull = random() < (oppShape === "sweeper" ? 0.74 : 0.42);
+  if (preferFull && fullBacks.length > 0) return pickName(fullBacks, random);
+  if (halfBacks.length > 0) return pickName(halfBacks, random);
+  return pickName(pool, random);
 }
 
 function indicesWhere(names: string[], want: (index: number) => boolean): number[] {
@@ -1281,13 +1303,12 @@ export function simulateMatch(options: {
             : `Puck-out broken — meant for ${target?.name ?? "the target"}, ${fielder} loses the break.`,
           credits: mergeCredits([
             ...(keeperCredit ? [keeperCredit] : []),
-            { name: fielder, teamId, highFieldingAttempted: 1 },
+            { name: fielder, teamId, highFieldingAttempted: 1, puckoutsAttempted: 1 },
             {
               name: oppFielder,
               teamId: defendingId,
               highFieldingAttempted: 1,
               highFieldingWon: 1,
-              puckoutsWon: 1,
               possessions: 1,
               sequences: 1,
             },
@@ -1304,6 +1325,7 @@ export function simulateMatch(options: {
           highFieldingAttempted: 1,
           highFieldingWon: 1,
           puckoutsWon: 1,
+          puckoutsAttempted: 1,
           possessions: 1,
           sequences: 1,
         },
@@ -1323,8 +1345,9 @@ export function simulateMatch(options: {
       } else {
         pendingCredits.push(...winCredits);
       }
-    } else if (random() < 0.12 + (1 - longPuck) * 0.28) {
-      const halfBack = pickName(names.slice(4, 7), random);
+    } else if (random() < shortPuckoutTakeChance(longPuck, oppTactics.shape)) {
+      const receiver = pickShortPuckoutReceiver(names, oppTactics.shape, random);
+      const onFullBack = names.slice(1, 4).includes(receiver);
       const pressDial = clampDial(oppTactics.pressure ?? 48) / 100;
       const hunt =
         forwardIndices(oppNames).length > 0 && random() < Math.min(0.92, 0.4 + pressDial * 0.52);
@@ -1353,11 +1376,11 @@ export function simulateMatch(options: {
         push({
           minute,
           teamId,
-          playerName: halfBack,
+          playerName: receiver,
           kind: "puckout",
-          text: `Short puck-out turned over — ${thiefPick.name} hunts down ${halfBack}.`,
+          text: `Short puck-out turned over — ${thiefPick.name} hunts down ${receiver}.`,
           credits: mergeCredits([
-            { name: halfBack, teamId, passesAttempted: 1, possessions: 1 },
+            { name: receiver, teamId, passesAttempted: 1, possessions: 1, puckoutsAttempted: 1 },
             {
               name: thiefPick.name,
               teamId: defendingId,
@@ -1389,12 +1412,33 @@ export function simulateMatch(options: {
           teamId: defendingId,
           playerName: thiefPick.name,
           kind: "hook",
-          text: `${halfBack} has the space to work it back to the keeper under pressure from ${thiefPick.name}.`,
+          text: `${receiver} has the space to work it back to the keeper under pressure from ${thiefPick.name}.`,
           credits: [{ name: thiefPick.name, teamId: defendingId, tacklesAttempted: 1 }],
         });
       }
-      carrier = halfBack;
-      pendingCredits.push({ name: halfBack, teamId, possessions: 1, sequences: 1, puckoutsWon: 1 });
+      carrier = receiver;
+      pendingCredits.push({
+        name: receiver,
+        teamId,
+        possessions: 1,
+        sequences: 1,
+        puckoutsWon: 1,
+        puckoutsAttempted: 1,
+      });
+      if (random() < 0.42) {
+        push({
+          minute,
+          teamId,
+          playerName: receiver,
+          kind: "puckout",
+          text: onFullBack
+            ? oppTactics.shape === "sweeper"
+              ? `Short to the full-back line — ${receiver} starts the attack around their sweeper.`
+              : `Short to the full-back line — ${receiver} starts the attack.`
+            : `${receiver} takes the short puck-out.`,
+          credits: mergeCredits(pendingCredits.splice(0, pendingCredits.length)),
+        });
+      }
     } else {
       const starter = names.slice(6, 15)[Math.floor(statRng() * Math.max(names.slice(6, 15).length, 1))] ?? names[7] ?? carrier;
       carrier = starter;

@@ -9,7 +9,7 @@ import { commentaryFeed, isScoreKind, momentumAt, scoreFromEvents } from "../lib
 import { KeyEventsBar } from "../components/KeyEventsBar";
 import { ShotMap } from "../components/ShotMap";
 import { WeatherBanner } from "../components/WeatherBanner";
-import { liveStats } from "../lib/matchStats";
+import { formatWonLost, liveStats } from "../lib/matchStats";
 import { ratedSquad, sheetPlayers, swapPlayersInSheet } from "../lib/players";
 import { closingSheetOf, injuredNamesFromEvents, isInjured } from "../lib/injuries";
 import { resolveMatchSides, teamById } from "../lib/resolve";
@@ -254,7 +254,7 @@ export function MatchScreen({
         />
       ) : null}
       <p className="live-strip">
-        Poss {chart.homeStats.possessions}-{chart.awayStats.possessions} · Shots {chart.homeStats.scores}/{chart.homeStats.shots}-{chart.awayStats.scores}/{chart.awayStats.shots} · Puck-outs {chart.homeStats.puckoutsWon}-{chart.awayStats.puckoutsWon} · Tackles {chart.homeStats.tacklesWon}-{chart.awayStats.tacklesWon}
+        Poss {chart.homeStats.possessions}-{chart.awayStats.possessions} · Shots {chart.homeStats.scores}/{chart.homeStats.shots}-{chart.awayStats.scores}/{chart.awayStats.shots} · Puck-outs {formatWonLost(chart.homeStats.puckoutsWon, chart.homeStats.puckoutsAttempted ?? 0)} / {formatWonLost(chart.awayStats.puckoutsWon, chart.awayStats.puckoutsAttempted ?? 0)} · Tackles {chart.homeStats.tacklesWon}-{chart.awayStats.tacklesWon}
       </p>
       {live.phase !== "half-time" && live.phase !== "half-wait" ? (
         <div className="speed-row pane-row">

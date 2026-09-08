@@ -297,6 +297,7 @@ export type StatCredit = {
   highFieldingAttempted?: number;
   highFieldingWon?: number;
   puckoutsWon?: number;
+  puckoutsAttempted?: number;
   tacklesAttempted?: number;
   tacklesWon?: number;
   freesConceded?: number;
@@ -332,6 +333,7 @@ export type PlayerMatchStats = {
   highFieldingAttempted: number;
   highFieldingWon: number;
   puckoutsWon: number;
+  puckoutsAttempted?: number;
   tacklesAttempted: number;
   tacklesWon: number;
   freesConceded?: number;
@@ -357,6 +359,7 @@ export type TeamMatchStats = {
   highFieldingAttempted: number;
   highFieldingWon: number;
   puckoutsWon: number;
+  puckoutsAttempted?: number;
   tacklesAttempted: number;
   tacklesWon: number;
   freesConceded?: number;

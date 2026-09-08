@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import type { MatchEvent, PlayerCondition, PlayerMatchStats, RatedPlayer, TeamMatchStats, TeamSheet } from "../types";
-import { formatPair } from "../lib/matchStats";
+import { formatPair, formatWonLost } from "../lib/matchStats";
 import { PlayerMatchTable } from "./PlayerMatchTable";
 
 type Props = {
@@ -111,7 +111,11 @@ export function MatchStatsPanel({
             home={formatPair(homeStats.highFieldingWon, homeStats.highFieldingAttempted)}
             away={formatPair(awayStats.highFieldingWon, awayStats.highFieldingAttempted)}
           />
-          <TeamRow label="Puck-outs won" home={homeStats.puckoutsWon} away={awayStats.puckoutsWon} />
+          <TeamRow
+            label="Puck-outs (won–lost)"
+            home={formatWonLost(homeStats.puckoutsWon, homeStats.puckoutsAttempted ?? 0)}
+            away={formatWonLost(awayStats.puckoutsWon, awayStats.puckoutsAttempted ?? 0)}
+          />
           <TeamRow
             label="Tackles"
             home={formatPair(homeStats.tacklesWon, homeStats.tacklesAttempted)}
