@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import type { GameSave, PlayerPlan, TrainingIntensity, WeekSession, WeekShape } from "../types";
+import type { GameSave, MatchPrep, PlayerPlan, TrainingIntensity, WeekSession, WeekShape } from "../types";
 import { Toast } from "../components/Toast";
 import { TrainingMixEditor } from "../components/TrainingMixEditor";
 import { WeekShapePicker } from "../components/WeekShapePicker";
@@ -7,8 +7,8 @@ import { ATTRIBUTE_LABELS } from "../lib/attributes";
 import { isInjured } from "../lib/injuries";
 import { ratedSquad } from "../lib/players";
 import {
-  IN_SEASON_SESSION_OPTIONS,
   INTENSITY_OPTIONS,
+  MATCH_PREP_OPTIONS,
   PRESEASON_WEEKS,
   SQUAD_TEMPLATES,
   applyIntensityToPlayers,
@@ -21,6 +21,7 @@ import {
   intensityTitle,
   mixAbbrev,
   mixSummary,
+  matchPrepTitle,
   planFor,
   planIntensity,
   sessionForSlot,
@@ -34,6 +35,7 @@ type Props = {
   save: GameSave;
   onBack: () => void;
   onTrain: (session: WeekSession) => void;
+  onMatchPrep: (prep: MatchPrep) => void;
   onSetPlans: (plans: GameSave["plans"]) => void;
   onSetIntensity: (intensity: TrainingIntensity) => void;
   onSetWeekShape: (shape: WeekShape) => void;
@@ -47,11 +49,11 @@ function liftClass(value: number): string {
   return "";
 }
 
-export function TrainingScreen({ save, onBack, onTrain, onSetPlans, onSetIntensity, onSetWeekShape }: Props) {
+export function TrainingScreen({ save, onBack, onTrain, onMatchPrep, onSetPlans, onSetIntensity, onSetWeekShape }: Props) {
   const squad = ratedSquad(save.clubId, save.seed);
   const [selected, setSelected] = useState<string[]>([]);
   const [templateId, setTemplateId] = useState<SquadTemplateId>("position");
-  const [session, setSession] = useState<WeekSession>("mixed");
+  const [prep, setPrep] = useState<MatchPrep>(save.nextMatchPrep ?? "puckout");
   const [toast, setToast] = useState<string | null>(null);
   const [draft, setDraft] = useState<PlayerPlan>(() => ({
     mix: defaultMixFor("MF"),
@@ -62,7 +64,7 @@ export function TrainingScreen({ save, onBack, onTrain, onSetPlans, onSetIntensi
   const weekShape = save.weekShape ?? "challenge";
   const sessionsDone = save.sessionsDone ?? 0;
   const total = sessionsPerWeek(save.phase);
-  const nextKind = sessionForSlot(save.phase, weekShape, sessionsDone, session === "recovery" ? "mixed" : session);
+  const nextKind = sessionForSlot(save.phase, weekShape, sessionsDone, "mixed");
   const names = useMemo(() => new Set(selected), [selected]);
   const allNames = useMemo(() => squad.map((player) => player.name), [squad]);
   const showToast = useCallback((message: string) => setToast(message), []);
@@ -112,9 +114,7 @@ export function TrainingScreen({ save, onBack, onTrain, onSetPlans, onSetIntensi
     ? nextKind === "challenge"
       ? `Play challenge · session ${sessionsDone + 1} of ${total}`
       : `Run session ${sessionsDone + 1} of ${total}`
-    : session === "challenge"
-      ? "Play challenge match"
-      : "Run midweek session";
+    : `Work ${matchPrepTitle(prep)}`;
 
   return (
     <div className="screen">
@@ -124,14 +124,16 @@ export function TrainingScreen({ save, onBack, onTrain, onSetPlans, onSetIntensi
       <p className="kicker">
         {preseason
           ? `Preseason · week ${Math.min(save.preseasonWeek, PRESEASON_WEEKS)} of ${PRESEASON_WEEKS}`
-          : "Midweek training"}
+          : "Championship rest"}
       </p>
-      <h2>Training</h2>
+      <h2>{preseason ? "Training" : "Match work"}</h2>
       <p className="hint hint--tight">
-        Set schedules and intensity for the panel or for individuals. Light is the recovery week: legs come back and
-        attributes only tick a little. Mixed sessions — three in a week, or two plus a challenge — use these schedules.
+        {preseason
+          ? "Set schedules and intensity for the panel or for individuals. Light is the recovery week: legs come back and attributes only tick a little. Mixed sessions — three in a week, or two plus a challenge — use these schedules."
+          : "Standard schedules are for preseason. Between championship days the panel recover to nearly full fitness. Pick one aspect for a slight lift on the next day."}
       </p>
 
+      {preseason ? (
       <section className="card card--compact">
         <p className="kicker">Squad intensity</p>
         <div className="choice-stack">
@@ -153,6 +155,7 @@ export function TrainingScreen({ save, onBack, onTrain, onSetPlans, onSetIntensi
           </button>
         </div>
       </section>
+      ) : null}
 
       {preseason ? (
         <section className="card card--compact">
@@ -171,14 +174,14 @@ export function TrainingScreen({ save, onBack, onTrain, onSetPlans, onSetIntensi
         </section>
       ) : (
         <section className="card card--compact">
-          <p className="kicker">This week&apos;s session</p>
+          <p className="kicker">Next match work</p>
           <div className="choice-stack">
-            {IN_SEASON_SESSION_OPTIONS.map((option) => (
+            {MATCH_PREP_OPTIONS.map((option) => (
               <button
                 key={option.value}
                 type="button"
-                className={session === option.value ? "is-active" : ""}
-                onClick={() => setSession(option.value)}
+                className={prep === option.value ? "is-active" : ""}
+                onClick={() => setPrep(option.value)}
               >
                 <strong>{option.title}</strong>
                 <span>{option.copy}</span>
@@ -188,6 +191,7 @@ export function TrainingScreen({ save, onBack, onTrain, onSetPlans, onSetIntensi
         </section>
       )}
 
+      {preseason ? (
       <section className="card card--compact">
         <p className="kicker">Schedules</p>
         <div className="template-row">
@@ -240,6 +244,7 @@ export function TrainingScreen({ save, onBack, onTrain, onSetPlans, onSetIntensi
           ) : null}
         </div>
       </section>
+      ) : null}
 
       <section className="card card--compact">
         <p className="kicker">Panel</p>
@@ -299,7 +304,7 @@ export function TrainingScreen({ save, onBack, onTrain, onSetPlans, onSetIntensi
             </tbody>
           </table>
         </div>
-        {selected.length === 1 ? (
+        {selected.length === 1 && preseason ? (
           <div className="training-schedules">
             <p className="kicker">{selected[0]} · {mixSummary(planFor(selected[0]!, save.plans, squad.find((item) => item.name === selected[0])?.position ?? "MF").mix)}</p>
             <TrainingMixEditor
@@ -313,7 +318,11 @@ export function TrainingScreen({ save, onBack, onTrain, onSetPlans, onSetIntensi
 
       {save.trainingDue ? (
         <div className="row-actions">
-          <button type="button" className="btn" onClick={() => onTrain(preseason ? nextKind : session)}>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => (preseason ? onTrain(nextKind) : onMatchPrep(prep))}
+          >
             {runLabel}
           </button>
         </div>
@@ -321,7 +330,9 @@ export function TrainingScreen({ save, onBack, onTrain, onSetPlans, onSetIntensi
         <p className="hint hint--tight">
           {preseason
             ? "This week's sessions are in. Waiting on the calendar to turn."
-            : "Midweek work is in. Championship day is next."}
+            : save.nextMatchPrep
+              ? `${matchPrepTitle(save.nextMatchPrep)} is in. Championship day is next.`
+              : "Championship day is next."}
         </p>
       )}
       <Toast message={toast} onDone={() => setToast(null)} />

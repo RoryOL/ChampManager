@@ -38,7 +38,7 @@ import { clubTactics, DEFAULT_TACTICS, defaultSheet, expandSheetToPanel, matchOr
 import { nextBatch } from "./lib/schedule";
 import { matchPlayed, scoreTotal } from "./lib/scoring";
 import { ATTRIBUTE_KEYS } from "./lib/attributes";
-import { applyMatchFatigue, applyTeamwork, applyTraining, applyFullTrainingWeek, applyWeekSession, averageMatchOverall, bankedLift, boostTotal, defaultCondition, fitnessOf, formatBoostDelta, isOvertrained, matchFatigueDelta, matchStat, sessionForSlot, tableLift, trainedStat, trainingDelta, trainingGainFactor, weekCoachCopy } from "./lib/training";
+import { applyMatchFatigue, applyTeamwork, applyTraining, applyFullTrainingWeek, applyWeekSession, averageMatchOverall, bankedLift, boostTotal, defaultCondition, fitnessOf, formatBoostDelta, isOvertrained, liftSquadForPrep, matchFatigueDelta, matchStat, recoverBetweenMatches, sessionForSlot, tableLift, trainedStat, trainingDelta, trainingGainFactor, weekCoachCopy } from "./lib/training";
 import { buildPreMatchBriefing } from "./lib/briefing";
 import type { PlayerMatchStats, Score, Tactics } from "./types";
 import { nextSwapPick } from "./components/SwapConfirmBar";
@@ -1273,7 +1273,7 @@ describe("training", () => {
     const tired = Object.fromEntries(
       squad.map((player) => [player.name, { fatigue: 80, sharpness: 70 }]),
     );
-    const second = applyTraining(squad, tired, "mixed", plans);
+    const second = applyTraining(squad, tired, "mixed", plans, undefined, undefined, "intense");
     expect(first.condition[squad[0].name]?.sharpness ?? 0).toBeGreaterThan(defaultCondition().sharpness);
     expect(second.overtrained.length).toBeGreaterThan(0);
     expect(isOvertrained(second.condition[squad[0].name] ?? defaultCondition())).toBe(true);
@@ -1470,7 +1470,7 @@ describe("training", () => {
     expect(intense.deltas[player.name]?.speed ?? 0).toBeGreaterThan(light.deltas[player.name]?.speed ?? 0);
   });
 
-  it("keeps match fitness on balanced work, restores it on light, and only dumps it when intense", () => {
+  it("recovers a little on balanced work, restores it on light, and only dumps it when intense", () => {
     const squad = ratedSquad("ballyea").slice(0, 3);
     const player = squad[0]!;
     const start = Object.fromEntries(squad.map((item) => [item.name, { ...defaultCondition(), fatigue: 40 }]));
@@ -1478,13 +1478,58 @@ describe("training", () => {
     const balanced = applyTraining(squad, start, "mixed", plans, undefined, undefined, "balanced");
     const light = applyTraining(squad, start, "mixed", plans, undefined, undefined, "light");
     const intense = applyTraining(squad, start, "mixed", plans, undefined, undefined, "intense");
-    expect(balanced.condition[player.name]?.fatigue).toBe(40);
+    expect(balanced.condition[player.name]?.fatigue ?? 40).toBeLessThan(40);
+    expect(light.condition[player.name]?.fatigue ?? 40).toBeLessThan(balanced.condition[player.name]?.fatigue ?? 40);
     expect(light.condition[player.name]?.fatigue ?? 40).toBeLessThan(28);
     expect(intense.condition[player.name]?.fatigue ?? 0).toBeGreaterThan(40);
     const sheet = { starters: squad.map((item) => item.name), subs: [] };
     const balancedChallenge = applyTraining(squad, start, "challenge", {}, sheet, undefined, "balanced");
     expect(balancedChallenge.condition[player.name]?.fatigue).toBe(40);
   });
+
+  it("lets higher stamina recover more on light work", () => {
+    const squad = ratedSquad("ballyea");
+    const ranked = [...squad].sort((a, b) => b.ratings.stamina - a.ratings.stamina);
+    const strong = ranked[0]!;
+    const weak = ranked.at(-1)!;
+    expect(strong.ratings.stamina).toBeGreaterThan(weak.ratings.stamina);
+    const start = {
+      [strong.name]: { ...defaultCondition(), fatigue: 50 },
+      [weak.name]: { ...defaultCondition(), fatigue: 50 },
+    };
+    const after = applyTraining([strong, weak], start, "mixed", {}, undefined, undefined, "light");
+    expect(after.condition[strong.name]?.fatigue ?? 50).toBeLessThan(after.condition[weak.name]?.fatigue ?? 50);
+  });
+
+  it("rests uninjured players to nearly full fitness between championship days", () => {
+    const squad = ratedSquad("ballyea").slice(0, 4);
+    const hurt = squad[0]!;
+    const start = Object.fromEntries(
+      squad.map((player) => [player.name, { ...defaultCondition(), fatigue: 82 }]),
+    );
+    start[hurt.name] = {
+      ...start[hurt.name]!,
+      injury: { weeksLeft: 2, durationWeeks: 3, ailment: "hamstring", source: "match" },
+    };
+    const rested = recoverBetweenMatches(start, squad);
+    for (const player of squad) {
+      if (player.name === hurt.name) {
+        expect(rested[player.name]?.fatigue ?? 0).toBeGreaterThan(40);
+        continue;
+      }
+      expect(fitnessOf(rested[player.name] ?? defaultCondition())).toBeGreaterThanOrEqual(90);
+    }
+  });
+
+  it("gives a slight one-match lift on the chosen championship aspect", () => {
+    const squad = ratedSquad("ballyea");
+    const player = squad.find((item) => item.ratings.shooting < 20) ?? squad[0]!;
+    const lifted = liftSquadForPrep(squad, "shooting");
+    const row = lifted.find((item) => item.name === player.name)!;
+    expect(row.ratings.shooting).toBeGreaterThanOrEqual(player.ratings.shooting);
+    expect(row.ratings.shooting).toBeGreaterThanOrEqual(Math.min(20, player.ratings.shooting + 1));
+  });
+
 
   it("runs three preseason sessions before the week turns, and only ticks injuries on the first", () => {
     const squad = ratedSquad("ballyea");
@@ -1605,7 +1650,7 @@ describe("save migration", () => {
       matches: [],
       inbox: [],
     });
-    expect(migrated?.version).toBe(11);
+    expect(migrated?.version).toBe(12);
     expect(migrated?.reports).toEqual({});
     expect(migrated?.tactics.mentality).toBe("attacking");
     expect(migrated?.tactics.build).toBeGreaterThan(60);

@@ -204,6 +204,9 @@ export type TrainingIntensity = "intense" | "balanced" | "light";
 /** Preseason week: two mixed sessions plus a challenge, or three mixed sessions. */
 export type WeekShape = "challenge" | "triple";
 
+/** Championship rest-week work for the next day only. */
+export type MatchPrep = "puckout" | "shooting" | "marking" | "running";
+
 /** @deprecated Use WeekSession. Kept so older saves/tests still type-check during migration. */
 export type TrainingFocus = WeekSession | "fitness" | "skills" | "setpieces";
 
@@ -408,7 +411,7 @@ export type TeamSheet = {
 };
 
 export type GameSave = {
-  version: 11;
+  version: 12;
   clubId: string;
   seed: number;
   difficulty: Difficulty;
@@ -430,6 +433,7 @@ export type GameSave = {
   trainingDeltas: Record<string, AttributeBoosts>;
   weekDeltas: Record<string, AttributeBoosts>;
   rivals: Record<string, ClubRuntime>;
+  nextMatchPrep?: MatchPrep;
 };
 
 export type LivePhase = "first" | "half-time" | "half-wait" | "second" | "finished";
@@ -455,6 +459,7 @@ export type ClubRuntime = {
   sessionsDone: number;
   trainingDeltas: Record<string, AttributeBoosts>;
   weekDeltas: Record<string, AttributeBoosts>;
+  nextMatchPrep?: MatchPrep;
 };
 
 export type HalfPlan = {

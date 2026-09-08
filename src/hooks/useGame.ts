@@ -17,6 +17,7 @@ import {
   submitSecondHalf,
   tickCampaign,
   trainClub,
+  trainClubPrep,
   trainClubWeek,
   unreadyClub,
   waitingOnSecondHalf,
@@ -81,8 +82,12 @@ import {
   applyWeekSession,
   DEFAULT_INTENSITY,
   DEFAULT_WEEK_SHAPE,
+  matchPrepSummary,
+  matchPrepTitle,
   PRESEASON_DATES,
   PRESEASON_WEEKS,
+  recoverAfterMatch,
+  recoverBetweenMatches,
   sessionsPerWeek,
   weekCoachCopy,
 } from "../lib/training";
@@ -117,6 +122,7 @@ import type {
   WeekSession,
   WeekShape,
   Difficulty,
+  MatchPrep,
 } from "../types";
 
 export type LiveMatch = {
@@ -495,6 +501,8 @@ export function useGame() {
             seed: save.seed,
             gameSeed: save.seed,
             performanceBoost: performanceBoostFor(save.difficulty, [save.clubId]),
+            homePrep: homeId === save.clubId ? save.nextMatchPrep : homeClub?.nextMatchPrep,
+            awayPrep: awayId === save.clubId ? save.nextMatchPrep : awayClub?.nextMatchPrep,
           });
           if (!isUser) return sim;
           const decorated = decorateUserMatch(sim, save);
@@ -605,6 +613,7 @@ export function useGame() {
               : 0,
         ),
         trainingDue: true,
+        nextMatchPrep: undefined,
       };
       const club = teamById(championship, base.clubId);
       const userMatch = championship.matches.find((match) => match.id === current.user.matchId);
@@ -637,6 +646,13 @@ export function useGame() {
       for (const rolled of current.injuries) {
         next = { ...next, condition: applyInjury(next.condition, rolled.name, rolled.injury) };
       }
+      const rested = recoverAfterMatch(next.condition, squad);
+      next = {
+        ...next,
+        condition: rested.condition,
+        trainingDue: true,
+        nextMatchPrep: undefined,
+      };
       next = {
         ...next,
         sheet: sitInjuredPlayers(sheet, squad, next.condition),
@@ -696,6 +712,9 @@ export function useGame() {
             clubName: club?.name ?? "the club",
           }),
         );
+      }
+      for (const name of rested.recovered) {
+        items.push(recoveryNews({ name, date, seed: base.seed }));
       }
       const otherLines = current.others.map((other) => {
         const match = championship.matches.find((item) => item.id === other.matchId);
@@ -828,6 +847,8 @@ export function useGame() {
           ),
         },
         performanceBoost: performanceBoostFor(save.difficulty, [save.clubId]),
+        homePrep: homeId === save.clubId ? save.nextMatchPrep : cpuClub?.nextMatchPrep,
+        awayPrep: awayId === save.clubId ? save.nextMatchPrep : cpuClub?.nextMatchPrep,
       });
       const decorated = decorateUserMatch(second, save);
       const combined = combineHalves(first, decorated.sim, {
@@ -943,9 +964,42 @@ export function useGame() {
     [activeSeat, campaign, commitCampaign, commitSolo, save],
   );
 
+  const runMatchPrep = useCallback(
+    (prep: MatchPrep) => {
+      if (!save || !save.trainingDue || save.phase !== "season") return;
+      if (campaign && activeSeat) {
+        commitCampaign(trainClubPrep(campaign, activeSeat.clubId, prep));
+        return;
+      }
+      const squad = ratedSquad(save.clubId, save.seed);
+      const date = championship.matches.find((match) => !matchPlayed(match))?.date ?? "";
+      let next: GameSave = {
+        ...save,
+        condition: recoverBetweenMatches(save.condition, squad),
+        nextMatchPrep: prep,
+        trainingDue: false,
+        sessionsDone: 0,
+        rivals: syncRivalsAfterUserWeek(save, remainingWeeks(save, championship, save.clubId), date),
+      };
+      next = withInbox(next, [
+        newsItem({
+          id: `${save.seed}-prep-${date}-${prep}`,
+          kind: "training",
+          date,
+          title: matchPrepTitle(prep),
+          body: matchPrepSummary(prep),
+        }),
+      ]);
+      next = ensureMatchBriefing(next, championshipFromSave(next));
+      commitSolo(next);
+    },
+    [activeSeat, campaign, championship, commitCampaign, commitSolo, save],
+  );
+
   const trainWeek = useCallback(
     (session: WeekSession = "mixed") => {
       if (!save || !save.trainingDue) return;
+      if (save.phase === "season") return;
       if (campaign && activeSeat) {
         commitCampaign(trainClub(campaign, activeSeat.clubId, session));
         return;
@@ -994,7 +1048,9 @@ export function useGame() {
               ...next,
               phase: "season",
               preseasonWeek: week,
-              trainingDue: false,
+              condition: recoverBetweenMatches(next.condition, squad),
+              trainingDue: true,
+              nextMatchPrep: undefined,
             };
             items.push(
               newsItem({
@@ -1002,7 +1058,7 @@ export function useGame() {
                 kind: "training",
                 date: "2026-07-23",
                 title: "Championship week",
-                body: `${result.summary} Preseason is over. Pick your fifteen — Round 1 is next.`,
+                body: `${result.summary} Preseason is over. The panel have their legs back. Work one aspect before Round 1, or go straight to the match.`,
               }),
             );
           } else {
@@ -1088,6 +1144,7 @@ export function useGame() {
   const trainFullWeek = useCallback(
     (weekShape: WeekShape) => {
       if (!save || !save.trainingDue) return;
+      if (save.phase === "season") return;
       if (campaign && activeSeat) {
         commitCampaign(trainClubWeek(campaign, activeSeat.clubId, weekShape));
         return;
@@ -1135,7 +1192,9 @@ export function useGame() {
             ...next,
             phase: "season",
             preseasonWeek: week,
-            trainingDue: false,
+            condition: recoverBetweenMatches(next.condition, squad),
+            trainingDue: true,
+            nextMatchPrep: undefined,
           };
           items.push(
             newsItem({
@@ -1143,7 +1202,7 @@ export function useGame() {
               kind: "training",
               date: "2026-07-23",
               title: "Championship week",
-              body: `${result.summary} Preseason is over. Pick your fifteen — Round 1 is next.`,
+              body: `${result.summary} Preseason is over. The panel have their legs back. Work one aspect before Round 1, or go straight to the match.`,
             }),
           );
         } else if (result.weekComplete) {
@@ -1332,6 +1391,7 @@ export function useGame() {
     skipRest,
     trainWeek,
     trainFullWeek,
+    runMatchPrep,
     confirmWeek,
     undoReady,
     forceWeek,

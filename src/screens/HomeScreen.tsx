@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Campaign, Championship, GameSave, Match, NewsItem, Seat, WeekShape } from "../types";
+import type { Campaign, Championship, GameSave, Match, MatchPrep, NewsItem, Seat, WeekShape } from "../types";
 import { CampaignWeekCard } from "../components/CampaignWeekCard";
 import { ClubBadge } from "../components/ClubBadge";
 import { NewsKindIcon } from "../components/NewsKindIcon";
@@ -9,7 +9,7 @@ import { NEWS_KIND_LABEL } from "../lib/news";
 import { resolveMatchSides, teamById, teamGroup } from "../lib/resolve";
 import { formatDate, stageLabel } from "../lib/scoring";
 import { buildPreMatchBriefing } from "../lib/briefing";
-import { averageFitness, averageMatchOverall, averageSharpness, DEFAULT_WEEK_SHAPE, PRESEASON_WEEKS } from "../lib/training";
+import { averageFitness, averageMatchOverall, averageSharpness, DEFAULT_WEEK_SHAPE, MATCH_PREP_OPTIONS, matchPrepTitle, PRESEASON_WEEKS } from "../lib/training";
 import { ratedSquad } from "../lib/players";
 import { rollClimate, climateSummary } from "../lib/weather";
 
@@ -35,6 +35,7 @@ type Props = {
   onOpenTraining?: () => void;
   onSetWeekShape?: (shape: WeekShape) => void;
   onRunWeek?: (shape: WeekShape) => void;
+  onMatchPrep?: (prep: MatchPrep) => void;
 };
 
 function preview(body: string): string {
@@ -103,6 +104,7 @@ export function HomeScreen({
   onOpenTraining,
   onSetWeekShape,
   onRunWeek,
+  onMatchPrep,
 }: Props) {
   const club = teamById(championship, save.clubId);
   const group = teamGroup(championship, save.clubId);
@@ -172,16 +174,13 @@ export function HomeScreen({
           {formDelta !== 0 ? ` (${formDelta > 0 ? "+" : ""}${formDelta})` : ""} · ability {form.ability}
         </p>
         {save.trainingDue && !preseason ? (
-          <p className="hint hint--tight">Midweek training is due. Mixed work uses the schedules from Training.</p>
+          <p className="hint hint--tight">
+            The panel have their legs back. Work one aspect for the next day, or go straight to the match.
+          </p>
+        ) : save.nextMatchPrep && !preseason ? (
+          <p className="hint hint--tight">{matchPrepTitle(save.nextMatchPrep)} is in for championship day.</p>
         ) : campaign && preseason && !save.trainingDue ? (
           <p className="tactic-copy">Your week is in. Waiting on the other managers before it turns.</p>
-        ) : null}
-        {save.trainingDue && !preseason && onOpenTraining ? (
-          <div className="row-actions">
-            <button type="button" className="btn" onClick={onOpenTraining}>
-              Open training
-            </button>
-          </div>
         ) : null}
         {!preseason && nextMatch && sides && !(campaign && !campaign.week.locked) ? (
           <div className="row-actions">
@@ -232,6 +231,23 @@ export function HomeScreen({
           <p className="hint hint--tight">Round 1 waits after six weeks. Open training when the next week is due.</p>
         ) : null}
       </section>
+
+      {!preseason && save.trainingDue && onMatchPrep ? (
+        <section className="card card--compact">
+          <p className="kicker">Next match work</p>
+          <div className="choice-stack">
+            {MATCH_PREP_OPTIONS.map((option) => (
+              <button key={option.value} type="button" onClick={() => onMatchPrep(option.value)}>
+                <strong>{option.title}</strong>
+                <span>{option.copy}</span>
+              </button>
+            ))}
+          </div>
+          <p className="hint hint--tight">
+            Tap an aspect to work it for the next championship day. Standard schedules are for preseason.
+          </p>
+        </section>
+      ) : null}
 
       {preseason && (onRunWeek || onSetWeekShape) ? (
         <section className="card card--compact">

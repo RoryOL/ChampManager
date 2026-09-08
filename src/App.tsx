@@ -129,6 +129,7 @@ export default function App() {
               onOpenTraining={() => setPage("training")}
               onSetWeekShape={game.setWeekShape}
               onRunWeek={game.trainFullWeek}
+              onMatchPrep={game.runMatchPrep}
             />
           )}
           {page === "squad" && (
@@ -150,6 +151,7 @@ export default function App() {
               save={game.save}
               onBack={() => setPage("squad")}
               onTrain={game.trainWeek}
+              onMatchPrep={game.runMatchPrep}
               onSetPlans={game.setPlans}
               onSetIntensity={game.setIntensity}
               onSetWeekShape={game.setWeekShape}

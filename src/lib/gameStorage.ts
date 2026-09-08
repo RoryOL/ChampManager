@@ -11,6 +11,7 @@ import {
   DEFAULT_INTENSITY,
   DEFAULT_WEEK_SHAPE,
   ensureCondition,
+  isMatchPrep,
   squadNames,
 } from "./training";
 import type {
@@ -21,6 +22,7 @@ import type {
   ClubRuntime,
   Difficulty,
   GameSave,
+  MatchPrep,
   MatchReport,
   NewsItem,
   PlayerCondition,
@@ -32,7 +34,7 @@ import type {
   WeekShape,
 } from "../types";
 
-export const SAVE_VERSION = 11;
+export const SAVE_VERSION = 12;
 
 const STORAGE_KEY = "champ-manager:game-v1";
 
@@ -128,6 +130,10 @@ function migrateWeekShape(raw: unknown): WeekShape {
   return raw === "triple" || raw === "challenge" ? raw : DEFAULT_WEEK_SHAPE;
 }
 
+function migrateMatchPrep(raw: unknown): MatchPrep | undefined {
+  return isMatchPrep(raw) ? raw : undefined;
+}
+
 function isSheet(value: unknown): value is TeamSheet {
   if (!value || typeof value !== "object") return false;
   const sheet = value as TeamSheet;
@@ -157,6 +163,7 @@ function migrateClubRuntime(clubId: string, raw: unknown, seed: number): ClubRun
       typeof parsed.sessionsDone === "number" ? Math.max(0, Math.min(3, Math.round(parsed.sessionsDone))) : 0,
     trainingDeltas: parsed.trainingDeltas ?? {},
     weekDeltas: parsed.weekDeltas ?? {},
+    nextMatchPrep: migrateMatchPrep(parsed.nextMatchPrep),
   };
 }
 
@@ -195,6 +202,7 @@ export function migrateSave(raw: unknown): GameSave | null {
     weekDeltas?: unknown;
     rivals?: unknown;
     difficulty?: unknown;
+    nextMatchPrep?: unknown;
   };
   if (!parsed.clubId || !parsed.sheet || !Array.isArray(parsed.matches)) return null;
   if (
@@ -208,7 +216,8 @@ export function migrateSave(raw: unknown): GameSave | null {
     parsed.version !== 8 &&
     parsed.version !== 9 &&
     parsed.version !== 10 &&
-    parsed.version !== 11
+    parsed.version !== 11 &&
+    parsed.version !== 12
   ) {
     return null;
   }
@@ -272,6 +281,7 @@ export function migrateSave(raw: unknown): GameSave | null {
     weekDeltas,
     rivals: migrateRivals(parsed.clubId, seed, parsed.rivals),
     difficulty: migrateDifficulty(parsed.difficulty),
+    nextMatchPrep: migrateMatchPrep(parsed.nextMatchPrep),
   };
 }
 
