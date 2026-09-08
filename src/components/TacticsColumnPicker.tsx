@@ -9,9 +9,11 @@ type Props = {
 export function TacticsColumnPicker({ selected, onChange }: Props) {
   const picked = new Set(selected);
   return (
-    <div className="tactics-columns">
+    <details className="tactics-columns">
+      <summary>
+        Grid columns{selected.length > 0 ? ` · ${selected.length} added` : ""}
+      </summary>
       <div className="tactics-columns__head">
-        <p className="kicker">Grid columns</p>
         {selected.length > 0 ? (
           <button type="button" className="btn btn--ghost" onClick={() => onChange([])}>
             Clear
@@ -38,6 +40,6 @@ export function TacticsColumnPicker({ selected, onChange }: Props) {
           </div>
         </div>
       ))}
-    </div>
+    </details>
   );
 }
