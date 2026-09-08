@@ -242,8 +242,12 @@ export function tackleChance(
   return base * roleMul * numbersMul;
 }
 
-function composureCardMul(composure: number): number {
-  return Math.max(0.65, Math.min(1.65, 1.28 - (composure - 10) * 0.055));
+function composureCardMul(composure: number, severity: "yellow" | "sendoff"): number {
+  const t = Math.max(0, Math.min(1, (composure - 4) / 16));
+  if (severity === "yellow") {
+    return Math.max(0.28, Math.min(1.75, 1.58 - t * 1.2));
+  }
+  return Math.max(0.06, Math.min(2.2, 1.9 - t * 1.92));
 }
 
 export function mistimedFoulChance(aggression: number, wet = false): number {
@@ -252,13 +256,18 @@ export function mistimedFoulChance(aggression: number, wet = false): number {
 }
 
 export function yellowOnFoulChance(aggression: number, composure = 12, wet = false): number {
-  const base = Math.min(0.4, Math.max(0.02, 0.04 + (clampDial(aggression) / 100) * 0.3));
-  return Math.min(0.55, base * composureCardMul(composure) * (wet ? 1.15 : 1));
+  const base = Math.min(0.52, Math.max(0.06, 0.11 + (clampDial(aggression) / 100) * 0.36));
+  return Math.min(0.66, base * composureCardMul(composure, "yellow") * (wet ? 1.12 : 1));
+}
+
+export function secondYellowOnFoulChance(aggression: number, composure = 12, wet = false): number {
+  const base = Math.min(0.82, Math.max(0.22, 0.5 + (clampDial(aggression) / 100) * 0.24));
+  return Math.min(0.9, base * composureCardMul(composure, "sendoff") * (wet ? 1.1 : 1));
 }
 
 export function redOnFoulChance(aggression: number, composure = 12, wet = false): number {
-  const base = Math.min(0.16, Math.max(0.02, 0.03 + (clampDial(aggression) / 100) * 0.1));
-  return Math.min(0.28, base * composureCardMul(composure) * (wet ? 1.12 : 1));
+  const base = Math.min(0.07, Math.max(0.008, 0.023 + (clampDial(aggression) / 100) * 0.028));
+  return Math.min(0.11, base * composureCardMul(composure, "sendoff") * (wet ? 1.08 : 1));
 }
 
 /** After a send-off, play 6-2-5 regardless of who went: six backs, two midfielders, five forwards. */
@@ -296,6 +305,18 @@ export function sentOffNamesFromEvents(events: MatchEvent[], teamId?: string): s
         .map((event) => event.playerName),
     ),
   ];
+}
+
+export function bookedNamesFromEvents(events: MatchEvent[], teamId?: string): string[] {
+  const yellows = new Set<string>();
+  const sentOff = new Set(sentOffNamesFromEvents(events, teamId));
+  for (const event of events) {
+    if (event.kind !== "booking" || !event.playerName) continue;
+    if (teamId && event.teamId !== teamId) continue;
+    if (sentOff.has(event.playerName)) continue;
+    yellows.add(event.playerName);
+  }
+  return [...yellows];
 }
 
 export function isScoreKind(kind: MatchEventKind): boolean {
@@ -423,6 +444,15 @@ function backAndMidIndices(names: string[]): number[] {
   return indicesWhere(names, (index) => index >= 1 && index <= 8);
 }
 
+function pickFouler(names: string[], booked: Set<string>, random: () => number): { name: string; index: number } {
+  const bookedOn = names.filter((name) => booked.has(name));
+  if (bookedOn.length > 0 && random() < 0.44) {
+    const name = bookedOn[Math.floor(random() * bookedOn.length)]!;
+    return { name, index: Math.max(0, names.indexOf(name)) };
+  }
+  return pickIndexed(names, backAndMidIndices(names), random);
+}
+
 function outFromBackIndices(names: string[]): number[] {
   return indicesWhere(names, (index) => index >= 1 && index <= 6);
 }
@@ -449,6 +479,7 @@ export function simulateMatch(options: {
   gameSeed?: number;
   climate?: MatchClimate;
   sentOff?: string[];
+  booked?: string[];
   homeSquad?: RatedPlayer[];
   awaySquad?: RatedPlayer[];
   remainingWeeks?: number;
@@ -482,6 +513,9 @@ export function simulateMatch(options: {
   const events: MatchEvent[] = [];
   const homeOut = new Set((options.sentOff ?? []).filter((name) => homeSheet.starters.includes(name) || homeSheet.subs.includes(name)));
   const awayOut = new Set((options.sentOff ?? []).filter((name) => awaySheet.starters.includes(name) || awaySheet.subs.includes(name)));
+  const yellows = new Set(
+    (options.booked ?? []).filter((name) => !homeOut.has(name) && !awayOut.has(name)),
+  );
   const homeSlots = [...homeSheet.starters];
   const awaySlots = [...awaySheet.starters];
   const homeSubs = [...homeSheet.subs];
@@ -1086,23 +1120,42 @@ export function simulateMatch(options: {
       }
 
       if (random() < mistimedFoulChance(oppTactics.aggression ?? 46, wet)) {
-        const tackler = pickIndexed(oppNames, backAndMidIndices(oppNames), random);
+        const tackler = pickFouler(oppNames, yellows, random);
         const defender = tackler.name;
         const agg = oppTactics.aggression ?? 46;
         const composure = playerOf(defendingId, defender)?.ratings.composure ?? 12;
-        if (random() < yellowOnFoulChance(agg, composure, wet)) {
-          const red = random() < redOnFoulChance(agg, composure, wet);
+        const bookedAlready = yellows.has(defender);
+        if (bookedAlready && random() < secondYellowOnFoulChance(agg, composure, wet)) {
           push({
             minute,
             teamId: defendingId,
             playerName: defender,
-            kind: red ? "red" : "booking",
-            text: red
-              ? `RED CARD — ${defender} is sent off. They'll play the rest 6-2-5.`
-              : `Yellow card — ${defender} overcooks the challenge.`,
+            kind: "red",
+            text: `SECOND YELLOW — ${defender} is sent off. They'll play the rest 6-2-5.`,
             credits: [{ name: defender, teamId: defendingId, tacklesAttempted: 1, freesConceded: 1 }],
           });
-          if (red) dismiss(defendingId, defender, minute);
+          yellows.delete(defender);
+          dismiss(defendingId, defender, minute);
+        } else if (!bookedAlready && random() < redOnFoulChance(agg, composure, wet)) {
+          push({
+            minute,
+            teamId: defendingId,
+            playerName: defender,
+            kind: "red",
+            text: `RED CARD — ${defender} is sent off. They'll play the rest 6-2-5.`,
+            credits: [{ name: defender, teamId: defendingId, tacklesAttempted: 1, freesConceded: 1 }],
+          });
+          dismiss(defendingId, defender, minute);
+        } else if (!bookedAlready && random() < yellowOnFoulChance(agg, composure, wet)) {
+          yellows.add(defender);
+          push({
+            minute,
+            teamId: defendingId,
+            playerName: defender,
+            kind: "booking",
+            text: `Yellow card — ${defender} overcooks the challenge.`,
+            credits: [{ name: defender, teamId: defendingId, tacklesAttempted: 1, freesConceded: 1 }],
+          });
         } else {
           pendingCredits.push({ name: defender, teamId: defendingId, tacklesAttempted: 1, freesConceded: 1 });
         }

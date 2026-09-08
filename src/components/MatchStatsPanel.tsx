@@ -139,7 +139,6 @@ export function MatchStatsPanel({
         numberSheet={team === "home" ? (numberHomeSheet ?? homeSheet) : (numberAwaySheet ?? awaySheet)}
         events={events}
         condition={team === "home" ? homeCondition : awayCondition}
-        showAttributes={!compact}
         interactive={interactive && (team === "home" ? homeId : awayId) === pickerClubId}
         picked={picked}
         onTap={onTapPlayer}
@@ -149,7 +148,7 @@ export function MatchStatsPanel({
       ) : interactive ? (
         <p className="hint hint--tight">Tap two of your lads in the grid, then Swap above. Shirt numbers stay from kickoff.</p>
       ) : (
-        <p className="hint hint--tight">Swipe the table sideways for every rating and match stat.</p>
+        <p className="hint hint--tight">Swipe the table sideways for match stats. Overall is the profile rating for the day.</p>
       )}
     </div>
   );

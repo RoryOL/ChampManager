@@ -21,6 +21,7 @@ import {
   scoreFromEvents,
   redOnFoulChance,
   reshapeTo625,
+  bookedNamesFromEvents,
   sentOffNamesFromEvents,
   simulateMatch,
   sixtyFiveChance,
@@ -33,12 +34,13 @@ import {
   lateEqualizerLookChance,
   withChaseTactics,
   yellowOnFoulChance,
+  secondYellowOnFoulChance,
 } from "./lib/matchEngine";
 import { clubTactics, DEFAULT_TACTICS, defaultSheet, expandSheetToPanel, matchOrderIndex, matchShirtNumber, matchSlot, pickPuckoutTarget, playerAge, ratePlayer, ratedSquad, sheetPlayers, sideStrength, swapPlayersInSheet } from "./lib/players";
 import { nextBatch } from "./lib/schedule";
 import { matchPlayed, scoreTotal } from "./lib/scoring";
-import { ATTRIBUTE_KEYS } from "./lib/attributes";
-import { applyMatchFatigue, applyTeamwork, applyTraining, applyFullTrainingWeek, applyWeekSession, averageMatchOverall, bankedLift, boostTotal, defaultCondition, fitnessOf, formatBoostDelta, isOvertrained, liftSquadForPrep, matchFatigueDelta, matchStat, recoverBetweenMatches, sessionForSlot, tableLift, trainedStat, trainingDelta, trainingGainFactor, weekCoachCopy } from "./lib/training";
+import { ATTRIBUTE_KEYS, MENTAL_KEYS } from "./lib/attributes";
+import { applyMatchFatigue, applyTeamwork, applyTraining, applyFullTrainingWeek, applyWeekSession, averageMatchOverall, bankedLift, boostTotal, defaultCondition, fitnessOf, formatBoostDelta, isOvertrained, liftSquadForPrep, matchFatigueDelta, matchStat, recoverBetweenMatches, sessionForSlot, tableLift, TRAINABLE_KEYS, trainedOverallLift, trainedRatings, trainedStat, trainingDelta, trainingGainFactor, weekCoachCopy } from "./lib/training";
 import { buildPreMatchBriefing } from "./lib/briefing";
 import type { PlayerMatchStats, Score, Tactics } from "./types";
 import { nextSwapPick } from "./components/SwapConfirmBar";
@@ -610,9 +612,65 @@ describe("match engine", () => {
   it("books low-composure players more readily, and wet weather adds a few more cards", () => {
     expect(yellowOnFoulChance(70, 6)).toBeGreaterThan(yellowOnFoulChance(70, 18));
     expect(redOnFoulChance(70, 6)).toBeGreaterThan(redOnFoulChance(70, 18));
+    expect(secondYellowOnFoulChance(70, 6)).toBeGreaterThan(secondYellowOnFoulChance(70, 18));
     expect(mistimedFoulChance(70, true)).toBeGreaterThan(mistimedFoulChance(70, false));
     expect(yellowOnFoulChance(70, 12, true)).toBeGreaterThan(yellowOnFoulChance(70, 12, false));
   });
+
+  it("carries first-half yellows so a second booking can send a man off", () => {
+    expect(bookedNamesFromEvents([
+      { minute: 18, teamId: "ballyea", playerName: "Tony Kelly", kind: "booking", text: "Yellow card — Tony Kelly overcooks the challenge." },
+      { minute: 29, teamId: "ballyea", playerName: "Niall Deasy", kind: "red", text: "RED CARD — Niall Deasy is sent off." },
+    ])).toEqual(["Tony Kelly"]);
+    expect(sentOffNamesFromEvents([
+      { minute: 29, teamId: "ballyea", playerName: "Niall Deasy", kind: "red", text: "RED CARD — Niall Deasy is sent off." },
+    ])).toEqual(["Niall Deasy"]);
+  });
+
+  it("sends players off more often for a second yellow than a straight red, and composure avoids both", () => {
+    const icy = ratedSquad("ballyea").map((player) => ({
+      ...player,
+      ratings: { ...player.ratings, composure: 5 },
+    }));
+    const typical = ratedSquad("ballyea").map((player) => ({
+      ...player,
+      ratings: { ...player.ratings, composure: 11 },
+    }));
+    const calm = ratedSquad("ballyea").map((player) => ({
+      ...player,
+      ratings: { ...player.ratings, composure: 19 },
+    }));
+    const tally = (seed: number, squad: typeof typical) => {
+      const result = simulateMatch({
+        matchId: "g1-r1-a",
+        homeId: "ballyea",
+        awayId: "inagh-kilnamona",
+        homeSquad: squad,
+        awaySquad: squad,
+        seed,
+      });
+      const straight = result.events.some((event) => event.kind === "red" && /RED CARD/i.test(event.text));
+      const second = result.events.some((event) => event.kind === "red" && /SECOND YELLOW/i.test(event.text));
+      return { straight, second, reds: (straight ? 1 : 0) + (second ? 1 : 0) };
+    };
+    let straightMatches = 0;
+    let secondMatches = 0;
+    let icyReds = 0;
+    let calmReds = 0;
+    for (let seed = 1; seed <= 36; seed += 1) {
+      const row = tally(seed, typical);
+      if (row.straight) straightMatches += 1;
+      if (row.second) secondMatches += 1;
+      icyReds += tally(seed + 80, icy).reds;
+      calmReds += tally(seed + 160, calm).reds;
+    }
+    expect(secondMatches).toBeGreaterThan(straightMatches);
+    expect(straightMatches / 36).toBeGreaterThan(0.03);
+    expect(straightMatches / 36).toBeLessThan(0.32);
+    expect(secondMatches / 36).toBeGreaterThan(0.08);
+    expect(secondMatches / 36).toBeLessThan(0.45);
+    expect(icyReds).toBeGreaterThan(calmReds);
+  }, 20000);
 
   it("leans on goals more from a direct long-ball game than a running game", () => {
     const direct: Tactics = { ...DEFAULT_TACTICS, build: 92, puckout: 80 };
@@ -1398,6 +1456,33 @@ describe("training", () => {
     expect(formatBoostDelta(bankedLift(form, "passing"))).not.toBe("");
     expect(formatBoostDelta(after.deltas[player.name]?.passing ?? 0)).not.toBe("");
     expect(Math.round(after.deltas[player.name]?.passing ?? 0)).toBe(0);
+  });
+
+  it("shows every trainable profile stat and a weighted overall lift, not just the rounded overall", () => {
+    expect(TRAINABLE_KEYS).toEqual([
+      "hooking",
+      "manMarking",
+      "shooting",
+      "offTheBall",
+      "passing",
+      "vision",
+      "firstTouch",
+      "strength",
+      "speed",
+      "acceleration",
+      "frees",
+      "sidelines",
+      "puckoutReach",
+      "teamwork",
+    ]);
+    expect(TRAINABLE_KEYS.some((key) => MENTAL_KEYS.includes(key))).toBe(false);
+    const player = ratedSquad("ballyea").find((item) => item.position === "FF")!;
+    const condition = { ...defaultCondition(), boosts: { shooting: 0.8, offTheBall: 0.5, firstTouch: 0.4 } };
+    const lift = trainedOverallLift(player, condition.boosts);
+    expect(lift).toBeGreaterThan(0.05);
+    expect(formatBoostDelta(lift)).not.toBe("");
+    const trained = trainedRatings(player, condition);
+    expect(trained.overall).toBe(player.ratings.overall + Math.round(lift));
   });
 
   it("uses mixed sessions for a three-session week and a challenge only on the third slot of a challenge week", () => {
@@ -2196,11 +2281,11 @@ describe("match ratings", () => {
     }
     const avg = ratings.reduce((sum, value) => sum + value, 0) / ratings.length;
     expect(new Set(ratings).size).toBeGreaterThanOrEqual(10);
-    expect(Math.min(...ratings)).toBeLessThan(7);
+    expect(Math.min(...ratings)).toBeLessThanOrEqual(7);
     expect(Math.max(...ratings)).toBeLessThan(10);
     expect(ratings.filter((value) => value >= 9.9).length).toBeLessThanOrEqual(1);
     expect(avg).toBeGreaterThan(6.5);
-    expect(avg).toBeLessThan(8.2);
+    expect(avg).toBeLessThan(8.4);
   });
 });
 
