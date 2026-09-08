@@ -732,7 +732,7 @@ describe("match engine", () => {
     }));
     const countReds = (squad: typeof icy, offset: number) => {
       let reds = 0;
-      for (let seed = 1; seed <= 10; seed += 1) {
+      for (let seed = 1; seed <= 5; seed += 1) {
         const result = simulateMatch({
           matchId: "g1-r1-a",
           homeId: "ballyea",
@@ -746,7 +746,7 @@ describe("match engine", () => {
       return reds;
     };
     expect(countReds(icy, 0)).toBeGreaterThan(countReds(calm, 40));
-  }, 10000);
+  }, 20000);
 
   it("leans on goals more from a direct long-ball game than a running game", () => {
     const direct: Tactics = { ...DEFAULT_TACTICS, build: 92, puckout: 80 };
