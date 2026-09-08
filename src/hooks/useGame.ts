@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { seedChampionship } from "../data/championship";
 import { compactName } from "../lib/display";
-import { momentumAt, bookedNamesFromEvents, sentOffNamesFromEvents, simulateMatch } from "../lib/matchEngine";
+import { momentumAt, bookedNamesFromEvents, sentOffNamesFromEvents, simulateMatch, straightRedNamesFromEvents } from "../lib/matchEngine";
 import { combineHalves, reportFromSim } from "../lib/matchStats";
 import { applyMatchForm } from "../lib/form";
 import {
@@ -63,6 +63,7 @@ import {
   keepClubSheet,
   remainingInjuryBudget,
   sitInjuredPlayers,
+  applyMatchSuspensions,
   type RolledInjury,
 } from "../lib/injuries";
 import {
@@ -664,7 +665,10 @@ export function useGame() {
       const rested = recoverAfterMatch(next.condition, squad);
       next = {
         ...next,
-        condition: rested.condition,
+        condition: applyMatchSuspensions(
+          rested.condition,
+          straightRedNamesFromEvents(current.user.events, base.clubId),
+        ),
         trainingDue: true,
         nextMatchPrep: undefined,
       };

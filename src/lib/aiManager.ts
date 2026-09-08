@@ -19,13 +19,14 @@ import { compactName } from "./display";
 import { applyMatchForm, formValue, withStartingForm } from "./form";
 import {
   applyInjury,
+  applyMatchSuspensions,
   closingSheetOf,
   injuredNamesFromEvents,
-  isInjured,
+  isUnavailable,
   keepClubSheet,
   sitInjuredPlayers,
 } from "./injuries";
-import { simulateMatch } from "./matchEngine";
+import { simulateMatch, straightRedNamesFromEvents } from "./matchEngine";
 import { ratingsCtx } from "./balance";
 import {
   assumedOpponentTactics,
@@ -175,7 +176,7 @@ function slotScore(
   const fitness = condition ? fitnessOf(condition) : 70;
   let score = bonus * 10 + familiarity * 8 + player.ratings.overall * 6 + form * 0.4 + fitness * 0.45;
   if (preferred) score += 18;
-  if (isInjured(condition)) score -= 1000;
+  if (isUnavailable(condition)) score -= 1000;
   if (slotIndex !== 0 && condition) {
     if (isOvertrained(condition)) score -= 48;
     else if (fitness <= 58) score -= 24;
@@ -199,7 +200,7 @@ export function pickCpuSheet(options: {
   const seated = sitInjuredPlayers(preferred, squad, options.condition, extra);
   const unavailable = new Set([
     ...extra,
-    ...squad.filter((player) => isInjured(options.condition[player.name])).map((player) => player.name),
+    ...squad.filter((player) => isUnavailable(options.condition[player.name])).map((player) => player.name),
   ]);
   const used = new Set<string>();
   const starters: string[] = [];
@@ -422,7 +423,7 @@ function subPoorPerformers(
   const squad = ratedSquad(teamId, ratingsCtx(seed, balance));
   const starters = [...sheet.starters];
   const subs = [...sheet.subs];
-  const bench = sheet.subs.filter((name) => !isInjured(condition[name]));
+  const bench = sheet.subs.filter((name) => !isUnavailable(condition[name]));
   let swaps = 0;
   for (const poor of worst) {
     if (swaps >= 2) break;
@@ -553,7 +554,7 @@ export function applySimToClub(
   }
   if (kind === "competitive") {
     const rested = recoverAfterMatch(condition, squad);
-    condition = rested.condition;
+    condition = applyMatchSuspensions(rested.condition, straightRedNamesFromEvents(sim.events, clubId));
   }
   return {
     ...club,

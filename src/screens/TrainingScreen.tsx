@@ -4,7 +4,7 @@ import { Toast } from "../components/Toast";
 import { TrainingMixEditor } from "../components/TrainingMixEditor";
 import { WeekShapePicker } from "../components/WeekShapePicker";
 import { ATTRIBUTE_LABELS, ATTRIBUTE_SHORT } from "../lib/attributes";
-import { isInjured } from "../lib/injuries";
+import { isInjured, isSuspended } from "../lib/injuries";
 import { ratedSquad } from "../lib/players";
 import {
   INTENSITY_OPTIONS,
@@ -289,7 +289,7 @@ export function TrainingScreen({ save, onBack, onTrain, onMatchPrep, onSetPlans,
                       <strong>{player.name}</strong>
                       <em>
                         {player.position}
-                        {isInjured(condition) ? " · Out" : ""}
+                        {isInjured(condition) ? " · Out" : isSuspended(condition) ? " · Suspended" : ""}
                       </em>
                     </td>
                     <td>{mixAbbrev(plan.mix)}</td>

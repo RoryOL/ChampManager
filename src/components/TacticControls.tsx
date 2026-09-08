@@ -195,7 +195,7 @@ export function TacticControls({ tactics, onChange, compact = false, xv = [] }: 
         {tactics.shape === "sweeper" ? (
           <p className="tactic-copy">
             The extra defender makes a goal a rare look. Five forwards cover more ground — their match fitness drops
-            faster. A send-off drops you to 6-2-5 and you lose the sweeper.
+            faster. A send-off drops you to 6-2-5 and you lose the sweeper. A second red leaves you with thirteen men.
           </p>
         ) : null}
         {tactics.mentality === "contain" || tactics.shape === "sweeper" || (tactics.pressure ?? 48) < 30 ? (
