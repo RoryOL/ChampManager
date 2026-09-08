@@ -34,7 +34,7 @@ import {
   withChaseTactics,
   yellowOnFoulChance,
 } from "./lib/matchEngine";
-import { clubTactics, DEFAULT_TACTICS, defaultSheet, matchOrderIndex, matchShirtNumber, matchSlot, pickPuckoutTarget, playerAge, ratePlayer, ratedSquad, sheetPlayers, sideStrength } from "./lib/players";
+import { clubTactics, DEFAULT_TACTICS, defaultSheet, expandSheetToPanel, matchOrderIndex, matchShirtNumber, matchSlot, pickPuckoutTarget, playerAge, ratePlayer, ratedSquad, sheetPlayers, sideStrength } from "./lib/players";
 import { nextBatch } from "./lib/schedule";
 import { matchPlayed, scoreTotal } from "./lib/scoring";
 import { ATTRIBUTE_KEYS } from "./lib/attributes";
@@ -42,6 +42,7 @@ import { applyMatchFatigue, applyTeamwork, applyTraining, applyFullTrainingWeek,
 import { buildPreMatchBriefing } from "./lib/briefing";
 import type { PlayerMatchStats, Score, Tactics } from "./types";
 import { nextSwapPick } from "./components/SwapConfirmBar";
+import { MATCH_SUB_LIMIT, isSubstitutionSwap, remainingMatchSubs } from "./lib/subs";
 
 describe("new game championship", () => {
   it("starts with every tie unplayed", () => {
@@ -510,6 +511,27 @@ describe("match engine", () => {
     expect(after.some((event) => event.playerName === hurt && event.kind !== "injury")).toBe(false);
     const minutes = result.players.find((row) => row.name === hurt && row.teamId === "ballyea")?.minutes ?? 62;
     expect(minutes).toBeLessThan(40);
+  });
+
+  it("caps injury replacements at five substitutions", () => {
+    const sheet = defaultSheet("ballyea");
+    const hurt = sheet.starters.slice(8, 14);
+    const result = simulateMatch({
+      matchId: "g1-r1-a",
+      homeId: "ballyea",
+      awayId: "inagh-kilnamona",
+      seed: 11,
+      remainingSubs: { home: MATCH_SUB_LIMIT },
+      forcedRemovals: hurt.map((name, index) => ({
+        minute: 8 + index * 3,
+        teamId: "ballyea",
+        name,
+        kind: "injury" as const,
+      })),
+    });
+    const ours = result.events.filter((event) => event.teamId === "ballyea");
+    expect(ours.filter((event) => event.kind === "injury")).toHaveLength(hurt.length);
+    expect(ours.filter((event) => event.kind === "sub")).toHaveLength(MATCH_SUB_LIMIT);
   });
 
   it("books low-composure players more readily, and wet weather adds a few more cards", () => {
@@ -1599,6 +1621,26 @@ describe("save migration", () => {
     expect(migrated?.weekDeltas).toEqual({});
   });
 
+  it("expands an old five-man bench to the full panel", () => {
+    const squad = ratedSquad("ballyea", 3);
+    const full = defaultSheet("ballyea", 3);
+    const migrated = migrateSave({
+      version: 9,
+      clubId: "ballyea",
+      seed: 3,
+      tactics: { mentality: "balanced", build: 40, puckout: 40, aggression: 40, pressure: 40, shooting: 50, shape: "traditional" },
+      sheet: { starters: full.starters, subs: full.subs.slice(0, 5) },
+      matches: [],
+      inbox: [],
+    });
+    expect(migrated?.sheet.starters).toHaveLength(15);
+    expect(migrated?.sheet.subs).toHaveLength(squad.length - 15);
+    expect(new Set([...(migrated?.sheet.starters ?? []), ...(migrated?.sheet.subs ?? [])]).size).toBe(squad.length);
+    expect(expandSheetToPanel("ballyea", { starters: full.starters, subs: full.subs.slice(0, 5) }, 3).subs.length).toBe(
+      squad.length - 15,
+    );
+  });
+
   it("clamps old training boosts into the new -1 to +2 range", () => {
     const migrated = migrateSave({
       version: 7,
@@ -2056,6 +2098,26 @@ describe("match shirts and swap confirmation", () => {
     expect(matchSlot(sheet, sheet.subs[0])).toBe("SUB");
     expect(matchOrderIndex(sheet, sheet.subs[0])).toBe(15);
     expect(matchShirtNumber(sheet, "Nobody")).toBeUndefined();
+    expect(sheet.subs.length).toBe(ratedSquad("ballyea").length - 15);
+  });
+
+  it("counts only starter-to-bench moves as substitutions", () => {
+    const sheet = defaultSheet("ballyea");
+    expect(isSubstitutionSwap(sheet, sheet.starters[0]!, sheet.starters[1]!)).toBe(false);
+    expect(isSubstitutionSwap(sheet, sheet.starters[0]!, sheet.subs[0]!)).toBe(true);
+    const after = {
+      starters: sheet.starters.map((name, index) => (index === 14 ? sheet.subs[0]! : name)),
+      subs: sheet.subs.map((name, index) => (index === 0 ? sheet.starters[14]! : name)),
+    };
+    expect(remainingMatchSubs([], "ballyea", sheet, after)).toBe(MATCH_SUB_LIMIT - 1);
+    expect(
+      remainingMatchSubs(
+        [{ minute: 12, teamId: "ballyea", playerName: "A", kind: "sub", text: "on", momentum: 50 }],
+        "ballyea",
+        sheet,
+        sheet,
+      ),
+    ).toBe(MATCH_SUB_LIMIT - 1);
   });
 
   it("does not swap until two names are picked", () => {

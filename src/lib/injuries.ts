@@ -196,18 +196,8 @@ export function sitInjuredPlayers(
     if (!replacement) continue;
     starters[index] = replacement;
     const subIndex = subs.indexOf(replacement);
-    if (subIndex >= 0) {
-      const fill = nextHealthy();
-      if (fill) subs[subIndex] = fill;
-      else subs.splice(subIndex, 1);
-    }
-  }
-  for (let index = subs.length - 1; index >= 0; index -= 1) {
-    const name = subs[index];
-    if (!name || !out.has(name)) continue;
-    const fill = nextHealthy();
-    if (fill) subs[index] = fill;
-    else subs.splice(index, 1);
+    if (subIndex >= 0) subs[subIndex] = name;
+    else subs.push(name);
   }
   return { starters, subs };
 }

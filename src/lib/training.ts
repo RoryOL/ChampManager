@@ -445,6 +445,12 @@ export function trainingDelta(condition: PlayerCondition, key: AttributeKey): nu
   return value === 0 ? 0 : value;
 }
 
+export function toneClass(delta: number): string {
+  if (delta > 0) return "is-up";
+  if (delta < 0) return "is-down";
+  return "";
+}
+
 export function bankedLift(condition: PlayerCondition, key: AttributeKey): number {
   return snapBoost(condition.boosts?.[key] ?? 0);
 }

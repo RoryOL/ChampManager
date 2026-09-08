@@ -10,11 +10,12 @@ import { KeyEventsBar } from "../components/KeyEventsBar";
 import { ShotMap } from "../components/ShotMap";
 import { WeatherBanner } from "../components/WeatherBanner";
 import { liveStats } from "../lib/matchStats";
-import { matchShirtNumber, matchSlot, ratedSquad, sheetPlayers, swapPlayersInSheet } from "../lib/players";
+import { ratedSquad, sheetPlayers, swapPlayersInSheet } from "../lib/players";
 import { injuredNamesFromEvents, isInjured, sitInjuredPlayers } from "../lib/injuries";
 import { resolveMatchSides, teamById } from "../lib/resolve";
 import { formatScore } from "../lib/scoring";
 import { SwapConfirmBar, nextSwapPick } from "../components/SwapConfirmBar";
+import { MATCH_SUB_LIMIT, isSubstitutionSwap, remainingMatchSubs } from "../lib/subs";
 
 const SPEEDS = [
   { id: "slow", label: "Slow", ms: 1100 },
@@ -76,7 +77,6 @@ export function MatchScreen({
   }, [live.phase]);
 
   const squad = useMemo(() => ratedSquad(save.clubId, save.seed), [save.clubId, save.seed]);
-  const byName = useMemo(() => new Map(squad.map((player) => [player.name, player])), [squad]);
   const homeSquad = useMemo(() => (homeId ? ratedSquad(homeId, save.seed) : []), [homeId, save.seed]);
   const awaySquad = useMemo(() => (awayId ? ratedSquad(awayId, save.seed) : []), [awayId, save.seed]);
   const htXv = useMemo(() => sheetPlayers(save.clubId, htSheet, save.seed), [htSheet, save.clubId, save.seed]);
@@ -91,6 +91,32 @@ export function MatchScreen({
     home: homeId === save.clubId ? save.condition : undefined,
     away: awayId === save.clubId ? save.condition : undefined,
   });
+  const atHalfTime = live.phase === "half-time";
+  const remainingSubs = remainingMatchSubs(
+    live.user.events.slice(0, live.cursor),
+    save.clubId,
+    live.openingSheet,
+    htSheet,
+  );
+
+  const tapHt = (name: string) => {
+    const next = nextSwapPick(htFirst, htSecond, name);
+    setHtFirst(next.first);
+    setHtSecond(next.second);
+  };
+
+  const confirmHtSwap = () => {
+    if (!htFirst || !htSecond) return;
+    const inSheet = (player: string) => htSheet.starters.includes(player) || htSheet.subs.includes(player);
+    if ((isInjured(save.condition[htFirst]) && !inSheet(htFirst)) || (isInjured(save.condition[htSecond]) && !inSheet(htSecond))) {
+      return;
+    }
+    if (isSubstitutionSwap(htSheet, htFirst, htSecond) && remainingSubs <= 0) return;
+    setHtSheet(swapPlayersInSheet(htSheet, htFirst, htSecond));
+    setHtFirst(null);
+    setHtSecond(null);
+  };
+
   const statsPanel = homeId && awayId ? (
     <MatchStatsPanel
       homeName={home ? compactName(home) : "Home"}
@@ -104,9 +130,13 @@ export function MatchScreen({
       awaySquad={awaySquad}
       homeCondition={homeId === save.clubId ? save.condition : undefined}
       awayCondition={awayId === save.clubId ? save.condition : undefined}
-      homeSheet={live.user.homeSheet}
-      awaySheet={live.user.awaySheet}
-      compact={live.phase !== "finished"}
+      homeSheet={homeId === save.clubId && atHalfTime ? htSheet : live.user.homeSheet}
+      awaySheet={awayId === save.clubId && atHalfTime ? htSheet : live.user.awaySheet}
+      compact={live.phase !== "finished" && !atHalfTime}
+      interactive={atHalfTime}
+      picked={[htFirst, htSecond].filter((name): name is string => Boolean(name))}
+      onTapPlayer={atHalfTime ? tapHt : undefined}
+      pickerClubId={atHalfTime ? save.clubId : undefined}
     />
   ) : null;
 
@@ -122,28 +152,6 @@ export function MatchScreen({
     if (kind === "injury" || kind === "sub") return "is-injury";
     return "is-play";
   };
-
-  const tapHt = (name: string) => {
-    const next = nextSwapPick(htFirst, htSecond, name);
-    setHtFirst(next.first);
-    setHtSecond(next.second);
-  };
-
-  const confirmHtSwap = () => {
-    if (!htFirst || !htSecond) return;
-    const inSheet = (player: string) => htSheet.starters.includes(player) || htSheet.subs.includes(player);
-    if ((isInjured(save.condition[htFirst]) && !inSheet(htFirst)) || (isInjured(save.condition[htSecond]) && !inSheet(htSecond))) {
-      return;
-    }
-    setHtSheet(swapPlayersInSheet(htSheet, htFirst, htSecond));
-    setHtFirst(null);
-    setHtSecond(null);
-  };
-
-  const liveByName = useMemo(
-    () => new Map(chart.players.filter((row) => row.teamId === save.clubId).map((row) => [row.name, row])),
-    [chart.players, save.clubId],
-  );
 
   return (
     <div className="screen screen--match">
@@ -239,48 +247,26 @@ export function MatchScreen({
         <div className="ht-panel">
           <h3>Half-time</h3>
           <p className="hint">
-            In-match stats only, in position order, with today&apos;s shirt numbers. Change dials or takers, pick two
-            names and tap Swap to sub, then send them out.
+            Pick two names in your grid and tap Swap to change a position or bring someone on. You have {remainingSubs} of{" "}
+            {MATCH_SUB_LIMIT} substitutions left. Shirt numbers are 1–15 and 16+ on the bench.
           </p>
-          {statsPanel}
-          <TacticControls tactics={htTactics} onChange={setHtTactics} compact xv={htXv} />
-          <h3 className="list-title">Second-half fifteen</h3>
           <SwapConfirmBar
             first={htFirst}
             second={htSecond}
             onSwap={confirmHtSwap}
+            disabled={Boolean(htFirst && htSecond && isSubstitutionSwap(htSheet, htFirst, htSecond) && remainingSubs <= 0)}
             onClear={() => {
               setHtFirst(null);
               setHtSecond(null);
             }}
-            hint="Pick two names, then tap Swap. Positions do not change until you confirm."
+            hint={
+              remainingSubs <= 0
+                ? "No substitutions left — you can still shuffle the fifteen. Positions do not change until you confirm."
+                : "Pick two names in the grid, then tap Swap. Positions do not change until you confirm."
+            }
           />
-          <ul className="player-list ht-list">
-            {[...htSheet.starters, ...htSheet.subs].map((name) => {
-              const player = byName.get(name);
-              if (!player) return null;
-              const onField = htSheet.starters.includes(name);
-              const slot = matchSlot(htSheet, name);
-              const number = matchShirtNumber(htSheet, name);
-              const row = liveByName.get(name);
-              const picked = name === htFirst || name === htSecond;
-              return (
-                <li key={name}>
-                  <button type="button" className={picked ? "is-picked" : ""} onClick={() => tapHt(name)}>
-                    <b>{number}</b>
-                    <span>
-                      <strong>{player.name}</strong>
-                      <em>
-                        {onField ? slot : "Bench"}
-                        {row ? ` · ${row.minutes}' · Rt ${row.rating}` : ""}
-                      </em>
-                    </span>
-                    <i>{row ? row.rating : "–"}</i>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
+          {statsPanel}
+          <TacticControls tactics={htTactics} onChange={setHtTactics} compact xv={htXv} />
         </div>
       ) : pane === "stats" ? (
         <div className="ht-panel">

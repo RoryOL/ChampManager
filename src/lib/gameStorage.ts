@@ -1,5 +1,5 @@
 import { seedChampionship } from "../data/championship";
-import { DEFAULT_TACTICS, defaultSheet } from "./players";
+import { DEFAULT_TACTICS, defaultSheet, expandSheetToPanel } from "./players";
 import { ATTRIBUTE_KEYS, clampDial } from "./attributes";
 import { ambitionFor, migrateNewsItem } from "./news";
 import { withStartingForm } from "./form";
@@ -187,7 +187,7 @@ export function migrateSave(raw: unknown): GameSave | null {
     clubId: parsed.clubId,
     seed,
     tactics: migrateTactics(parsed.tactics),
-    sheet: parsed.sheet,
+    sheet: expandSheetToPanel(parsed.clubId, parsed.sheet, seed),
     matches: parsed.matches,
     inbox,
     phase: parsed.phase === "preseason" || parsed.phase === "season" ? parsed.phase : returning ? "season" : "preseason",
@@ -212,7 +212,7 @@ export function migrateSave(raw: unknown): GameSave | null {
     reports: parsed.reports ?? {},
     ambition,
     plans: parsed.plans ?? {},
-    lastSheet: parsed.lastSheet,
+    lastSheet: parsed.lastSheet ? expandSheetToPanel(parsed.clubId, parsed.lastSheet, seed) : parsed.lastSheet,
     intensity: migrateIntensity(parsed.intensity),
     weekShape: migrateWeekShape(parsed.weekShape),
     sessionsDone: typeof parsed.sessionsDone === "number" ? Math.max(0, Math.min(3, Math.round(parsed.sessionsDone))) : 0,

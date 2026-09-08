@@ -10,7 +10,7 @@ import {
 import { isInjured } from "../lib/injuries";
 import { formatMatchRating, lastMatchRating, seasonStatsFor } from "../lib/matchStats";
 import { coachPickSheet, matchShirtNumber, matchSlot, ratedSquad, sheetPlayers } from "../lib/players";
-import { conditionFor, fitnessOf, matchRatings } from "../lib/training";
+import { conditionFor, fitnessOf, matchRatings, toneClass, trainingDelta } from "../lib/training";
 
 type Props = {
   save: GameSave;
@@ -54,10 +54,11 @@ export function TacticsScreen({ save, onChange, onSwap, onSetSheet }: Props) {
   return (
     <div className="screen">
       <p className="hint">
-        Match numbers follow today&apos;s fifteen, not squad jerseys. Scroll the table right for every attribute.
-        Tap two names, then Swap, to change a position or bring a sub on — it will not move until you confirm.
+        The whole panel is available today. Fifteen start; you get five substitutions on the day. Match numbers follow
+        today&apos;s fifteen, not squad jerseys. Scroll the table right for every attribute. Tap two names, then Swap, to
+        change a position or bring a sub on — it will not move until you confirm.
       </p>
-      <h3 className="list-title">Fifteen and bench</h3>
+      <h3 className="list-title">Match-day panel</h3>
       <SwapConfirmBar
         first={first}
         second={second}
@@ -85,7 +86,7 @@ export function TacticsScreen({ save, onChange, onSwap, onSetSheet }: Props) {
               <th>Last</th>
               <th>Pos</th>
               <th>Age</th>
-              <th>Ovr</th>
+              <th className="ovr">Ovr</th>
               {ATTRIBUTE_KEYS.map((key) => (
                 <th key={key} title={ATTRIBUTE_LABELS[key]}>
                   {ATTRIBUTE_SHORT[key]}
@@ -103,6 +104,7 @@ export function TacticsScreen({ save, onChange, onSwap, onSetSheet }: Props) {
               const last = lastMatchRating(save.reports, save.clubId, name, matchIds);
               const slot = matchSlot(save.sheet, name);
               const number = matchShirtNumber(save.sheet, name);
+              const overallDelta = ratings.overall - player.ratings.overall;
               const onField = save.sheet.starters.includes(name);
               const picked = name === first || name === second;
               return (
@@ -122,9 +124,11 @@ export function TacticsScreen({ save, onChange, onSwap, onSetSheet }: Props) {
                   <td>{formatMatchRating(last)}</td>
                   <td>{player.position}</td>
                   <td>{player.age}</td>
-                  <td>{ratings.overall}</td>
+                  <td className={`ovr ${toneClass(overallDelta)}`}>{ratings.overall}</td>
                   {ATTRIBUTE_KEYS.map((key) => (
-                    <td key={key}>{ratings[key]}</td>
+                    <td key={key} className={toneClass(trainingDelta(condition, key))}>
+                      {ratings[key]}
+                    </td>
                   ))}
                 </tr>
               );

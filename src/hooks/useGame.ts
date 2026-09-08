@@ -44,6 +44,7 @@ import {
   persistCampaign,
 } from "../lib/multiplayer/store";
 import { clubTactics, defaultSheet, ratedSquad, swapPlayersInSheet } from "../lib/players";
+import { remainingMatchSubs } from "../lib/subs";
 import { resolveMatchSides, teamById } from "../lib/resolve";
 import { nextBatch } from "../lib/schedule";
 import { formatScore, matchPlayed, scoreTotal, stageLabel } from "../lib/scoring";
@@ -407,32 +408,9 @@ export function useGame() {
     [activeSeat, campaign, commitCampaign, commitSolo, save],
   );
 
-  const tapPlayer = useCallback(
-    (name: string) => {
-      const editingOwnTeam = !viewTeamId || viewTeamId === save?.clubId;
-      if (!picked) {
-        setPicked(name);
-        return;
-      }
-      if (picked === name) {
-        setPicked(null);
-        return;
-      }
-      if (!editingOwnTeam || !save) {
-        setPicked(name);
-        return;
-      }
-      const inSheet = (player: string) => save.sheet.starters.includes(player) || save.sheet.subs.includes(player);
-      const pickedOut = Boolean(save.condition[picked]?.injury && save.condition[picked]?.injury?.weeksLeft);
-      const nameOut = Boolean(save.condition[name]?.injury && save.condition[name]?.injury?.weeksLeft);
-      if ((nameOut && !inSheet(name)) || (pickedOut && !inSheet(picked))) {
-        setPicked(name);
-        return;
-      }
-      swapPlayers(picked, name);
-    },
-    [picked, save, swapPlayers, viewTeamId],
-  );
+  const tapPlayer = useCallback((name: string) => {
+    setPicked((current) => (current === name ? null : name));
+  }, []);
 
   const passDevice = useCallback((playerId: string) => {
     setActivePlayerId(playerId);
@@ -773,6 +751,20 @@ export function useGame() {
         seed: save.seed,
         gameSeed: save.seed,
         climate: first.climate,
+        remainingSubs: {
+          home: remainingMatchSubs(
+            first.events,
+            homeId,
+            first.homeSheet,
+            homeId === save.clubId ? workingSheet : first.homeSheet,
+          ),
+          away: remainingMatchSubs(
+            first.events,
+            awayId,
+            first.awaySheet,
+            awayId === save.clubId ? workingSheet : first.awaySheet,
+          ),
+        },
       });
       const decorated = decorateUserMatch(second, save);
       const combined = combineHalves(first, decorated.sim, {

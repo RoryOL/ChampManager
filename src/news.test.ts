@@ -77,6 +77,7 @@ describe("injuries", () => {
     });
     const sheet = sitInjuredPlayers(defaultSheet("clooney-quin"), squad, injured);
     expect(sheet.starters).not.toContain(name);
+    expect(sheet.subs).toContain(name);
     const mid = tickInjuries(injured, squad);
     expect(mid.recovered).toEqual([]);
     expect(mid.condition[name]?.injury?.weeksLeft).toBe(1);
@@ -149,12 +150,12 @@ describe("news kinds", () => {
 });
 
 describe("coach team pick", () => {
-  it("names a unique fifteen by slot and a five-man bench", () => {
+  it("names a unique fifteen by slot and the rest of the panel on the bench", () => {
     const squad = ratedSquad("ballyea");
     const sheet = coachPickSheet(squad, {});
     expect(sheet.starters).toHaveLength(15);
-    expect(sheet.subs).toHaveLength(5);
-    expect(new Set([...sheet.starters, ...sheet.subs]).size).toBe(20);
+    expect(sheet.subs).toHaveLength(squad.length - 15);
+    expect(new Set([...sheet.starters, ...sheet.subs]).size).toBe(squad.length);
     const gk = squad.find((player) => player.name === sheet.starters[0]);
     expect(gk?.position).toBe("GK");
     expect(sheet.starters).toContain("Tony Kelly");

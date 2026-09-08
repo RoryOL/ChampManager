@@ -1,7 +1,5 @@
-import { useEffect, useRef } from "react";
-import type { GameSave, PlayerCondition, PlayerMatchStats, PlayerPlan, RatedPlayer, Team, TrainingIntensity } from "../types";
+import type { GameSave, PlayerCondition, PlayerMatchStats, RatedPlayer, Team } from "../types";
 import { ClubBadge } from "../components/ClubBadge";
-import { TrainingMixEditor } from "../components/TrainingMixEditor";
 import {
   ATTRIBUTE_GROUPS,
   ATTRIBUTE_KEYS,
@@ -16,7 +14,7 @@ import { compactName } from "../lib/display";
 import { formatPair, seasonStatsFor } from "../lib/matchStats";
 import { defaultSheet, matchOrderIndex, matchShirtNumber, ratedSquad } from "../lib/players";
 import { FORMATION_ROWS } from "../lib/squads";
-import { conditionFor, fitnessOf, isOvertrained, matchRatings, planFor, trainedRatings, trainingDelta } from "../lib/training";
+import { conditionFor, fitnessOf, isOvertrained, matchRatings, toneClass, trainedRatings, trainingDelta } from "../lib/training";
 import { injuryLine, isInjured } from "../lib/injuries";
 
 type Props = {
@@ -26,7 +24,6 @@ type Props = {
   onViewTeam: (teamId: string) => void;
   picked: string | null;
   onTapPlayer: (name: string) => void;
-  onSetPlan?: (name: string, plan: PlayerPlan) => void;
   onOpenTraining?: () => void;
 };
 
@@ -47,17 +44,11 @@ function PlayerDetail({
   condition,
   showCondition,
   season,
-  plan,
-  onSetPlan,
-  squadIntensity,
 }: {
   player: RatedPlayer;
   condition?: PlayerCondition;
   showCondition: boolean;
   season: PlayerMatchStats;
-  plan?: PlayerPlan;
-  onSetPlan?: (plan: PlayerPlan) => void;
-  squadIntensity?: TrainingIntensity;
 }) {
   const match = showCondition && condition ? matchRatings(player, condition) : player.ratings;
   const trained = showCondition && condition ? trainedRatings(player, condition) : player.ratings;
@@ -120,12 +111,6 @@ function PlayerDetail({
           )}
         </div>
       ) : null}
-      {showCondition && plan && onSetPlan ? (
-        <div className="attr-group">
-          <h4>Schedule and intensity</h4>
-          <TrainingMixEditor plan={plan} squadIntensity={squadIntensity} onChange={onSetPlan} />
-        </div>
-      ) : null}
       {ATTRIBUTE_GROUPS.map((group) => (
         <div key={group.id} className="attr-group">
           <h4>{group.label}</h4>
@@ -183,7 +168,7 @@ function PlayerDetail({
   );
 }
 
-export function SquadScreen({ save, teams, viewTeamId, onViewTeam, picked, onTapPlayer, onSetPlan, onOpenTraining }: Props) {
+export function SquadScreen({ save, teams, viewTeamId, onViewTeam, picked, onTapPlayer, onOpenTraining }: Props) {
   const ownTeam = viewTeamId === save.clubId;
   const squad = ratedSquad(viewTeamId, save.seed);
   const byName = new Map(squad.map((player) => [player.name, player]));
@@ -192,12 +177,6 @@ export function SquadScreen({ save, teams, viewTeamId, onViewTeam, picked, onTap
     .map((name) => byName.get(name))
     .filter((player): player is RatedPlayer => Boolean(player));
   const selected = picked ? byName.get(picked) : undefined;
-  const detailRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (!picked) return;
-    detailRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
-  }, [picked]);
 
   const displayOverall = (player: RatedPlayer) => {
     if (!ownTeam) return { value: player.ratings.overall, delta: 0 };
@@ -222,8 +201,8 @@ export function SquadScreen({ save, teams, viewTeamId, onViewTeam, picked, onTap
     <div className="screen">
       <p className="hint">
         {ownTeam
-          ? "Numbers are today's fifteen (1–15) and bench, not squad jerseys. Tap a row for the full card — match fitness and sharpness sit there. Training lifts show as small green or red deltas."
-          : "Scouting view — inspect any championship panel. Numbers follow that club's likely fifteen. Swap is only for your own club."}
+          ? "Numbers are today's fifteen (1–15) and the rest of the panel. Tap a row for the full card — match fitness and sharpness sit there. Training lifts show as small green or red deltas. Swaps are on Tactics."
+          : "Scouting view — inspect any championship panel. Numbers follow that club's likely fifteen. You cannot change their team from here."}
       </p>
       <div className="club-strip">
         {teams.map((team) => (
@@ -295,7 +274,7 @@ export function SquadScreen({ save, teams, viewTeamId, onViewTeam, picked, onTap
               <th>Player</th>
               <th>Pos</th>
               <th>Age</th>
-              <th>Ovr</th>
+              <th className="ovr">Ovr</th>
               {ATTRIBUTE_KEYS.map((key) => (
                 <th key={key} title={ATTRIBUTE_LABELS[key]}>
                   {ATTRIBUTE_SHORT[key]}
@@ -325,12 +304,15 @@ export function SquadScreen({ save, teams, viewTeamId, onViewTeam, picked, onTap
                   </td>
                   <td>{player.position}</td>
                   <td>{player.age}</td>
-                  <td className={shown.delta > 0 ? "is-up" : shown.delta < 0 ? "is-down" : ""}>
-                    {shown.value}
-                  </td>
-                  {ATTRIBUTE_KEYS.map((key) => (
-                    <td key={key}>{ratings[key]}</td>
-                  ))}
+                  <td className={`ovr ${toneClass(shown.delta)}`}>{shown.value}</td>
+                  {ATTRIBUTE_KEYS.map((key) => {
+                    const delta = condition ? trainingDelta(condition, key) : 0;
+                    return (
+                      <td key={key} className={toneClass(delta)}>
+                        {ratings[key]}
+                      </td>
+                    );
+                  })}
                 </tr>
               );
             })}
@@ -338,16 +320,26 @@ export function SquadScreen({ save, teams, viewTeamId, onViewTeam, picked, onTap
         </table>
       </div>
       {selected ? (
-        <div ref={detailRef}>
-          <PlayerDetail
-            player={selected}
-            condition={ownTeam ? conditionFor(selected.name, save.condition) : undefined}
-            showCondition={ownTeam}
-            season={seasonStatsFor(save.reports, viewTeamId, selected.name)}
-            plan={ownTeam ? planFor(selected.name, save.plans, selected.position) : undefined}
-            squadIntensity={save.intensity}
-            onSetPlan={ownTeam && onSetPlan ? (plan) => onSetPlan(selected.name, plan) : undefined}
-          />
+        <div
+          className="player-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="player-detail"
+          onClick={() => onTapPlayer(selected.name)}
+        >
+          <div className="player-overlay__panel" onClick={(event) => event.stopPropagation()}>
+            <div className="player-overlay__bar">
+              <button type="button" className="btn btn--ghost" onClick={() => onTapPlayer(selected.name)}>
+                Close
+              </button>
+            </div>
+            <PlayerDetail
+              player={selected}
+              condition={ownTeam ? conditionFor(selected.name, save.condition) : undefined}
+              showCondition={ownTeam}
+              season={seasonStatsFor(save.reports, viewTeamId, selected.name)}
+            />
+          </div>
         </div>
       ) : null}
     </div>

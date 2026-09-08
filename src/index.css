@@ -701,6 +701,38 @@ html.native-app .device {
   margin-top: 8px;
 }
 
+.player-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(8, 12, 20, 0.72);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 12px;
+  overflow: auto;
+}
+
+.player-overlay__panel {
+  width: min(560px, 100%);
+  max-height: calc(100dvh - 24px);
+  overflow: auto;
+  background: var(--bg, #121820);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 8px 8px 16px;
+}
+
+.player-overlay__bar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 4px;
+}
+
+.player-overlay .player-card {
+  margin-top: 0;
+}
+
 .swap-bar {
   margin: 0 0 10px;
 }
@@ -1327,6 +1359,15 @@ html.native-app .device {
   font-weight: 700;
 }
 
+.squad-table th.ovr,
+.squad-table td.ovr,
+.player-chart th.ovr,
+.player-chart td.ovr {
+  font-size: 13px;
+  font-weight: 800;
+  min-width: 34px;
+}
+
 .club-banner--overview .btn {
   margin-left: auto;
   flex-shrink: 0;
@@ -1645,6 +1686,30 @@ html.native-app .device {
 .player-chart tbody th.is-sticky {
   font-weight: 600;
   color: var(--ink);
+}
+
+.player-chart tbody tr.is-interactive {
+  cursor: pointer;
+}
+
+.player-chart tbody tr.is-interactive:hover th,
+.player-chart tbody tr.is-interactive:hover td {
+  background: var(--surface-2);
+}
+
+.player-chart tbody tr.is-picked th,
+.player-chart tbody tr.is-picked td {
+  background: var(--you);
+}
+
+.player-chart td.is-up {
+  color: #7dce8a;
+  font-weight: 700;
+}
+
+.player-chart td.is-down {
+  color: #f0a3a3;
+  font-weight: 700;
 }
 
 .weather-banner {

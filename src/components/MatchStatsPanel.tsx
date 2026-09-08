@@ -18,6 +18,10 @@ type Props = {
   homeSheet?: TeamSheet;
   awaySheet?: TeamSheet;
   compact?: boolean;
+  interactive?: boolean;
+  picked?: string[];
+  onTapPlayer?: (name: string) => void;
+  pickerClubId?: string;
 };
 
 function TeamRow({
@@ -53,6 +57,10 @@ export function MatchStatsPanel({
   homeSheet,
   awaySheet,
   compact = false,
+  interactive = false,
+  picked = [],
+  onTapPlayer,
+  pickerClubId,
 }: Props) {
   const [team, setTeam] = useState<"home" | "away">("home");
   const homePlayers = players.filter((player) => player.teamId === homeId);
@@ -121,9 +129,14 @@ export function MatchStatsPanel({
         sheet={team === "home" ? homeSheet : awaySheet}
         condition={team === "home" ? homeCondition : awayCondition}
         showAttributes={!compact}
+        interactive={interactive && (team === "home" ? homeId : awayId) === pickerClubId}
+        picked={picked}
+        onTap={onTapPlayer}
       />
       {compact ? (
         <p className="hint hint--tight">Listed in match position order. Shirt numbers are 1–15 and 16+ on the bench.</p>
+      ) : interactive ? (
+        <p className="hint hint--tight">Tap two of your lads in the grid, then Swap. Swipe sideways for every rating.</p>
       ) : (
         <p className="hint hint--tight">Swipe the table sideways for every rating and match stat.</p>
       )}
