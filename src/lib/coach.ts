@@ -119,7 +119,7 @@ export function buildCoachReport(input: CoachInput): string[] {
 
   if (ourTactics.puckout >= 62 && (us.puckoutsAttempted ?? 0) >= 4 && us.puckoutsWon + 1 <= lostPuckouts(us)) {
     notes.push(
-      `Long puck-outs were the plan (${puckoutLabel(ourTactics.puckout).toLowerCase()}), yet we lost the restarts ${us.puckoutsWon}-${lostPuckouts(us)}. Shorten a few to the half-backs.`,
+      `Long puck-outs were the plan (${puckoutLabel(ourTactics.puckout).toLowerCase()}), yet we lost the restarts ${us.puckoutsWon}-${lostPuckouts(us)}. Shorten a few to the back line.`,
     );
   } else if (ourTactics.puckout <= 38 && (us.puckoutsAttempted ?? 0) >= 4 && us.puckoutsWon + 2 < lostPuckouts(us)) {
     notes.push(`Short restarts were turned over. A few longer contests would at least ask a question.`);

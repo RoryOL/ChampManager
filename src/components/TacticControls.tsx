@@ -87,7 +87,7 @@ export function TacticControls({ tactics, onChange, compact = false, xv = [] }: 
       <section className="card">
         <h3>Puck-out</h3>
         <p className="tactic-copy">
-          Short to the half-backs on the left, long to a midfielder or half-forward on the right. Currently{" "}
+          Short to the full-back line on the left, long to a midfielder or half-forward on the right. Currently{" "}
           <strong>{puckoutLabel(tactics.puckout)}</strong>.
         </p>
         <label className="dial">
