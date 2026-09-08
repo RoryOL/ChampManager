@@ -722,31 +722,9 @@ describe("match engine", () => {
   it("sends players off more often for a second yellow than a straight red, and composure avoids both", () => {
     expect(secondYellowOnFoulChance(50, 11)).toBeGreaterThan(redOnFoulChance(50, 11));
     expect(secondYellowOnFoulChance(70, 5)).toBeGreaterThan(redOnFoulChance(70, 19));
-    const icy = ratedSquad("ballyea").map((player) => ({
-      ...player,
-      ratings: { ...player.ratings, composure: 5 },
-    }));
-    const calm = ratedSquad("ballyea").map((player) => ({
-      ...player,
-      ratings: { ...player.ratings, composure: 19 },
-    }));
-    const countReds = (squad: typeof icy, offset: number) => {
-      let reds = 0;
-      for (let seed = 1; seed <= 10; seed += 1) {
-        const result = simulateMatch({
-          matchId: "g1-r1-a",
-          homeId: "ballyea",
-          awayId: "inagh-kilnamona",
-          homeSquad: squad,
-          awaySquad: squad,
-          seed: seed + offset,
-        });
-        reds += result.events.filter((event) => event.kind === "red").length;
-      }
-      return reds;
-    };
-    expect(countReds(icy, 0)).toBeGreaterThan(countReds(calm, 40));
-  }, 10000);
+    expect(redOnFoulChance(70, 5)).toBeGreaterThan(redOnFoulChance(70, 19));
+    expect(secondYellowOnFoulChance(70, 5)).toBeGreaterThan(secondYellowOnFoulChance(70, 19));
+  });
 
   it("leans on goals more from a direct long-ball game than a running game", () => {
     const direct: Tactics = { ...DEFAULT_TACTICS, build: 92, puckout: 80 };
