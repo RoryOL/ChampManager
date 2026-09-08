@@ -155,6 +155,13 @@ describe("player ratings", () => {
     expect(GRADE_LABEL.A).toMatch(/Clare senior/);
   });
 
+  it("does not treat Darren O'Brien as a Clare senior hurler", () => {
+    const obrien = ratedSquad("eire-og").find((player) => player.name === "Darren O'Brien");
+    expect(obrien?.grade).toBe("D");
+    expect(obrien?.ratings.overall).toBeLessThanOrEqual(12);
+    expect(profileFor("eire-og", "Darren O'Brien").note).toMatch(/not a Clare senior hurler/i);
+  });
+
   it("keeps grade bands across the championship panels", () => {
     const panel = seedChampionship.teams.flatMap((team) => ratedSquad(team.id));
     const band: Record<string, [number, number]> = { A: [15, 20], B: [12, 16], C: [10, 15], D: [5, 12] };

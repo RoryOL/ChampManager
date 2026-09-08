@@ -153,7 +153,7 @@ const LISTINGS: Record<string, Listing[]> = {
   "eire-og": [
     { name: "Shane O'Donnell", grade: "A", age: 32, position: "FF", overallMin: 18, overallMax: 19, note: "Current Clare senior — All-Star forward" },
     { name: "David Reidy", grade: "A", age: 33, position: "MF", overallMin: 15, overallMax: 17, note: "Current Clare senior" },
-    { name: "Darren O'Brien", grade: "A", age: 24, position: "HF", overallMin: 15, overallMax: 16, note: "Current Clare senior" },
+    { name: "Darren O'Brien", grade: "D", age: 24, position: "HF", note: "Club hurler — dual footballer, not a Clare senior hurler" },
     { name: "Danny Russell", grade: "B", age: 29, position: "FF", overallMin: 13, overallMax: 16, note: "Former Clare senior" },
     { name: "Aaron Fitzgerald", grade: "B", age: 28, position: "HB", overallMin: 12, overallMax: 15, note: "Former Clare senior panellist" },
     { name: "Fionan Treacy", grade: "C", age: 21, position: "FB", overallMin: 11, overallMax: 14, note: "Clare U20" },
