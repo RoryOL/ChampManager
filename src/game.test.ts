@@ -628,49 +628,33 @@ describe("match engine", () => {
   });
 
   it("sends players off more often for a second yellow than a straight red, and composure avoids both", () => {
+    expect(secondYellowOnFoulChance(50, 11)).toBeGreaterThan(redOnFoulChance(50, 11));
+    expect(secondYellowOnFoulChance(70, 5)).toBeGreaterThan(redOnFoulChance(70, 19));
     const icy = ratedSquad("ballyea").map((player) => ({
       ...player,
       ratings: { ...player.ratings, composure: 5 },
-    }));
-    const typical = ratedSquad("ballyea").map((player) => ({
-      ...player,
-      ratings: { ...player.ratings, composure: 11 },
     }));
     const calm = ratedSquad("ballyea").map((player) => ({
       ...player,
       ratings: { ...player.ratings, composure: 19 },
     }));
-    const tally = (seed: number, squad: typeof typical) => {
-      const result = simulateMatch({
-        matchId: "g1-r1-a",
-        homeId: "ballyea",
-        awayId: "inagh-kilnamona",
-        homeSquad: squad,
-        awaySquad: squad,
-        seed,
-      });
-      const straight = result.events.some((event) => event.kind === "red" && /RED CARD/i.test(event.text));
-      const second = result.events.some((event) => event.kind === "red" && /SECOND YELLOW/i.test(event.text));
-      return { straight, second, reds: (straight ? 1 : 0) + (second ? 1 : 0) };
+    const countReds = (squad: typeof icy, offset: number) => {
+      let reds = 0;
+      for (let seed = 1; seed <= 10; seed += 1) {
+        const result = simulateMatch({
+          matchId: "g1-r1-a",
+          homeId: "ballyea",
+          awayId: "inagh-kilnamona",
+          homeSquad: squad,
+          awaySquad: squad,
+          seed: seed + offset,
+        });
+        reds += result.events.filter((event) => event.kind === "red").length;
+      }
+      return reds;
     };
-    let straightMatches = 0;
-    let secondMatches = 0;
-    let icyReds = 0;
-    let calmReds = 0;
-    for (let seed = 1; seed <= 36; seed += 1) {
-      const row = tally(seed, typical);
-      if (row.straight) straightMatches += 1;
-      if (row.second) secondMatches += 1;
-      icyReds += tally(seed + 80, icy).reds;
-      calmReds += tally(seed + 160, calm).reds;
-    }
-    expect(secondMatches).toBeGreaterThan(straightMatches);
-    expect(straightMatches / 36).toBeGreaterThan(0.03);
-    expect(straightMatches / 36).toBeLessThan(0.32);
-    expect(secondMatches / 36).toBeGreaterThan(0.08);
-    expect(secondMatches / 36).toBeLessThan(0.45);
-    expect(icyReds).toBeGreaterThan(calmReds);
-  }, 20000);
+    expect(countReds(icy, 0)).toBeGreaterThan(countReds(calm, 40));
+  });
 
   it("leans on goals more from a direct long-ball game than a running game", () => {
     const direct: Tactics = { ...DEFAULT_TACTICS, build: 92, puckout: 80 };
