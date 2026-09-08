@@ -20,6 +20,38 @@ export function shotDistanceM(shooting: number, strikingDistance: number, random
   return Math.max(10, Math.min(82, mean + (random() - 0.5) * spread * 2));
 }
 
+/** Half-backs (4–6) and midfielders (7–8) take the distance looks. */
+export function midfieldDistanceSlot(index: number): boolean {
+  return index >= 4 && index <= 8;
+}
+
+/** Chance a midfielder or half-back pulls the trigger from range. Easier with space. */
+export function distanceAttemptChance(
+  strikingDistance: number,
+  shooting: number,
+  slotIndex: number,
+  pressure = 48,
+): number {
+  if (!midfieldDistanceSlot(slotIndex)) return 0;
+  const dst = Math.max(0, strikingDistance - 8);
+  const sht = Math.max(0, shooting - 8);
+  const line = slotIndex >= 7 ? 1 : 0.82;
+  const press = clampDial(pressure) / 100;
+  const space = 1 + (0.48 - press) * 0.28;
+  return Math.min(0.58, Math.max(0, (0.04 + dst * 0.026 + sht * 0.016) * line * space));
+}
+
+export function distanceShotM(strikingDistance: number, random: () => number): number {
+  const mean = 54 + (strikingDistance - 12) * 0.4;
+  return Math.max(46, Math.min(70, mean + (random() - 0.5) * 12));
+}
+
+/** Distance shots drop more easily when the press is on. */
+export function distancePressureMul(pressure: number): number {
+  const press = clampDial(pressure) / 100;
+  return Math.min(1.2, Math.max(0.78, 1.14 - press * 0.36));
+}
+
 export function openPlayConversion(options: {
   strikingDistance: number;
   composure: number;

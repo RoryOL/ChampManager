@@ -101,12 +101,13 @@ export function halfWindBlurb(climate: MatchClimate, period: "first" | "second")
   return "A mixed breeze, more across than down the pitch.";
 }
 
-export function passCompleteChance(climate: MatchClimate, direct: number, teamwork = 12): number {
+export function passCompleteChance(climate: MatchClimate, direct: number, teamwork = 12, workrate = 12): number {
   let chance = 0.74 - direct * 0.06;
   if (climate.sky === "wet") chance -= 0.14;
   else if (climate.sky === "cold") chance -= 0.05;
   chance -= crossWind(climate) * 0.04;
   chance += (teamwork - 12) * 0.01;
+  chance += (workrate - 12) * 0.006;
   return Math.min(0.86, Math.max(0.42, chance));
 }
 
