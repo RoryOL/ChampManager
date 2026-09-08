@@ -29,12 +29,17 @@ import {
 import { clubTactics, defaultSheet, expandSheetToPanel, pickPuckoutTarget, sheetPlayers, sideProfile, sideTeamwork, aerialContestRating, type SideProfile } from "./players";
 import { MATCH_SUB_LIMIT } from "./subs";
 import {
+  attackingTop,
   conversionContext,
   goalChanceFromDistance,
   makeShot,
+  nearestToSpot,
   openPlayConversion,
   setPieceConversion,
   shotDistanceM,
+  sidelineLanding,
+  sidelineSpot,
+  type SidelineZone,
 } from "./shooting";
 import { scoreTotal } from "./scoring";
 import { liftSquadRatings } from "./difficulty";
@@ -79,8 +84,30 @@ export function sixtyFiveChance(frees: number, strikingDistance: number, composu
   return Math.min(0.86, Math.max(0.18, 0.1 + frees * 0.028 + strikingDistance * 0.01 + composure * 0.006));
 }
 
+export function sidelinePointChance(
+  sidelines: number,
+  strikingDistance: number,
+  composure = 12,
+  distanceM = 46,
+): number {
+  const quality = sidelines * 0.6 + strikingDistance * 0.28 + composure * 0.12;
+  const qualityTerm = (quality - 12) * 0.014;
+  const distanceTerm = (45 - distanceM) * 0.0032;
+  return Math.min(0.22, Math.max(0.006, 0.07 + qualityTerm + distanceTerm));
+}
+
+/** @deprecated Use sidelinePointChance — kept as a thin alias for older tests. */
 export function sidelineChance(sidelines: number, strikingDistance: number): number {
-  return Math.min(0.72, Math.max(0.1, 0.06 + sidelines * 0.028 + strikingDistance * 0.008));
+  return sidelinePointChance(sidelines, strikingDistance);
+}
+
+export function sidelineFindChance(sidelines: number, passing: number, vision: number): number {
+  return Math.min(0.58, Math.max(0.1, 0.06 + sidelines * 0.016 + passing * 0.008 + vision * 0.006));
+}
+
+export function sidelineCarryM(sidelines: number, strikingDistance: number, random: () => number): number {
+  const mean = 22 + strikingDistance * 1.85 + sidelines * 1.15;
+  return Math.max(16, Math.min(98, mean + (random() - 0.5) * 18));
 }
 
 /** How much a side is sitting in: contain, sweeper and sitting off the press. */
@@ -334,6 +361,7 @@ const FEATURED_FEED: ReadonlySet<MatchEventKind> = new Set([
   "free",
   "sixtyFive",
   "sideline",
+  "play",
   "booking",
   "red",
   "half",
@@ -381,6 +409,9 @@ export function nextMomentum(
       break;
     case "puckout":
       delta = /broken|turned over/i.test(event.text) ? -6 : 4;
+      break;
+    case "play":
+      delta = 3;
       break;
     case "turnover":
       delta = -4;
@@ -781,21 +812,15 @@ export function simulateMatch(options: {
 
   const attemptSetPiece = (
     teamId: string,
-    kind: "free" | "sixtyFive" | "sideline" | "longFree" | "shortFree",
+    kind: "free" | "sixtyFive" | "longFree" | "shortFree",
     profile: SideProfile,
     minute: number,
     newSequence = true,
   ) => {
-    const resolved =
-      kind === "sideline" ? "sideline" : kind === "sixtyFive" || kind === "longFree" ? "longFree" : "shortFree";
-    const taker =
-      resolved === "sideline"
-        ? profile.sidelineTaker
-        : resolved === "longFree"
-          ? profile.longFreeTaker
-          : profile.shortFreeTaker;
+    const resolved = kind === "sixtyFive" || kind === "longFree" ? "longFree" : "shortFree";
+    const taker = resolved === "longFree" ? profile.longFreeTaker : profile.shortFreeTaker;
     const playerName = taker?.name ?? pickName(teamId === options.homeId ? homeNames : awayNames, random);
-    const eventKind: MatchEventKind = resolved === "sideline" ? "sideline" : kind === "sixtyFive" ? "sixtyFive" : "free";
+    const eventKind: MatchEventKind = kind === "sixtyFive" ? "sixtyFive" : "free";
     const rawChance =
       eventKind === "free" && resolved === "longFree"
         ? sixtyFiveChance(
@@ -809,16 +834,13 @@ export function simulateMatch(options: {
               taker?.ratings.composure ?? 11,
               taker?.ratings.underPressure ?? 11,
             )
-          : eventKind === "sixtyFive"
-            ? sixtyFiveChance(
-                taker?.ratings.frees ?? 11,
-                taker?.ratings.strikingDistance ?? 11,
-                taker?.ratings.composure ?? 11,
-              )
-            : sidelineChance(taker?.ratings.sidelines ?? 11, taker?.ratings.strikingDistance ?? 11);
+          : sixtyFiveChance(
+              taker?.ratings.frees ?? 11,
+              taker?.ratings.strikingDistance ?? 11,
+              taker?.ratings.composure ?? 11,
+            );
 
-    const distanceM =
-      eventKind === "sixtyFive" ? 65 : resolved === "longFree" ? 52 : resolved === "sideline" ? 46 : 28;
+    const distanceM = eventKind === "sixtyFive" ? 65 : resolved === "longFree" ? 52 : 28;
     const wind = conversionContext(climate, teamId, options.homeId, period);
     const chance = applyFormChance(setPieceConversion(rawChance, distanceM, wind.withWind, wind.crossWind), formOf(teamId, playerName));
 
@@ -827,9 +849,7 @@ export function simulateMatch(options: {
     const setPiece =
       eventKind === "free"
         ? { freesAttempted: 1, freesScored: scored ? 1 : 0 }
-        : eventKind === "sixtyFive"
-          ? { sixtyFivesAttempted: 1, sixtyFivesScored: scored ? 1 : 0 }
-          : {};
+        : { sixtyFivesAttempted: 1, sixtyFivesScored: scored ? 1 : 0 };
     if (scored) {
       credit(teamId, "point");
       const text =
@@ -837,9 +857,7 @@ export function simulateMatch(options: {
           ? resolved === "longFree"
             ? `${playerName} points from a long free.`
             : `${playerName} points from a short free.`
-          : eventKind === "sixtyFive"
-            ? `65 — ${playerName} splits the posts.`
-            : `Sideline cut from ${playerName}.`;
+          : `65 — ${playerName} splits the posts.`;
       push({
         minute,
         teamId,
@@ -857,9 +875,7 @@ export function simulateMatch(options: {
         text:
           eventKind === "free"
             ? `${resolved === "longFree" ? "Long free" : "Free"} out wide from ${playerName}.`
-            : eventKind === "sixtyFive"
-              ? `${playerName}'s 65 drops short.`
-              : `${playerName}'s sideline drifts wide.`,
+            : `${playerName}'s 65 drops short.`,
         credits: [{ ...gain, ...setPiece, shots: 1 }],
       });
     }
@@ -874,6 +890,127 @@ export function simulateMatch(options: {
         distanceM,
         period,
         random,
+      }),
+    );
+  };
+
+  const attemptSideline = (teamId: string, zone: SidelineZone, minute: number) => {
+    const names = fieldNames(teamId);
+    const towardGoal = attackingTop(teamId, options.homeId, period);
+    const spot = sidelineSpot(towardGoal, zone, random);
+    const takerPick = nearestToSpot(names, towardGoal, spot.x, spot.y);
+    const playerName = takerPick.name;
+    const player = playerOf(teamId, playerName);
+    const sidelines = player?.ratings.sidelines ?? 11;
+    const striking = player?.ratings.strikingDistance ?? 11;
+    const composure = player?.ratings.composure ?? 11;
+    const passing = player?.ratings.passing ?? 11;
+    const vision = player?.ratings.vision ?? 11;
+    const wind = conversionContext(climate, teamId, options.homeId, period);
+    const rawPoint = sidelinePointChance(sidelines, striking, composure, spot.distanceM);
+    const pointChance = Math.min(
+      0.22,
+      Math.max(
+        0.004,
+        rawPoint * (1 + wind.withWind * 0.07) -
+          wind.crossWind * (0.04 + Math.max(0, spot.distanceM - 40) * 0.002),
+      ),
+    );
+    const form = formOf(teamId, playerName);
+    const formedPoint = Math.min(0.22, Math.max(0.004, pointChance * (1 + ((form - 50) / 42) * 0.24)));
+    const gain: StatCredit = { name: playerName, teamId, possessions: 1, sequences: 1 };
+
+    if (random() < formedPoint) {
+      credit(teamId, "point");
+      push({
+        minute,
+        teamId,
+        playerName,
+        kind: "sideline",
+        text: `Sideline cut from ${playerName}.`,
+        credits: [{ ...gain, shots: 1, scores: 1 }],
+      });
+      shots.push(
+        makeShot({
+          minute,
+          teamId,
+          homeId: options.homeId,
+          playerName,
+          kind: "sideline",
+          scored: true,
+          distanceM: spot.distanceM,
+          period,
+          random,
+          x: spot.x,
+        }),
+      );
+      return;
+    }
+
+    const carry = sidelineCarryM(sidelines, striking, random);
+    const landing = sidelineLanding(spot, towardGoal, carry);
+    const findChance = applyFormChance(sidelineFindChance(sidelines, passing, vision), form);
+    if (random() < findChance) {
+      const receiver = nearestToSpot(names, towardGoal, landing.x, landing.y, { skip: new Set([playerName]) });
+      const found = receiver.name !== playerName ? receiver.name : undefined;
+      push({
+        minute,
+        teamId,
+        playerName,
+        kind: "play",
+        text: found
+          ? `${playerName} finds ${found} from the line.`
+          : `${playerName} works the sideline in.`,
+        credits: mergeCredits([
+          { ...gain, passesAttempted: 1, passesCompleted: found ? 1 : 0 },
+          ...(found ? [{ name: found, teamId, possessions: 1 }] : []),
+        ]),
+      });
+      return;
+    }
+
+    const workedInChance = Math.min(
+      0.48,
+      Math.max(0.08, 0.1 + sidelines * 0.012 + (landing.distanceM < 48 ? 0.16 : 0) + (carry - 50) * 0.004),
+    );
+    if (random() < workedInChance) {
+      push({
+        minute,
+        teamId,
+        playerName,
+        kind: "play",
+        text:
+          carry > 62
+            ? `${playerName} hits a long sideline into the square.`
+            : `${playerName}'s sideline is worked in.`,
+        credits: [{ ...gain }],
+      });
+      return;
+    }
+
+    const overhit = carry > 70 && landing.distanceM < 14;
+    push({
+      minute,
+      teamId,
+      playerName,
+      kind: "wide",
+      text: overhit
+        ? `${playerName} overhits the sideline.`
+        : `${playerName}'s sideline drifts wide.`,
+      credits: [{ ...gain, shots: 1 }],
+    });
+    shots.push(
+      makeShot({
+        minute,
+        teamId,
+        homeId: options.homeId,
+        playerName,
+        kind: "wide",
+        scored: false,
+        distanceM: spot.distanceM,
+        period,
+        random,
+        x: spot.x,
       }),
     );
   };
@@ -1118,7 +1255,7 @@ export function simulateMatch(options: {
         });
         const out = random();
         if (out < 0.24) attemptSetPiece(teamId, "sixtyFive", profile, minute);
-        else if (out < 0.4) attemptSetPiece(teamId, "sideline", profile, minute);
+        else if (out < 0.34) attemptSideline(teamId, "attacking", minute);
         return;
       }
 
@@ -1209,7 +1346,7 @@ export function simulateMatch(options: {
             : `Pass goes astray from ${moved.carrier}.`),
         credits: mergeCredits([...pendingCredits.splice(0, pendingCredits.length), ...moved.credits]),
       });
-      if (random() < 0.18) attemptSetPiece(defendingId, "sideline", opp, minute);
+      if (random() < 0.12) attemptSideline(defendingId, "midfield", minute);
       return;
     }
     const shooter = playerOf(teamId, playerName);
@@ -1439,7 +1576,10 @@ export function simulateMatch(options: {
       const carrierIndex = carrier.index;
       const out = random();
       if (!isPress && carrierIndex >= 9 && out < 0.2) attemptSetPiece(attackingId, "sixtyFive", attProfile, minute);
-      else if (!isPress && out < 0.14) attemptSetPiece(attackingId, "sideline", attProfile, minute);
+      else if (!isPress && out < 0.1) {
+        const zone: SidelineZone = carrierIndex >= 9 ? "attacking" : carrierIndex >= 7 ? "midfield" : "defensive";
+        attemptSideline(attackingId, zone, minute);
+      }
       return;
     }
     push({

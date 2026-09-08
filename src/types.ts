@@ -278,6 +278,7 @@ export type MatchEventKind =
   | "red"
   | "puckout"
   | "turnover"
+  | "play"
   | "coach"
   | "injury"
   | "sub"

@@ -203,7 +203,9 @@ export function TacticControls({ tactics, onChange, compact = false, xv = [] }: 
       {xv.length > 0 ? (
         <section className="card">
           <h3>Set-piece takers</h3>
-          <p className="tactic-copy">Long frees and 65s, close-in frees, and sideline cuts.</p>
+          <p className="tactic-copy">
+            Long frees and 65s, and close-in frees. Sideline cuts are taken by whoever is nearest the ball.
+          </p>
           <TakerSelect
             label="Long frees"
             value={tactics.longFreeTaker}
@@ -215,12 +217,6 @@ export function TacticControls({ tactics, onChange, compact = false, xv = [] }: 
             value={tactics.shortFreeTaker}
             players={xv}
             onChange={(name) => onChange({ ...tactics, shortFreeTaker: name || undefined })}
-          />
-          <TakerSelect
-            label="Sidelines"
-            value={tactics.sidelineTaker}
-            players={xv}
-            onChange={(name) => onChange({ ...tactics, sidelineTaker: name || undefined })}
           />
         </section>
       ) : null}

@@ -56,12 +56,79 @@ export function goalChanceFromDistance(distanceM: number, sweeperCut: number): n
   return Math.min(0.34, Math.max(0.035, (0.07 + close * 0.26) * sweeperCut));
 }
 
+export type SidelineZone = "defensive" | "midfield" | "attacking";
+
+/** On-pitch station for an XV slot. Index 1/4/9/12 are the attacking right. */
+export function slotPitchPos(index: number, attackingTop: boolean): { x: number; y: number } {
+  const line = index <= 0 ? 0 : index <= 3 ? 1 : index <= 6 ? 2 : index <= 8 ? 3 : index <= 11 ? 4 : 5;
+  const depth = [10, 32, 55, 76, 98, 122][line] ?? 76;
+  const y = attackingTop ? PITCH_LENGTH - depth : depth;
+  const rightX = attackingTop ? 76 : 14;
+  const leftX = attackingTop ? 14 : 76;
+  let lane = 1;
+  if (index <= 0) lane = 1;
+  else if (index <= 3) lane = index - 1;
+  else if (index <= 6) lane = index - 4;
+  else if (index <= 8) lane = index === 7 ? 0 : 2;
+  else if (index <= 11) lane = index - 9;
+  else lane = Math.min(2, index - 12);
+  const x = lane <= 0 ? rightX : lane >= 2 ? leftX : PITCH_WIDTH / 2;
+  return { x, y };
+}
+
+export function nearestToSpot(
+  names: string[],
+  attackingTop: boolean,
+  x: number,
+  y: number,
+  options?: { skip?: ReadonlySet<string>; includeKeeper?: boolean },
+): { name: string; index: number } {
+  const skip = options?.skip;
+  const start = options?.includeKeeper ? 0 : 1;
+  let best: { name: string; index: number; dist: number } | undefined;
+  for (let i = start; i < names.length; i += 1) {
+    const name = names[i];
+    if (!name || skip?.has(name)) continue;
+    const pos = slotPitchPos(i, attackingTop);
+    const dist = (pos.x - x) ** 2 + (pos.y - y) ** 2;
+    if (!best || dist < best.dist) best = { name, index: i, dist };
+  }
+  if (best) return { name: best.name, index: best.index };
+  const fallback = names.find((name) => Boolean(name) && !skip?.has(name)) ?? names[0];
+  return { name: fallback ?? "a substitute", index: Math.max(0, names.indexOf(fallback ?? "")) };
+}
+
+export function sidelineSpot(
+  attackingTop: boolean,
+  zone: SidelineZone,
+  random: () => number,
+): { x: number; y: number; distanceM: number } {
+  const distanceM =
+    zone === "attacking" ? 20 + random() * 34 : zone === "midfield" ? 54 + random() * 26 : 80 + random() * 36;
+  const y = attackingTop ? distanceM : PITCH_LENGTH - distanceM;
+  const x = random() < 0.5 ? 2 : PITCH_WIDTH - 2;
+  return { x, y, distanceM };
+}
+
+export function sidelineLanding(
+  spot: { x: number; y: number; distanceM: number },
+  attackingTop: boolean,
+  carryM: number,
+): { x: number; y: number; distanceM: number } {
+  const infield = spot.x < PITCH_WIDTH / 2 ? 1 : -1;
+  const remaining = Math.max(8, spot.distanceM - carryM * 0.52);
+  const y = attackingTop ? remaining : PITCH_LENGTH - remaining;
+  const x = Math.max(10, Math.min(PITCH_WIDTH - 10, spot.x + infield * Math.min(36, 10 + carryM * 0.22)));
+  return { x, y, distanceM: remaining };
+}
+
 export function placeShot(options: {
   kind: ShotKind;
   scored: boolean;
   attackingTop: boolean;
   distanceM: number;
   random: () => number;
+  x?: number;
 }): { x: number; y: number } {
   const wide = options.kind === "sideline" ? 28 + options.random() * 12 : 6 + options.random() * 22;
   const side = options.random() < 0.5 ? -1 : 1;
@@ -71,7 +138,10 @@ export function placeShot(options: {
       : options.kind === "sixtyFive"
         ? (options.random() - 0.5) * 16
         : side * wide * (0.35 + options.random() * 0.65);
-  const x = Math.max(3, Math.min(PITCH_WIDTH - 3, PITCH_WIDTH / 2 + lateral));
+  const x =
+    options.x != null
+      ? Math.max(2, Math.min(PITCH_WIDTH - 2, options.x))
+      : Math.max(3, Math.min(PITCH_WIDTH - 3, PITCH_WIDTH / 2 + lateral));
   const depth = Math.max(6, options.distanceM + (options.scored ? -2 : 1) * options.random() * 4);
   const y = options.attackingTop
     ? Math.max(4, depth)
@@ -98,6 +168,7 @@ export function makeShot(options: {
   distanceM: number;
   period: "first" | "second" | "full";
   random: () => number;
+  x?: number;
 }): ShotAttempt {
   const { x, y } = placeShot({
     kind: options.kind,
@@ -105,6 +176,7 @@ export function makeShot(options: {
     attackingTop: attackingTop(options.teamId, options.homeId, options.period),
     distanceM: options.distanceM,
     random: options.random,
+    x: options.x,
   });
   return {
     minute: options.minute,

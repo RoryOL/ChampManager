@@ -587,7 +587,6 @@ export type SideProfile = {
   pressure: number;
   longFreeTaker: RatedPlayer | undefined;
   shortFreeTaker: RatedPlayer | undefined;
-  sidelineTaker: RatedPlayer | undefined;
   puckoutTarget: RatedPlayer | undefined;
   keeper: RatedPlayer | undefined;
 };
@@ -657,14 +656,12 @@ export function designatedRoles(
 ): {
   longFreeTaker?: string;
   shortFreeTaker?: string;
-  sidelineTaker?: string;
   puckoutKeeper?: string;
   puckoutTarget?: string;
 } {
   return {
     longFreeTaker: pickNamedOrSpecialist(xv, tactics?.longFreeTaker, "frees")?.name,
     shortFreeTaker: pickNamedOrSpecialist(xv, tactics?.shortFreeTaker, "frees")?.name,
-    sidelineTaker: pickNamedOrSpecialist(xv, tactics?.sidelineTaker, "sidelines")?.name,
     puckoutKeeper: xv[0]?.name,
     puckoutTarget: pickPuckoutTarget(xv, tactics?.puckoutTarget)?.name,
   };
@@ -735,7 +732,6 @@ export function sideProfile(
     : 12;
   const longFreeTaker = pickNamedOrSpecialist(xv, tactics.longFreeTaker, "frees", condition);
   const shortFreeTaker = pickNamedOrSpecialist(xv, tactics.shortFreeTaker, "frees", condition);
-  const sidelineTaker = pickNamedOrSpecialist(xv, tactics.sidelineTaker, "sidelines", condition);
   const puckoutTarget = pickPuckoutTarget(xv, tactics.puckoutTarget, condition);
   const aerialOf = (player: RatedPlayer | undefined) => {
     if (!player) return 12;
@@ -808,7 +804,6 @@ export function sideProfile(
     pressure,
     longFreeTaker,
     shortFreeTaker,
-    sidelineTaker,
     puckoutTarget,
     keeper,
   };

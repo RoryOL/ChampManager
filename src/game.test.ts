@@ -5,7 +5,7 @@ import { buildCoachReport } from "./lib/coach";
 import { applyMatchForm, formValue } from "./lib/form";
 import { migrateSave } from "./lib/gameStorage";
 import { playerMatchRating, seasonStatsFor, lastMatchRating } from "./lib/matchStats";
-import { openPlayConversion } from "./lib/shooting";
+import { nearestToSpot, openPlayConversion, slotPitchPos } from "./lib/shooting";
 import { crossWind, parallelWind, passCompleteChance, rollClimate, withWindFor } from "./lib/weather";
 import {
   commentaryFeed,
@@ -25,6 +25,9 @@ import {
   sentOffNamesFromEvents,
   simulateMatch,
   sixtyFiveChance,
+  sidelineCarryM,
+  sidelineFindChance,
+  sidelinePointChance,
   tackleChance,
   targetedPuckoutWinChance,
   pressOutnumbered,
@@ -322,6 +325,9 @@ describe("match engine", () => {
   it("makes specialist free-takers convert far more dead balls", () => {
     expect(freeConversionChance(19, 18, 18)).toBeGreaterThan(freeConversionChance(10, 11, 11) + 0.2);
     expect(sixtyFiveChance(18, 18, 16)).toBeGreaterThan(sixtyFiveChance(9, 10, 10));
+    expect(sidelinePointChance(16, 16, 16, 42)).toBeGreaterThan(sidelinePointChance(11, 11, 11, 42) + 0.04);
+    expect(sidelineFindChance(16, 15, 15)).toBeGreaterThan(sidelineFindChance(10, 10, 10) + 0.12);
+    expect(sidelineCarryM(16, 16, () => 0.5)).toBeGreaterThan(sidelineCarryM(10, 10, () => 0.5) + 12);
   });
 
   it("produces set-piece and puck-out events", () => {
@@ -926,11 +932,10 @@ describe("match engine", () => {
     expect(traditional).toBeGreaterThan(downAMan);
   });
 
-  it("uses the named long-free, short-free and sideline takers", () => {
+  it("uses the named long-free and short-free takers", () => {
     const sheet = defaultSheet("ballyea");
     const longName = sheet.starters[12] ?? sheet.starters[11];
     const shortName = sheet.starters[13] ?? sheet.starters[10];
-    const sidelineName = sheet.starters[6] ?? sheet.starters[5];
     const homeSet: { playerName: string }[] = [];
     for (let seed = 1; seed <= 48 && homeSet.length === 0; seed += 1) {
       const result = simulateMatch({
@@ -942,19 +947,80 @@ describe("match engine", () => {
           build: 90,
           longFreeTaker: longName,
           shortFreeTaker: shortName,
-          sidelineTaker: sidelineName,
         },
         seed,
       });
       homeSet.push(
         ...result.events.filter(
-          (event) => event.teamId === "ballyea" && ["free", "sixtyFive", "sideline"].includes(event.kind),
+          (event) => event.teamId === "ballyea" && ["free", "sixtyFive"].includes(event.kind),
         ),
       );
     }
     expect(homeSet.length).toBeGreaterThan(0);
     const names = new Set(homeSet.map((event) => event.playerName));
-    expect([...names].every((name) => name === longName || name === shortName || name === sidelineName)).toBe(true);
+    expect([...names].every((name) => name === longName || name === shortName)).toBe(true);
+  });
+
+  it("gives the sideline to the nearest player, not a named specialist", () => {
+    const names = [
+      "GK",
+      "RCB",
+      "FB",
+      "LCB",
+      "RWB",
+      "CB",
+      "LWB",
+      "RM",
+      "LM",
+      "RHF",
+      "CF",
+      "LHF",
+      "RCF",
+      "FF",
+      "LCF",
+    ];
+    expect(nearestToSpot(names, true, 88, 50).name).toBe("RHF");
+    expect(nearestToSpot(names, true, 2, 118).name).toBe("LCB");
+    expect(slotPitchPos(12, true).x).toBeGreaterThan(slotPitchPos(14, true).x);
+    const specialist = defaultSheet("ballyea").starters[2];
+    const takers = new Set<string>();
+    let cuts = 0;
+    for (let seed = 1; seed <= 24; seed += 1) {
+      const result = simulateMatch({
+        matchId: "g1-r1-a",
+        homeId: "ballyea",
+        awayId: "inagh-kilnamona",
+        homeTactics: { ...DEFAULT_TACTICS, sidelineTaker: specialist },
+        climate: { sky: "sunny", windStrength: 8, windAngle: 12 },
+        seed,
+      });
+      for (const event of result.events) {
+        if (!/sideline/i.test(event.text)) continue;
+        cuts += 1;
+        if (event.playerName) takers.add(event.playerName);
+      }
+    }
+    expect(cuts).toBeGreaterThan(8);
+    expect(takers.size).toBeGreaterThan(3);
+    expect([...takers].every((name) => name === specialist)).toBe(false);
+  });
+
+  it("scores fewer than one sideline point per game on average", () => {
+    let scores = 0;
+    let games = 0;
+    for (let seed = 1; seed <= 36; seed += 1) {
+      const result = simulateMatch({
+        matchId: "g1-r1-a",
+        homeId: "ballyea",
+        awayId: "inagh-kilnamona",
+        climate: { sky: "sunny", windStrength: 10, windAngle: 15 },
+        seed,
+      });
+      games += 1;
+      scores += result.events.filter((event) => event.kind === "sideline").length;
+    }
+    expect(scores / games).toBeLessThan(1);
+    expect(scores / games).toBeGreaterThanOrEqual(0);
   });
 
   it("awards 65s after a save or a tackle over the end line", () => {
@@ -993,7 +1059,6 @@ describe("match engine", () => {
           ...DEFAULT_TACTICS,
           longFreeTaker: taker,
           shortFreeTaker: taker,
-          sidelineTaker: taker,
         },
         climate: { sky: "sunny", windStrength: 8, windAngle: 12 },
         seed,
@@ -1009,7 +1074,7 @@ describe("match engine", () => {
           openPlay += 1;
           if (event.playerName === taker) openPlayByTaker += 1;
         }
-        if (event.kind === "free" || event.kind === "sixtyFive" || event.kind === "sideline") {
+        if (event.kind === "free" || event.kind === "sixtyFive") {
           setPieces += 1;
           if (event.playerName === taker) setPiecesByTaker += 1;
           else expect(takerOff).toBe(true);
