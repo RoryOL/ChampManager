@@ -2,7 +2,7 @@ import type { PlayerCondition, PlayerMatchStats, RatedPlayer, TeamSheet } from "
 import { ATTRIBUTE_LABELS } from "../lib/attributes";
 import { CHART_RATING_KEYS, CHART_RATING_SHORT, formatPair } from "../lib/matchStats";
 import { matchOrderIndex, matchShirtNumber, matchSlot } from "../lib/players";
-import { conditionFor, matchRatings } from "../lib/training";
+import { conditionFor, matchRatings, toneClass } from "../lib/training";
 
 type Props = {
   teamName: string;
@@ -11,6 +11,9 @@ type Props = {
   sheet?: TeamSheet;
   condition?: Record<string, PlayerCondition>;
   showAttributes?: boolean;
+  interactive?: boolean;
+  picked?: string[];
+  onTap?: (name: string) => void;
 };
 
 export function PlayerMatchTable({
@@ -20,8 +23,12 @@ export function PlayerMatchTable({
   sheet,
   condition = {},
   showAttributes = true,
+  interactive = false,
+  picked = [],
+  onTap,
 }: Props) {
   const byName = new Map(squad.map((player) => [player.name, player]));
+  const pickedSet = new Set(picked);
   const rows = stats
     .filter((row) => row.started || row.minutes > 0 || byName.has(row.name))
     .map((row) => {
@@ -46,7 +53,7 @@ export function PlayerMatchTable({
             <th>Pos</th>
             {showAttributes ? (
               <>
-                <th>Ovr</th>
+                <th className="ovr">Ovr</th>
                 {CHART_RATING_KEYS.map((key) => (
                   <th key={key} title={ATTRIBUTE_LABELS[key]}>
                     {CHART_RATING_SHORT[key]}
@@ -70,33 +77,46 @@ export function PlayerMatchTable({
           </tr>
         </thead>
         <tbody>
-          {rows.map(({ row, player, ratings, number, slot }) => (
-            <tr key={`${row.teamId}:${row.name}`}>
-              <th className="is-sticky">{number ? `${number} ${row.name}` : row.name}</th>
-              <td>{slot && slot !== "SUB" ? slot : slot === "SUB" ? "SUB" : player?.position ?? ""}</td>
-              {showAttributes ? (
-                <>
-                  <td>{ratings?.overall ?? row.overall}</td>
-                  {CHART_RATING_KEYS.map((key) => (
-                    <td key={key}>{ratings?.[key] ?? "–"}</td>
-                  ))}
-                </>
-              ) : null}
-              <td>{row.fitness}</td>
-              <td>{row.rating}</td>
-              <td>{row.minutes}</td>
-              <td>{row.possessions}</td>
-              <td>{formatPair(row.passesCompleted, row.passesAttempted)}</td>
-              <td>{formatPair(row.scores, row.shots)}</td>
-              <td>{formatPair(row.freesScored ?? 0, row.freesAttempted ?? 0)}</td>
-              <td>{formatPair(row.sixtyFivesScored ?? 0, row.sixtyFivesAttempted ?? 0)}</td>
-              <td>{row.freesConceded ?? 0}</td>
-              <td>{formatPair(row.highFieldingWon, row.highFieldingAttempted)}</td>
-              <td>{row.puckoutsWon}</td>
-              <td>{formatPair(row.tacklesWon, row.tacklesAttempted)}</td>
-              <td>{row.groundCovered}</td>
-            </tr>
-          ))}
+          {rows.map(({ row, player, ratings, number, slot }) => {
+            const selected = pickedSet.has(row.name);
+            const overallDelta = ratings && player ? ratings.overall - player.ratings.overall : 0;
+            return (
+              <tr
+                key={`${row.teamId}:${row.name}`}
+                className={[interactive ? "is-interactive" : "", selected ? "is-picked" : ""].filter(Boolean).join(" ")}
+                onClick={interactive && onTap ? () => onTap(row.name) : undefined}
+              >
+                <th className="is-sticky">{number ? `${number} ${row.name}` : row.name}</th>
+                <td>{slot && slot !== "SUB" ? slot : slot === "SUB" ? "SUB" : player?.position ?? ""}</td>
+                {showAttributes ? (
+                  <>
+                    <td className={`ovr ${toneClass(overallDelta)}`}>{ratings?.overall ?? row.overall}</td>
+                    {CHART_RATING_KEYS.map((key) => {
+                      const delta = ratings && player ? ratings[key] - player.ratings[key] : 0;
+                      return (
+                        <td key={key} className={toneClass(delta)}>
+                          {ratings?.[key] ?? "–"}
+                        </td>
+                      );
+                    })}
+                  </>
+                ) : null}
+                <td>{row.fitness}</td>
+                <td>{row.rating}</td>
+                <td>{row.minutes}</td>
+                <td>{row.possessions}</td>
+                <td>{formatPair(row.passesCompleted, row.passesAttempted)}</td>
+                <td>{formatPair(row.scores, row.shots)}</td>
+                <td>{formatPair(row.freesScored ?? 0, row.freesAttempted ?? 0)}</td>
+                <td>{formatPair(row.sixtyFivesScored ?? 0, row.sixtyFivesAttempted ?? 0)}</td>
+                <td>{row.freesConceded ?? 0}</td>
+                <td>{formatPair(row.highFieldingWon, row.highFieldingAttempted)}</td>
+                <td>{row.puckoutsWon}</td>
+                <td>{formatPair(row.tacklesWon, row.tacklesAttempted)}</td>
+                <td>{row.groundCovered}</td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

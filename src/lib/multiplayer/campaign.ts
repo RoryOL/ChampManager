@@ -42,7 +42,8 @@ import {
   remainingWeeks,
   recoveryNews,
 } from "../news";
-import { clubTactics, DEFAULT_TACTICS, defaultSheet, ratedSquad } from "../players";
+import { clubTactics, DEFAULT_TACTICS, defaultSheet, expandSheetToPanel, ratedSquad } from "../players";
+import { remainingMatchSubs } from "../subs";
 import { resolveMatchSides, teamById } from "../resolve";
 import { nextBatch, nextOpenBatch } from "../schedule";
 import { formatScore, matchPlayed, scoreTotal, stageLabel } from "../scoring";
@@ -247,7 +248,7 @@ export function saveFromCampaign(campaign: Campaign, clubId: string): GameSave {
     clubId,
     seed: campaign.seed,
     tactics: club.tactics,
-    sheet: club.sheet,
+    sheet: expandSheetToPanel(clubId, club.sheet, campaign.seed),
     matches: campaign.matches,
     inbox: club.inbox,
     phase: campaign.phase === "season" ? "season" : "preseason",
@@ -257,7 +258,7 @@ export function saveFromCampaign(campaign: Campaign, clubId: string): GameSave {
     reports: campaign.reports,
     ambition: ambitionFor(clubId).target,
     plans: club.plans ?? {},
-    lastSheet: club.lastSheet,
+    lastSheet: club.lastSheet ? expandSheetToPanel(clubId, club.lastSheet, campaign.seed) : club.lastSheet,
     intensity: club.intensity ?? DEFAULT_INTENSITY,
     weekShape: club.weekShape ?? DEFAULT_WEEK_SHAPE,
     sessionsDone: club.sessionsDone ?? 0,
@@ -699,7 +700,7 @@ function clubSheet(
   extraNames: string[] = [],
 ): TeamSheet {
   const club = campaign.clubs[clubId];
-  const sheet = override ?? club?.sheet ?? defaultSheet(clubId);
+  const sheet = expandSheetToPanel(clubId, override ?? club?.sheet ?? defaultSheet(clubId), campaign.seed);
   return sitInjuredPlayers(sheet, ratedSquad(clubId, campaign.seed), club?.condition ?? {}, extraNames);
 }
 
@@ -785,6 +786,12 @@ function simulateSides(
     startHome: first?.homeScore,
     startAway: first?.awayScore,
     startMomentum: first ? momentumAt(first.events) : undefined,
+    remainingSubs: first
+      ? {
+          home: remainingMatchSubs(first.events, homeId, first.homeSheet, extras?.homeSheet ?? first.homeSheet),
+          away: remainingMatchSubs(first.events, awayId, first.awaySheet, extras?.awaySheet ?? first.awaySheet),
+        }
+      : undefined,
   });
 }
 

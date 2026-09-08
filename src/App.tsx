@@ -138,7 +138,6 @@ export default function App() {
               }}
               picked={game.picked}
               onTapPlayer={game.tapPlayer}
-              onSetPlan={(name, plan) => game.setPlans({ ...game.save!.plans, [name]: plan })}
               onOpenTraining={() => setPage("training")}
             />
           )}

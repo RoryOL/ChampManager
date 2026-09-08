@@ -22,6 +22,7 @@ import {
   type RolledInjury,
 } from "./injuries";
 import { clubTactics, defaultSheet, pickPuckoutTarget, sheetPlayers, sideProfile, sideTeamwork, aerialContestRating, type SideProfile } from "./players";
+import { MATCH_SUB_LIMIT } from "./subs";
 import {
   conversionContext,
   goalChanceFromDistance,
@@ -446,6 +447,7 @@ export function simulateMatch(options: {
   homeSquad?: RatedPlayer[];
   awaySquad?: RatedPlayer[];
   remainingWeeks?: number;
+  remainingSubs?: { home?: number; away?: number };
   forcedRemovals?: { minute: number; teamId: string; name: string; kind: "red" | "injury" }[];
 }): SimulatedMatch {
   const period = options.period ?? "full";
@@ -475,6 +477,8 @@ export function simulateMatch(options: {
   const awaySlots = [...awaySheet.starters];
   const homeSubs = [...homeSheet.subs];
   const awaySubs = [...awaySheet.subs];
+  let homeSubsLeft = options.remainingSubs?.home ?? MATCH_SUB_LIMIT;
+  let awaySubsLeft = options.remainingSubs?.away ?? MATCH_SUB_LIMIT;
   let homeNames = reshapeTo625(homeSlots, homeOut);
   let awayNames = reshapeTo625(awaySlots, awayOut);
   let homeLiveTactics: Tactics = homeNames.length < 15 ? { ...homeTactics, shape: "traditional" } : homeTactics;
@@ -570,12 +574,15 @@ export function simulateMatch(options: {
     const subs = teamId === options.homeId ? homeSubs : awaySubs;
     const slot = slots.indexOf(name);
     const incoming = nextSub(teamId);
-    if (incoming && slot >= 0) {
+    const remaining = teamId === options.homeId ? homeSubsLeft : awaySubsLeft;
+    if (incoming && slot >= 0 && remaining > 0) {
       slots[slot] = incoming;
       const subIndex = subs.indexOf(incoming);
       if (subIndex >= 0) subs.splice(subIndex, 1);
       beginStint(teamId, incoming, minute);
       push(subEventFor(rolled, incoming));
+      if (teamId === options.homeId) homeSubsLeft -= 1;
+      else awaySubsLeft -= 1;
     } else {
       (teamId === options.homeId ? homeOut : awayOut).add(name);
     }

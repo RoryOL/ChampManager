@@ -43,7 +43,8 @@ import {
   parseCampaignInvite,
   persistCampaign,
 } from "../lib/multiplayer/store";
-import { clubTactics, defaultSheet, ratedSquad, swapPlayersInSheet } from "../lib/players";
+import { clubTactics, defaultSheet, expandSheetToPanel, ratedSquad, swapPlayersInSheet } from "../lib/players";
+import { remainingMatchSubs } from "../lib/subs";
 import { resolveMatchSides, teamById } from "../lib/resolve";
 import { nextBatch } from "../lib/schedule";
 import { formatScore, matchPlayed, scoreTotal, stageLabel } from "../lib/scoring";
@@ -383,7 +384,7 @@ export function useGame() {
   const swapPlayers = useCallback(
     (first: string, second: string) => {
       if (!save) return;
-      const sheet = swapPlayersInSheet(save.sheet, first, second);
+      const sheet = swapPlayersInSheet(expandSheetToPanel(save.clubId, save.sheet, save.seed), first, second);
       if (campaign && activeSeat) {
         commitCampaign(withClubSheet(campaign, activeSeat.clubId, sheet));
       } else {
@@ -397,42 +398,20 @@ export function useGame() {
   const setSheet = useCallback(
     (sheet: TeamSheet) => {
       if (!save) return;
+      const next = expandSheetToPanel(save.clubId, sheet, save.seed);
       if (campaign && activeSeat) {
-        commitCampaign(withClubSheet(campaign, activeSeat.clubId, sheet));
+        commitCampaign(withClubSheet(campaign, activeSeat.clubId, next));
       } else {
-        commitSolo(withSheet(save, sheet));
+        commitSolo(withSheet(save, next));
       }
       setPicked(null);
     },
     [activeSeat, campaign, commitCampaign, commitSolo, save],
   );
 
-  const tapPlayer = useCallback(
-    (name: string) => {
-      const editingOwnTeam = !viewTeamId || viewTeamId === save?.clubId;
-      if (!picked) {
-        setPicked(name);
-        return;
-      }
-      if (picked === name) {
-        setPicked(null);
-        return;
-      }
-      if (!editingOwnTeam || !save) {
-        setPicked(name);
-        return;
-      }
-      const inSheet = (player: string) => save.sheet.starters.includes(player) || save.sheet.subs.includes(player);
-      const pickedOut = Boolean(save.condition[picked]?.injury && save.condition[picked]?.injury?.weeksLeft);
-      const nameOut = Boolean(save.condition[name]?.injury && save.condition[name]?.injury?.weeksLeft);
-      if ((nameOut && !inSheet(name)) || (pickedOut && !inSheet(picked))) {
-        setPicked(name);
-        return;
-      }
-      swapPlayers(picked, name);
-    },
-    [picked, save, swapPlayers, viewTeamId],
-  );
+  const tapPlayer = useCallback((name: string) => {
+    setPicked((current) => (current === name ? null : name));
+  }, []);
 
   const passDevice = useCallback((playerId: string) => {
     setActivePlayerId(playerId);
@@ -449,7 +428,7 @@ export function useGame() {
       if (!batch) return null;
 
       const squad = ratedSquad(save.clubId, save.seed);
-      const userSheet = sitInjuredPlayers(save.sheet, squad, save.condition);
+      const userSheet = sitInjuredPlayers(expandSheetToPanel(save.clubId, save.sheet, save.seed), squad, save.condition);
       let injuries: RolledInjury[] = [];
       const simulated = batch.matches
         .map((match) => {
@@ -773,6 +752,20 @@ export function useGame() {
         seed: save.seed,
         gameSeed: save.seed,
         climate: first.climate,
+        remainingSubs: {
+          home: remainingMatchSubs(
+            first.events,
+            homeId,
+            first.homeSheet,
+            homeId === save.clubId ? workingSheet : first.homeSheet,
+          ),
+          away: remainingMatchSubs(
+            first.events,
+            awayId,
+            first.awaySheet,
+            awayId === save.clubId ? workingSheet : first.awaySheet,
+          ),
+        },
       });
       const decorated = decorateUserMatch(second, save);
       const combined = combineHalves(first, decorated.sim, {

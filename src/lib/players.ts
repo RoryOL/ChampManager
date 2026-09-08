@@ -299,12 +299,36 @@ export function ratedSquad(teamId: string, gameSeed?: number): RatedPlayer[] {
   });
 }
 
-export function defaultSheet(teamId: string): TeamSheet {
+/** Fifteen starters plus the rest of the panel on the bench. */
+export function expandSheetToPanel(teamId: string, sheet: TeamSheet, gameSeed?: number): TeamSheet {
+  const squad = ratedSquad(teamId, gameSeed);
+  const names = squad.map((player) => player.name);
+  const known = new Set(names);
+  const starters = sheet.starters.filter((name) => known.has(name)).slice(0, 15);
+  const taken = new Set(starters);
+  if (starters.length < 15) {
+    for (const name of names) {
+      if (taken.has(name)) continue;
+      starters.push(name);
+      taken.add(name);
+      if (starters.length >= 15) break;
+    }
+  }
+  const keptSubs = sheet.subs.filter((name) => known.has(name) && !taken.has(name));
+  const rest = names.filter((name) => !taken.has(name) && !keptSubs.includes(name));
+  return { starters, subs: [...keptSubs, ...rest] };
+}
+
+export function defaultSheet(teamId: string, gameSeed?: number): TeamSheet {
   const lineup = latestLineup(teamId);
-  return {
-    starters: (lineup?.starters ?? []).map((player) => player.name).slice(0, 15),
-    subs: (lineup?.subs ?? []).map((player) => player.name).slice(0, 5),
-  };
+  return expandSheetToPanel(
+    teamId,
+    {
+      starters: (lineup?.starters ?? []).map((player) => player.name).slice(0, 15),
+      subs: (lineup?.subs ?? []).map((player) => player.name),
+    },
+    gameSeed,
+  );
 }
 
 function coachSlotScore(player: RatedPlayer, slotIndex: number, condition: Record<string, PlayerCondition>): number {
@@ -313,7 +337,7 @@ function coachSlotScore(player: RatedPlayer, slotIndex: number, condition: Recor
   return healthy + slotFit(player, slotIndex) + fit * 0.08;
 }
 
-/** Best available fifteen by slot, then five bench players. Injured lads sit if the panel allows. */
+/** Best available fifteen by slot, then the rest of the panel on the bench. Injured lads sit if the panel allows. */
 export function coachPickSheet(
   squad: RatedPlayer[],
   condition: Record<string, PlayerCondition> = {},
@@ -344,7 +368,6 @@ export function coachPickSheet(
       const overall = b.ratings.overall - a.ratings.overall;
       return overall !== 0 ? overall : a.name.localeCompare(b.name);
     })
-    .slice(0, 5)
     .map((player) => player.name);
 
   return { starters, subs };
