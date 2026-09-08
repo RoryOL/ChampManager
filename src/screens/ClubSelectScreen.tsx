@@ -6,12 +6,19 @@ import { teamGroup } from "../lib/resolve";
 import { ratedSquad } from "../lib/players";
 import { WAIT_OPTIONS } from "../lib/multiplayer/campaign";
 import { normaliseCode } from "../lib/multiplayer/codes";
-import type { WaitHours } from "../types";
+import {
+  DEFAULT_DIFFICULTY,
+  DIFFICULTY_OPTIONS,
+  WELCOME_STORAGE_KEY,
+  difficultyCopy,
+} from "../lib/difficulty";
+import type { Difficulty, WaitHours } from "../types";
 
 export type HostPayload = {
   name: string;
   clubId: string;
   waitHours: WaitHours;
+  difficulty: Difficulty;
 };
 
 export type JoinPayload = {
@@ -22,7 +29,7 @@ export type JoinPayload = {
 };
 
 type Props = {
-  onTakeCharge: (clubId: string) => void;
+  onTakeCharge: (clubId: string, difficulty: Difficulty) => void;
   onHost: (payload: HostPayload) => void;
   onJoin: (payload: JoinPayload) => Promise<{ ok: true } | { ok: false; error: string }> | { ok: true } | { ok: false; error: string };
   onPreviewTaken?: (code: string, snapshot?: string) => Promise<string[]> | string[];
@@ -67,15 +74,25 @@ function ClubList({
   );
 }
 
+function readWelcomeSeen(): boolean {
+  try {
+    return localStorage.getItem(WELCOME_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 export function ClubSelectScreen({ onTakeCharge, onHost, onJoin, onPreviewTaken }: Props) {
   const [mode, setMode] = useState<Mode>("solo");
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const [snapshot, setSnapshot] = useState("");
   const [waitHours, setWaitHours] = useState<WaitHours>(24);
+  const [difficulty, setDifficulty] = useState<Difficulty>(DEFAULT_DIFFICULTY);
   const [error, setError] = useState<string | null>(null);
   const [taken, setTaken] = useState<string[]>([]);
   const [looking, setLooking] = useState(false);
+  const [showWelcome, setShowWelcome] = useState(() => !readWelcomeSeen());
 
   useEffect(() => {
     if (mode !== "join") {
@@ -101,13 +118,65 @@ export function ClubSelectScreen({ onTakeCharge, onHost, onJoin, onPreviewTaken 
   const hostReady = name.trim().length > 0;
   const joinReady = name.trim().length > 0 && (normaliseCode(code).length >= 4 || snapshot.trim().length > 8);
 
+  const dismissWelcome = () => {
+    try {
+      localStorage.setItem(WELCOME_STORAGE_KEY, "1");
+    } catch {
+      /* ignore */
+    }
+    setShowWelcome(false);
+  };
+
   return (
     <div className="screen screen--select">
+      {showWelcome ? (
+        <div className="welcome-scrim" role="presentation">
+          <section className="welcome-card" role="dialog" aria-labelledby="welcome-title">
+            <p>Capture the Canon</p>
+            <h2 id="welcome-title">Welcome</h2>
+            <p>
+              The best of luck hunting the Canon Hamilton Cup for the 2026 season. Sixteen clubs, one trophy,
+              and a long Clare summer ahead of you.
+            </p>
+            <p>
+              The panels here are simulated from a few simple assumptions — lineups, a handful of known names,
+              and a bit of guesswork. They are not a scout&apos;s notebook, not accurate, and just a bit of fun.
+            </p>
+            <button type="button" className="btn" onClick={dismissWelcome}>
+              Take charge
+            </button>
+          </section>
+        </div>
+      ) : null}
+
       <header className="select-hero">
         <p>Capture the Canon</p>
         <h1>{mode === "solo" ? "Take charge" : mode === "host" ? "Host a championship" : "Join a championship"}</h1>
         <span>TUS Clare Senior Hurling Championship 2026</span>
       </header>
+
+      <section className="difficulty-picker">
+        <p className="kicker">Standard</p>
+        <div className="difficulty-grid">
+          {DIFFICULTY_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              className={difficulty === option.value ? "is-active" : ""}
+              onClick={() => setDifficulty(option.value)}
+              disabled={mode === "join"}
+            >
+              <strong>{option.title}</strong>
+              <em>{option.subtitle}</em>
+            </button>
+          ))}
+        </div>
+        <p className="hint">
+          {mode === "join"
+            ? "The host already set the standard for this championship."
+            : difficultyCopy(difficulty)}
+        </p>
+      </section>
 
       <div className="speed-row pane-row">
         <button type="button" className={mode === "solo" ? "is-active" : ""} onClick={() => setMode("solo")}>
@@ -174,7 +243,7 @@ export function ClubSelectScreen({ onTakeCharge, onHost, onJoin, onPreviewTaken 
       )}
 
       {mode === "solo" ? (
-        <ClubList taken={[]} action="Take charge" onPick={onTakeCharge} />
+        <ClubList taken={[]} action="Take charge" onPick={(clubId) => onTakeCharge(clubId, difficulty)} />
       ) : mode === "host" ? (
         <ClubList
           taken={[]}
@@ -185,7 +254,7 @@ export function ClubSelectScreen({ onTakeCharge, onHost, onJoin, onPreviewTaken 
               return;
             }
             setError(null);
-            onHost({ name, clubId, waitHours });
+            onHost({ name, clubId, waitHours, difficulty });
           }}
         />
       ) : (

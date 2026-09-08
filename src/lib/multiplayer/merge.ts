@@ -7,6 +7,7 @@ import type {
   Seat,
   WeekState,
 } from "../../types";
+import { migrateDifficulty } from "../difficulty";
 
 const PHASE_RANK: Record<Campaign["phase"], number> = {
   lobby: 0,
@@ -161,6 +162,7 @@ export function mergeCampaigns(left: Campaign, right: Campaign): Campaign {
     clubs,
     week: mergeWeek(left.week, right.week),
     revision: Math.max(left.revision, right.revision),
+    difficulty: migrateDifficulty(newer.difficulty ?? older.difficulty),
   };
 
   if (campaignsEquivalent(merged, left)) return left;

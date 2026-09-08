@@ -209,6 +209,8 @@ export type TrainingFocus = WeekSession | "fitness" | "skills" | "setpieces";
 
 export type CalendarPhase = "preseason" | "season";
 
+export type Difficulty = "junior" | "intermediate" | "senior" | "intercounty";
+
 export type NewsKind = "chairman" | "match" | "press" | "injury" | "training" | "recovery" | "briefing";
 
 export type NewsTone = "positive" | "negative" | "neutral";
@@ -406,9 +408,10 @@ export type TeamSheet = {
 };
 
 export type GameSave = {
-  version: 10;
+  version: 11;
   clubId: string;
   seed: number;
+  difficulty: Difficulty;
   tactics: Tactics;
   sheet: TeamSheet;
   matches: { id: string; homeScore: Score | null; awayScore: Score | null }[];
@@ -486,6 +489,7 @@ export type Campaign = {
   seed: number;
   hostPlayerId: string;
   waitHours: WaitHours;
+  difficulty: Difficulty;
   createdAt: number;
   seats: Seat[];
   phase: "lobby" | "preseason" | "season";

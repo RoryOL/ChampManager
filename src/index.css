@@ -56,6 +56,7 @@ button {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  position: relative;
 }
 
 @media (min-width: 480px) {
@@ -125,6 +126,7 @@ html.native-app .device {
 
 .screen--select {
   padding-top: 8px;
+  position: relative;
 }
 
 .screen--match {
@@ -1830,4 +1832,86 @@ html.native-app .device {
 .hint--tight {
   margin-top: 8px;
 }
+
+.welcome-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  background: rgba(7, 9, 13, 0.88);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+}
+
+.welcome-card {
+  width: 100%;
+  max-width: 360px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 20px 18px 16px;
+  display: grid;
+  gap: 10px;
+}
+
+.welcome-card p:first-child {
+  margin: 0;
+  color: var(--saffron);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  font-size: 12px;
+}
+
+.welcome-card h2 {
+  font-size: 28px;
+}
+
+.welcome-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.welcome-card .btn {
+  margin-top: 8px;
+}
+
+.difficulty-picker {
+  margin: 0 0 12px;
+}
+
+.difficulty-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.difficulty-grid button {
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.difficulty-grid strong {
+  display: block;
+}
+
+.difficulty-grid em {
+  color: var(--muted);
+  font-style: normal;
+  font-size: 12px;
+}
+
+.difficulty-grid .is-active {
+  border-color: var(--saffron);
+  background: var(--you);
+}
+
+.difficulty-grid button:disabled {
+  opacity: 0.55;
+}
+
 

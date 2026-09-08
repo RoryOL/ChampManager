@@ -4,7 +4,8 @@ import { ClubBadge } from "../components/ClubBadge";
 import { compactName } from "../lib/display";
 import { seedChampionship } from "../data/championship";
 import { teamById } from "../lib/resolve";
-import { WAIT_OPTIONS, waitLabel } from "../lib/multiplayer/campaign";
+import { WAIT_OPTIONS, waitLabel, campaignDifficulty } from "../lib/multiplayer/campaign";
+import { difficultyTitle } from "../lib/difficulty";
 
 type Props = {
   campaign: Campaign;
@@ -44,7 +45,9 @@ export function LobbyScreen({
       <header className="select-hero">
         <p>Together</p>
         <h1>Championship lobby</h1>
-        <span>Invite code {campaign.code}</span>
+        <span>
+          Invite code {campaign.code} · {difficultyTitle(campaignDifficulty(campaign))}
+        </span>
       </header>
 
       <section className="card">

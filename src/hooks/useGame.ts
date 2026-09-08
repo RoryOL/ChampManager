@@ -25,6 +25,7 @@ import {
   withClubTactics,
   withClubTraining,
 } from "../lib/multiplayer/campaign";
+import { DEFAULT_DIFFICULTY, performanceBoostFor } from "../lib/difficulty";
 import { randomId } from "../lib/multiplayer/codes";
 import {
   clearLocalSeats,
@@ -115,6 +116,7 @@ import type {
   WaitHours,
   WeekSession,
   WeekShape,
+  Difficulty,
 } from "../types";
 
 export type LiveMatch = {
@@ -147,6 +149,9 @@ function preparedRivals(save: GameSave, championship: Championship): GameSave["r
     date,
     remainingWeeks: remainingWeeks(save, championship, save.clubId),
     preseasonWeek: save.preseasonWeek,
+    difficulty: save.difficulty,
+    reports: save.reports,
+    userCondition: save.condition,
   });
 }
 
@@ -281,9 +286,9 @@ export function useGame() {
     });
   }, [campaign, live]);
 
-  const takeCharge = useCallback((clubId: string) => {
+  const takeCharge = useCallback((clubId: string, difficulty = DEFAULT_DIFFICULTY) => {
     const club = teamById(seedChampionship, clubId);
-    const started = newSave(clubId);
+    const started = newSave(clubId, difficulty);
     if (!club) {
       commitSolo(started);
       setLive(null);
@@ -299,7 +304,7 @@ export function useGame() {
   }, [commitSolo]);
 
   const hostCampaign = useCallback(
-    (payload: { name: string; clubId: string; waitHours: WaitHours }) => {
+    (payload: { name: string; clubId: string; waitHours: WaitHours; difficulty?: Difficulty }) => {
       const self = setPlayerName(payload.name);
       setPlayer(self);
       rememberLocalSeat(self.id);
@@ -308,6 +313,7 @@ export function useGame() {
         hostName: self.name,
         clubId: payload.clubId,
         waitHours: payload.waitHours,
+        difficulty: payload.difficulty,
       });
       commitCampaign(created);
       setActivePlayerId(self.id);
@@ -488,6 +494,7 @@ export function useGame() {
             period: isUser && mode === "first" ? "first" : "full",
             seed: save.seed,
             gameSeed: save.seed,
+            performanceBoost: performanceBoostFor(save.difficulty, [save.clubId]),
           });
           if (!isUser) return sim;
           const decorated = decorateUserMatch(sim, save);
@@ -779,6 +786,7 @@ export function useGame() {
             side: homeId === save.clubId ? "away" : "home",
             condition: cpuClub.condition,
             seed: save.seed,
+            difficulty: save.difficulty,
           })
         : null;
       const second = simulateMatch({
@@ -819,6 +827,7 @@ export function useGame() {
             awayId === save.clubId ? workingSheet : first.awaySheet,
           ),
         },
+        performanceBoost: performanceBoostFor(save.difficulty, [save.clubId]),
       });
       const decorated = decorateUserMatch(second, save);
       const combined = combineHalves(first, decorated.sim, {

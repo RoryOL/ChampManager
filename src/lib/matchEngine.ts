@@ -32,6 +32,7 @@ import {
   shotDistanceM,
 } from "./shooting";
 import { scoreTotal } from "./scoring";
+import { liftSquadRatings } from "./difficulty";
 import { conditionFor, matchStat } from "./training";
 import { climateOf, passCompleteChance, puckoutWindAdjust, rollClimate, withWindFor } from "./weather";
 
@@ -449,6 +450,7 @@ export function simulateMatch(options: {
   remainingWeeks?: number;
   remainingSubs?: { home?: number; away?: number };
   forcedRemovals?: { minute: number; teamId: string; name: string; kind: "red" | "injury" }[];
+  performanceBoost?: { clubIds: string[]; amount: number };
 }): SimulatedMatch {
   const period = options.period ?? "full";
   const seedKey = period === "second" ? `${options.seed}:${options.matchId}:second` : `${options.seed}:${options.matchId}`;
@@ -483,12 +485,46 @@ export function simulateMatch(options: {
   let awayNames = reshapeTo625(awaySlots, awayOut);
   let homeLiveTactics: Tactics = homeNames.length < 15 ? { ...homeTactics, shape: "traditional" } : homeTactics;
   let awayLiveTactics: Tactics = awayNames.length < 15 ? { ...awayTactics, shape: "traditional" } : awayTactics;
-  let home = sideProfile(options.homeId, { starters: homeNames, subs: homeSubs }, homeLiveTactics, options.homeCondition, options.gameSeed, climate);
-  let away = sideProfile(options.awayId, { starters: awayNames, subs: awaySubs }, awayLiveTactics, options.awayCondition, options.gameSeed, climate);
-  const homeRoster = options.homeSquad ?? sheetPlayers(options.homeId, homeSheet, options.gameSeed);
-  const awayRoster = options.awaySquad ?? sheetPlayers(options.awayId, awaySheet, options.gameSeed);
-  const homeTeamwork = sideTeamwork(options.homeId, { starters: homeNames, subs: homeSubs }, options.homeCondition, options.gameSeed);
-  const awayTeamwork = sideTeamwork(options.awayId, { starters: awayNames, subs: awaySubs }, options.awayCondition, options.gameSeed);
+  const homeLift =
+    options.performanceBoost?.clubIds.includes(options.homeId) ? (options.performanceBoost.amount ?? 0) : 0;
+  const awayLift =
+    options.performanceBoost?.clubIds.includes(options.awayId) ? (options.performanceBoost.amount ?? 0) : 0;
+  const rawHomeRoster = options.homeSquad ?? sheetPlayers(options.homeId, homeSheet, options.gameSeed);
+  const rawAwayRoster = options.awaySquad ?? sheetPlayers(options.awayId, awaySheet, options.gameSeed);
+  const homeRoster = liftSquadRatings(rawHomeRoster, homeLift);
+  const awayRoster = liftSquadRatings(rawAwayRoster, awayLift);
+  let home = sideProfile(
+    options.homeId,
+    { starters: homeNames, subs: homeSubs },
+    homeLiveTactics,
+    options.homeCondition,
+    options.gameSeed,
+    climate,
+    homeRoster,
+  );
+  let away = sideProfile(
+    options.awayId,
+    { starters: awayNames, subs: awaySubs },
+    awayLiveTactics,
+    options.awayCondition,
+    options.gameSeed,
+    climate,
+    awayRoster,
+  );
+  const homeTeamwork = sideTeamwork(
+    options.homeId,
+    { starters: homeNames, subs: homeSubs },
+    options.homeCondition,
+    options.gameSeed,
+    homeRoster,
+  );
+  const awayTeamwork = sideTeamwork(
+    options.awayId,
+    { starters: awayNames, subs: awaySubs },
+    options.awayCondition,
+    options.gameSeed,
+    awayRoster,
+  );
   const playerOf = (teamId: string, name: string) =>
     (teamId === options.homeId ? homeRoster : awayRoster).find((player) => player.name === name)
     ?? sheetPlayers(teamId, { starters: teamId === options.homeId ? homeNames : awayNames, subs: [] }, options.gameSeed).find(
@@ -532,6 +568,7 @@ export function simulateMatch(options: {
         options.homeCondition,
         options.gameSeed,
         climate,
+        homeRoster,
       );
     } else {
       awayNames = reshapeTo625(awaySlots, awayOut);
@@ -543,6 +580,7 @@ export function simulateMatch(options: {
         options.awayCondition,
         options.gameSeed,
         climate,
+        awayRoster,
       );
     }
   };
@@ -596,7 +634,7 @@ export function simulateMatch(options: {
     ...(options.homeSquad
       ? rollMatchInjuries({
           clubId: options.homeId,
-          squad: options.homeSquad,
+          squad: rawHomeRoster,
           condition: options.homeCondition ?? {},
           seed: options.seed,
           matchId: options.matchId,
@@ -609,7 +647,7 @@ export function simulateMatch(options: {
     ...(options.awaySquad
       ? rollMatchInjuries({
           clubId: options.awayId,
-          squad: options.awaySquad,
+          squad: rawAwayRoster,
           condition: options.awayCondition ?? {},
           seed: options.seed,
           matchId: options.matchId,

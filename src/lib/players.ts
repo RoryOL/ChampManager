@@ -538,6 +538,20 @@ export function designatedRoles(
   };
 }
 
+function xvFromSquad(
+  teamId: string,
+  sheet: TeamSheet,
+  gameSeed?: number,
+  squad?: RatedPlayer[],
+): RatedPlayer[] {
+  if (!squad?.length) return sheetPlayers(teamId, sheet, gameSeed);
+  const byName = new Map(squad.map((player) => [player.name, player]));
+  const xv = sheet.starters
+    .map((name) => byName.get(name))
+    .filter((player): player is RatedPlayer => Boolean(player));
+  return xv.length === sheet.starters.length ? xv : sheetPlayers(teamId, sheet, gameSeed);
+}
+
 export function sideProfile(
   teamId: string,
   sheet: TeamSheet,
@@ -545,8 +559,9 @@ export function sideProfile(
   condition: Record<string, PlayerCondition> = {},
   gameSeed?: number,
   climate?: MatchClimate,
+  squad?: RatedPlayer[],
 ): SideProfile {
-  const xv = sheetPlayers(teamId, sheet, gameSeed);
+  const xv = xvFromSquad(teamId, sheet, gameSeed, squad);
   const scaled = (index: number, keys: AttributeKey[]) => {
     const player = xv[index];
     if (!player) return 12;
@@ -682,8 +697,9 @@ export function sideTeamwork(
   sheet: TeamSheet,
   condition: Record<string, PlayerCondition> = {},
   gameSeed?: number,
+  squad?: RatedPlayer[],
 ): number {
-  const xv = sheetPlayers(teamId, sheet, gameSeed);
+  const xv = xvFromSquad(teamId, sheet, gameSeed, squad);
   if (xv.length === 0) return 12;
   const total = xv.reduce(
     (sum, player) => sum + matchStat(player.ratings.teamwork, conditionFor(player.name, condition), "teamwork"),

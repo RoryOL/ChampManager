@@ -4,6 +4,7 @@ import { useGame } from "./hooks/useGame";
 import { BottomNav } from "./components/BottomNav";
 import { teamById } from "./lib/resolve";
 import { compactName } from "./lib/display";
+import { difficultyTitle } from "./lib/difficulty";
 import { ClubBadge } from "./components/ClubBadge";
 import { ClubSelectScreen } from "./screens/ClubSelectScreen";
 import { LobbyScreen } from "./screens/LobbyScreen";
@@ -90,7 +91,10 @@ export default function App() {
           <header className="app-bar">
             <ClubBadge team={club} size="sm" variant="crest" />
             <div>
-              <p>{game.campaign ? `Together · ${game.campaign.code}` : "Clare SHC 2026"}</p>
+              <p>
+                {game.campaign ? `Together · ${game.campaign.code}` : "Clare SHC 2026"}
+                {game.save ? ` · ${difficultyTitle(game.save.difficulty)}` : ""}
+              </p>
               <h1>{managerLabel}</h1>
             </div>
           </header>
