@@ -375,6 +375,8 @@ export type MatchReport = {
   climate?: MatchClimate;
   shots?: ShotAttempt[];
   events?: MatchEvent[];
+  homeClosingSheet?: TeamSheet;
+  awayClosingSheet?: TeamSheet;
 };
 
 export type SimulatedMatch = {

@@ -74,6 +74,11 @@ export function appearanceOf(
     mark.offMinute = 32;
     mark.offKind = "sub";
   }
+  if (nowOn && mark.offKind === "sub" && mark.onMinute === undefined) {
+    mark.onMinute = mark.offMinute;
+    mark.offMinute = undefined;
+    mark.offKind = undefined;
+  }
   return mark;
 }
 

@@ -360,6 +360,8 @@ export function reportFromSim(sim: SimulatedMatch): MatchReport {
     climate: sim.climate,
     shots: sim.shots,
     events: sim.events.filter((event) => event.kind === "sub" || event.kind === "injury" || event.kind === "red"),
+    homeClosingSheet: sim.homeClosingSheet,
+    awayClosingSheet: sim.awayClosingSheet,
   };
 }
 

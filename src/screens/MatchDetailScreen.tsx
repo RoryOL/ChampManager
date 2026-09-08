@@ -110,8 +110,10 @@ export function MatchDetailScreen({ championship, save, match, report, onBack, o
               players={report.players}
               homeSquad={homeId ? ratedSquad(homeId, save.seed) : []}
               awaySquad={awayId ? ratedSquad(awayId, save.seed) : []}
-              homeSheet={report.homeSheet}
-              awaySheet={report.awaySheet}
+              homeSheet={report.homeClosingSheet ?? report.homeSheet}
+              awaySheet={report.awayClosingSheet ?? report.awaySheet}
+              numberHomeSheet={report.homeSheet}
+              numberAwaySheet={report.awaySheet}
               events={report.events}
               homeCondition={homeId === save.clubId ? save.condition : undefined}
               awayCondition={awayId === save.clubId ? save.condition : undefined}
