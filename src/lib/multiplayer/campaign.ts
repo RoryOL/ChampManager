@@ -3,6 +3,7 @@ import type {
   Campaign,
   Championship,
   ClubRuntime,
+  Difficulty,
   GameSave,
   HalfPlan,
   Match,
@@ -21,6 +22,7 @@ import type {
 import { compactName } from "../display";
 import { briefingNews } from "../briefing";
 import { championshipFromSave, SAVE_VERSION } from "../gameStorage";
+import { DEFAULT_DIFFICULTY, migrateDifficulty, performanceBoostFor } from "../difficulty";
 import {
   applySimToClub,
   createManagedClub,
@@ -129,6 +131,7 @@ export function createCampaign(options: {
   hostName: string;
   clubId: string;
   waitHours: WaitHours;
+  difficulty?: Difficulty;
   now?: number;
   seed?: number;
   code?: string;
@@ -143,6 +146,7 @@ export function createCampaign(options: {
     seed: options.seed ?? Math.floor(Math.random() * 1_000_000_000),
     hostPlayerId: options.hostPlayerId,
     waitHours: options.waitHours,
+    difficulty: migrateDifficulty(options.difficulty ?? DEFAULT_DIFFICULTY),
     createdAt: now,
     seats: [{ playerId: options.hostPlayerId, name: options.hostName.trim() || "Host", clubId: options.clubId }],
     phase: "lobby",
@@ -156,6 +160,14 @@ export function createCampaign(options: {
     clubs: {},
     week: emptyWeek(),
   };
+}
+
+export function campaignDifficulty(campaign: Campaign): Difficulty {
+  return migrateDifficulty(campaign.difficulty);
+}
+
+export function withCampaignDefaults(campaign: Campaign): Campaign {
+  return { ...campaign, difficulty: campaignDifficulty(campaign) };
 }
 
 export function takenClubIds(campaign: Campaign): string[] {
@@ -261,6 +273,7 @@ export function saveFromCampaign(campaign: Campaign, clubId: string): GameSave {
     version: SAVE_VERSION,
     clubId,
     seed: campaign.seed,
+    difficulty: campaignDifficulty(campaign),
     tactics: club.tactics,
     sheet: expandSheetToPanel(clubId, club.sheet, campaign.seed),
     matches: campaign.matches,
@@ -687,9 +700,12 @@ function lockMatchday(campaign: Campaign, now: number): Campaign {
           id: opponentId,
           sheet: opponent?.sheet ?? defaultSheet(opponentId),
           tactics: isHumanClub(next, opponentId) ? (opponent?.tactics ?? clubTactics(opponentId)) : clubTactics(opponentId),
+          condition: opponent?.condition,
         },
         match.id,
         next.seed,
+        undefined,
+        { difficulty: campaignDifficulty(next), reports: next.reports },
       );
     }
   }
@@ -729,6 +745,8 @@ function lockPreseason(campaign: Campaign, now: number): Campaign {
     seed: campaign.seed,
     week: campaign.preseasonWeek,
     remainingWeeks: remaining,
+    difficulty: campaignDifficulty(campaign),
+    reports: campaign.reports,
   });
   const week = campaign.preseasonWeek + 1;
   const clubs = { ...trained };
@@ -869,6 +887,10 @@ function simulateSides(
           away: remainingMatchSubs(first.events, awayId, first.awaySheet, extras?.awaySheet ?? first.awaySheet),
         }
       : undefined,
+    performanceBoost: performanceBoostFor(
+      campaignDifficulty(campaign),
+      campaign.seats.map((seat) => seat.clubId),
+    ),
   });
 }
 
@@ -1005,6 +1027,7 @@ function autoPlan(campaign: Campaign, clubId: string, first: SimulatedMatch, sid
     side,
     condition: club.condition,
     seed: campaign.seed,
+    difficulty: campaignDifficulty(campaign),
   });
 }
 

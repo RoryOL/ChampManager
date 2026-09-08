@@ -2,8 +2,10 @@ import { seedChampionship } from "../data/championship";
 import type {
   CalendarPhase,
   ClubRuntime,
+  Difficulty,
   HalfPlan,
   MatchClimate,
+  MatchReport,
   PlayerCondition,
   RatedPlayer,
   SimulatedMatch,
@@ -20,6 +22,14 @@ import {
   sitInjuredPlayers,
 } from "./injuries";
 import { simulateMatch } from "./matchEngine";
+import {
+  assumedOpponentTactics,
+  blendTactics,
+  cpuAdaptWeight,
+  cpuDifficulty,
+  cpuHalfTimeSkill,
+  inferOpponentTactics,
+} from "./difficulty";
 import {
   clubTactics,
   defaultSheet,
@@ -180,16 +190,36 @@ export function pickCpuTactics(options: {
   condition?: Record<string, PlayerCondition>;
   opponentSheet?: TeamSheet;
   opponentTactics?: Tactics;
+  opponentCondition?: Record<string, PlayerCondition>;
   climate?: MatchClimate;
+  difficulty?: Difficulty;
+  reports?: Record<string, MatchReport>;
 }): Tactics {
+  const difficulty = cpuDifficulty(options.difficulty);
   const base = clubTactics(options.teamId);
+  const weight = cpuAdaptWeight(difficulty);
+  if (weight <= 0) return { ...base };
+
   const climate = options.climate ?? rollClimate(options.seed, options.matchKey);
   const sheet = options.sheet ?? defaultSheet(options.teamId);
   const condition = options.condition ?? {};
   const opponentSheet = options.opponentSheet ?? defaultSheet(options.opponentId);
-  const opponentTactics = options.opponentTactics ?? clubTactics(options.opponentId);
+  const inferred = inferOpponentTactics(options.reports ?? {}, options.opponentId, options.teamId);
+  const opponentTactics = assumedOpponentTactics(
+    difficulty,
+    options.opponentTactics,
+    inferred,
+    clubTactics(options.opponentId),
+  );
   const ours = sideProfile(options.teamId, sheet, base, condition, options.seed, climate);
-  const theirs = sideProfile(options.opponentId, opponentSheet, opponentTactics, {}, options.seed, climate);
+  const theirs = sideProfile(
+    options.opponentId,
+    opponentSheet,
+    opponentTactics,
+    options.opponentCondition ?? {},
+    options.seed,
+    climate,
+  );
 
   let mentality = base.mentality;
   let shape = base.shape;
@@ -231,7 +261,7 @@ export function pickCpuTactics(options: {
   const jitter = (seedFrom(`${options.seed}:${options.matchKey}:cpu-tactics`) % 9) - 4;
   const xv = sheetPlayers(options.teamId, sheet, options.seed);
   const target = pickPuckoutTarget(xv, base.puckoutTarget, condition);
-  return {
+  const adapted: Tactics = {
     mentality,
     shape,
     build: clampDial(build + jitter),
@@ -241,6 +271,7 @@ export function pickCpuTactics(options: {
     shooting: clampDial(shooting),
     puckoutTarget: clampDial(puckout) >= 55 ? target?.name : undefined,
   };
+  return blendTactics(base, adapted, weight);
 }
 
 export function pickCpuHalfPlan(options: {
@@ -249,15 +280,18 @@ export function pickCpuHalfPlan(options: {
   side: "home" | "away";
   condition: Record<string, PlayerCondition>;
   seed: number;
+  difficulty?: Difficulty;
 }): HalfPlan {
+  const skill = cpuHalfTimeSkill(cpuDifficulty(options.difficulty));
   const ours = options.side === "home";
   const ourScore = ours ? options.first.homeScore : options.first.awayScore;
   const theirScore = ours ? options.first.awayScore : options.first.homeScore;
   const gap = scoreTotal(theirScore) - scoreTotal(ourScore);
   const opening = ours ? options.first.homeSheet : options.first.awaySheet;
   const openingTactics = ours ? options.first.homeTactics : options.first.awayTactics;
+  const theirTactics = ours ? options.first.awayTactics : options.first.homeTactics;
   const hurt = injuredNamesFromEvents(options.first.events, options.teamId);
-  const sheet = pickCpuSheet({
+  let sheet = pickCpuSheet({
     teamId: options.teamId,
     condition: options.condition,
     seed: options.seed,
@@ -265,8 +299,36 @@ export function pickCpuHalfPlan(options: {
     lastSheet: opening,
     extraNames: hurt,
   });
+  if (skill === "scout") {
+    sheet = subPoorPerformers(sheet, options.first, options.teamId, options.condition, options.seed);
+  }
   let tactics: Tactics = { ...openingTactics };
-  if (gap >= 4) {
+  if (skill === "none") {
+    return { tactics, sheet, submittedAt: 0 };
+  }
+  const chaseGap = skill === "late" ? 8 : skill === "scout" ? 3 : 4;
+  const sitGap = skill === "late" ? -12 : skill === "scout" ? -5 : -6;
+  if (skill === "scout") {
+    if (theirTactics.shape === "sweeper") {
+      tactics = {
+        ...tactics,
+        shooting: clampDial(Math.min(tactics.shooting, 36)),
+        build: clampDial(Math.min(tactics.build, 46)),
+        pressure: clampDial(Math.max(tactics.pressure, 58)),
+      };
+    }
+    if (theirTactics.puckout <= 38) {
+      tactics = { ...tactics, pressure: clampDial(Math.max(tactics.pressure, 72)) };
+    }
+    if (theirTactics.mentality === "attacking" && gap <= 2) {
+      tactics = {
+        ...tactics,
+        mentality: tactics.mentality === "attacking" ? "balanced" : tactics.mentality,
+        shape: "sweeper",
+      };
+    }
+  }
+  if (gap >= chaseGap) {
     tactics = {
       ...tactics,
       mentality: "attacking",
@@ -275,7 +337,7 @@ export function pickCpuHalfPlan(options: {
       pressure: clampDial(Math.max(tactics.pressure, 62)),
       build: clampDial(Math.min(tactics.build, 48)),
     };
-  } else if (gap <= -6) {
+  } else if (gap <= sitGap) {
     tactics = {
       ...tactics,
       mentality: "contain",
@@ -284,6 +346,43 @@ export function pickCpuHalfPlan(options: {
     };
   }
   return { tactics, sheet, submittedAt: 0 };
+}
+
+function subPoorPerformers(
+  sheet: TeamSheet,
+  first: SimulatedMatch,
+  teamId: string,
+  condition: Record<string, PlayerCondition>,
+  seed: number,
+): TeamSheet {
+  const rows = first.players.filter((row) => row.teamId === teamId && row.started);
+  if (rows.length === 0) return sheet;
+  const worst = [...rows]
+    .filter((row) => row.rating <= 5.8 && sheet.starters.includes(row.name))
+    .sort((left, right) => left.rating - right.rating);
+  if (worst.length === 0) return sheet;
+  const squad = ratedSquad(teamId, seed);
+  const starters = [...sheet.starters];
+  const subs = [...sheet.subs];
+  const bench = sheet.subs.filter((name) => !isInjured(condition[name]));
+  let swaps = 0;
+  for (const poor of worst) {
+    if (swaps >= 2) break;
+    const slot = starters.indexOf(poor.name);
+    if (slot < 0) continue;
+    const incoming = bench.find((name) => {
+      const player = squad.find((item) => item.name === name);
+      const outgoing = squad.find((item) => item.name === poor.name);
+      return Boolean(player) && (player?.ratings.overall ?? 0) >= (outgoing?.ratings.overall ?? 0) - 2;
+    });
+    if (!incoming) continue;
+    starters[slot] = incoming;
+    const subIndex = subs.indexOf(incoming);
+    if (subIndex >= 0) subs[subIndex] = poor.name;
+    bench.splice(bench.indexOf(incoming), 1);
+    swaps += 1;
+  }
+  return { starters, subs };
 }
 
 export function trainManagedClub(
@@ -409,6 +508,8 @@ export function playManagedChallenge(options: {
   seed: number;
   week: number;
   remainingWeeks: number;
+  difficulty?: Difficulty;
+  reports?: Record<string, MatchReport>;
 }): { home: ClubRuntime; away: ClubRuntime; sim: SimulatedMatch } {
   const matchId = `pre:${options.week}:${options.homeId}:${options.awayId}`;
   const climate = rollClimate(options.seed, matchId);
@@ -435,7 +536,10 @@ export function playManagedChallenge(options: {
     condition: options.home.condition,
     opponentSheet: awaySheet,
     opponentTactics: clubTactics(options.awayId),
+    opponentCondition: options.away.condition,
     climate,
+    difficulty: options.difficulty,
+    reports: options.reports,
   });
   const awayTactics = pickCpuTactics({
     teamId: options.awayId,
@@ -446,7 +550,10 @@ export function playManagedChallenge(options: {
     condition: options.away.condition,
     opponentSheet: homeSheet,
     opponentTactics: clubTactics(options.homeId),
+    opponentCondition: options.home.condition,
     climate,
+    difficulty: options.difficulty,
+    reports: options.reports,
   });
   const sim = simulateMatch({
     matchId,
@@ -483,6 +590,8 @@ export function tickManagedPreseasonWeek(
     seed: number;
     week: number;
     remainingWeeks: number;
+    difficulty?: Difficulty;
+    reports?: Record<string, MatchReport>;
   },
 ): Record<string, ClubRuntime> {
   const date = PRESEASON_DATES[options.week - 1] ?? PRESEASON_DATES.at(-1) ?? "";
@@ -517,6 +626,8 @@ export function tickManagedPreseasonWeek(
       seed: options.seed,
       week: options.week,
       remainingWeeks: options.remainingWeeks,
+      difficulty: options.difficulty,
+      reports: options.reports,
     });
     next[pair.homeId] = played.home;
     next[pair.awayId] = played.away;
@@ -541,6 +652,7 @@ export function prepareManagedClubForMatch(
   matchId: string,
   seed: number,
   climate?: MatchClimate,
+  extras?: { difficulty?: Difficulty; reports?: Record<string, MatchReport> },
 ): ClubRuntime {
   const sheet = pickCpuSheet({
     teamId: clubId,
@@ -558,7 +670,10 @@ export function prepareManagedClubForMatch(
     condition: club.condition,
     opponentSheet: opponent.sheet,
     opponentTactics: opponent.tactics,
+    opponentCondition: opponent.condition,
     climate,
+    difficulty: extras?.difficulty,
+    reports: extras?.reports,
   });
   return { ...club, sheet, tactics };
 }
@@ -573,6 +688,9 @@ export function prepareRivalsForMatches(options: {
   date: string;
   remainingWeeks: number;
   preseasonWeek: number;
+  difficulty?: Difficulty;
+  reports?: Record<string, MatchReport>;
+  userCondition?: Record<string, PlayerCondition>;
 }): Record<string, ClubRuntime> {
   let rivals = { ...options.rivals };
   const involved = new Set<string>();
@@ -610,10 +728,12 @@ export function prepareRivalsForMatches(options: {
           id: opponentId,
           sheet: opponentIsUser ? options.userSheet : (opponentClub?.sheet ?? defaultSheet(opponentId)),
           tactics: opponentIsUser ? options.userTactics : clubTactics(opponentId),
-          condition: opponentIsUser ? undefined : opponentClub?.condition,
+          condition: opponentIsUser ? options.userCondition : opponentClub?.condition,
         },
         match.id,
         options.seed,
+        undefined,
+        { difficulty: options.difficulty, reports: options.reports },
       );
     }
   }
@@ -668,6 +788,8 @@ export function syncRivalsAfterUserWeek(
     phase: CalendarPhase;
     preseasonWeek: number;
     rivals: Record<string, ClubRuntime>;
+    difficulty?: Difficulty;
+    reports?: Record<string, MatchReport>;
   },
   remainingWeeks: number,
   date: string,
@@ -678,6 +800,8 @@ export function syncRivalsAfterUserWeek(
       seed: save.seed,
       week: save.preseasonWeek,
       remainingWeeks,
+      difficulty: save.difficulty,
+      reports: save.reports,
     });
   }
   return tickRivalsMidweek(rivals, {

@@ -11,7 +11,7 @@ import {
   tickManagedPreseasonWeek,
 } from "./aiManager";
 import { newSave, migrateSave } from "./gameStorage";
-import type { SimulatedMatch } from "../types";
+import type { MatchReport, SimulatedMatch } from "../types";
 
 describe("computer club manager", () => {
   it("seeds a managed club with personality tactics and starting form", () => {
@@ -93,6 +93,107 @@ describe("computer club manager", () => {
     expect(plan.tactics.shape).toBe("traditional");
   });
 
+  it("keeps a junior computer manager on club personality and does not chase at half-time", () => {
+    const climate = { sky: "sunny" as const, windStrength: 10, windAngle: 0 };
+    const vsSweeper = pickCpuTactics({
+      teamId: "ballyea",
+      opponentId: "eire-og",
+      seed: 9,
+      matchKey: "same-day",
+      climate,
+      difficulty: "junior",
+      opponentTactics: { ...DEFAULT_TACTICS, shape: "sweeper", build: 28, puckout: 24, pressure: 40 },
+    });
+    const vsDirect = pickCpuTactics({
+      teamId: "ballyea",
+      opponentId: "eire-og",
+      seed: 9,
+      matchKey: "same-day",
+      climate,
+      difficulty: "junior",
+      opponentTactics: { ...DEFAULT_TACTICS, shape: "traditional", build: 82, puckout: 80, pressure: 30 },
+    });
+    expect(vsSweeper).toEqual(vsDirect);
+    const first = {
+      matchId: "g1-r1-a",
+      homeId: "ballyea",
+      awayId: "eire-og",
+      homeScore: { goals: 0, points: 3 },
+      awayScore: { goals: 2, points: 12 },
+      events: [],
+      homeTactics: { ...DEFAULT_TACTICS, mentality: "balanced" as const },
+      awayTactics: DEFAULT_TACTICS,
+      homeSheet: defaultSheet("ballyea"),
+      awaySheet: defaultSheet("eire-og"),
+      homeStats: { scores: 3, wides: 1, hooks: 0, frees: 0, bookings: 0 },
+      awayStats: { scores: 18, wides: 1, hooks: 0, frees: 0, bookings: 0 },
+      players: [],
+      coachReport: [],
+      climate,
+      shots: [],
+    } as unknown as SimulatedMatch;
+    const junior = pickCpuHalfPlan({
+      teamId: "ballyea",
+      first,
+      side: "home",
+      condition: {},
+      seed: 2,
+      difficulty: "junior",
+    });
+    expect(junior.tactics.mentality).toBe("balanced");
+    const intercounty = pickCpuHalfPlan({
+      teamId: "ballyea",
+      first,
+      side: "home",
+      condition: {},
+      seed: 2,
+      difficulty: "intercounty",
+    });
+    expect(intercounty.tactics.mentality).toBe("attacking");
+  });
+
+  it("lets an intercounty manager assume tactics from a previous day", () => {
+    const climate = { sky: "sunny" as const, windStrength: 10, windAngle: 0 };
+    const reports = {
+      "g1-r1-a": {
+        matchId: "g1-r1-a",
+        homeId: "eire-og",
+        awayId: "ballyea",
+        homeScore: { goals: 1, points: 10 },
+        awayScore: { goals: 0, points: 8 },
+        homeTactics: { ...DEFAULT_TACTICS, shape: "sweeper" as const, shooting: 22, build: 28, puckout: 24 },
+        awayTactics: DEFAULT_TACTICS,
+        homeSheet: defaultSheet("eire-og"),
+        awaySheet: defaultSheet("ballyea"),
+        homeStats: { scores: 13, wides: 1, hooks: 0, frees: 0, bookings: 0 },
+        awayStats: { scores: 8, wides: 1, hooks: 0, frees: 0, bookings: 0 },
+        players: [],
+        coachReport: [],
+      },
+    };
+    const withHistory = pickCpuTactics({
+      teamId: "ballyea",
+      opponentId: "eire-og",
+      seed: 9,
+      matchKey: "next-day",
+      climate,
+      difficulty: "intercounty",
+      opponentTactics: { ...DEFAULT_TACTICS, shape: "traditional", build: 82, puckout: 80 },
+      reports: reports as unknown as Record<string, MatchReport>,
+    });
+    const withoutHistory = pickCpuTactics({
+      teamId: "ballyea",
+      opponentId: "eire-og",
+      seed: 9,
+      matchKey: "next-day",
+      climate,
+      difficulty: "intercounty",
+      opponentTactics: { ...DEFAULT_TACTICS, shape: "traditional", build: 82, puckout: 80 },
+    });
+    expect(withHistory.shooting).toBeLessThanOrEqual(withoutHistory.shooting);
+    expect(withHistory.shape === "sweeper" || withHistory.shooting <= withoutHistory.shooting).toBe(true);
+  });
+
   it("pairs computer clubs for preseason challenges", () => {
     const ids = ["a", "b", "c", "d", "e"];
     const pairs = pairChallengeMatches(ids, 1, 3);
@@ -112,9 +213,10 @@ describe("computer club manager", () => {
     expect(sample.sessionsDone).toBe(0);
   });
 
-  it("puts rival runtimes on a new save and migrates old saves to version 10", () => {
+  it("puts rival runtimes on a new save and migrates old saves to version 11", () => {
     const fresh = newSave("ballyea");
-    expect(fresh.version).toBe(10);
+    expect(fresh.version).toBe(11);
+    expect(fresh.difficulty).toBe("intermediate");
     expect(Object.keys(fresh.rivals)).toHaveLength(15);
     expect(fresh.rivals.ballyea).toBeUndefined();
     expect(fresh.rivals["eire-og"]?.sheet.starters).toHaveLength(15);
@@ -128,7 +230,8 @@ describe("computer club manager", () => {
       matches: [],
       inbox: [],
     });
-    expect(migrated?.version).toBe(10);
+    expect(migrated?.version).toBe(11);
+    expect(migrated?.difficulty).toBe("senior");
     expect(Object.keys(migrated?.rivals ?? {})).toHaveLength(15);
   });
 });

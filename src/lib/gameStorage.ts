@@ -1,5 +1,6 @@
 import { seedChampionship } from "../data/championship";
 import { createManagedClub, seedRivals } from "./aiManager";
+import { DEFAULT_DIFFICULTY, migrateDifficulty } from "./difficulty";
 import { DEFAULT_TACTICS, defaultSheet, expandSheetToPanel } from "./players";
 import { ATTRIBUTE_KEYS, clampDial } from "./attributes";
 import { ambitionFor, migrateNewsItem } from "./news";
@@ -18,6 +19,7 @@ import type {
   CalendarPhase,
   Championship,
   ClubRuntime,
+  Difficulty,
   GameSave,
   MatchReport,
   NewsItem,
@@ -30,7 +32,7 @@ import type {
   WeekShape,
 } from "../types";
 
-export const SAVE_VERSION = 10;
+export const SAVE_VERSION = 11;
 
 const STORAGE_KEY = "champ-manager:game-v1";
 
@@ -192,6 +194,7 @@ export function migrateSave(raw: unknown): GameSave | null {
     trainingDeltas?: unknown;
     weekDeltas?: unknown;
     rivals?: unknown;
+    difficulty?: unknown;
   };
   if (!parsed.clubId || !parsed.sheet || !Array.isArray(parsed.matches)) return null;
   if (
@@ -204,7 +207,8 @@ export function migrateSave(raw: unknown): GameSave | null {
     parsed.version !== 7 &&
     parsed.version !== 8 &&
     parsed.version !== 9 &&
-    parsed.version !== 10
+    parsed.version !== 10 &&
+    parsed.version !== 11
   ) {
     return null;
   }
@@ -267,6 +271,7 @@ export function migrateSave(raw: unknown): GameSave | null {
     trainingDeltas,
     weekDeltas,
     rivals: migrateRivals(parsed.clubId, seed, parsed.rivals),
+    difficulty: migrateDifficulty(parsed.difficulty),
   };
 }
 
@@ -287,7 +292,7 @@ function clampConditionBoosts(condition: Record<string, PlayerCondition>): Recor
   return next;
 }
 
-export function newSave(clubId: string): GameSave {
+export function newSave(clubId: string, difficulty: Difficulty = DEFAULT_DIFFICULTY): GameSave {
   const championship = structuredClone(seedChampionship);
   const seed = Math.floor(Math.random() * 1_000_000_000);
   const names = squadNames(clubId, seed);
@@ -295,6 +300,7 @@ export function newSave(clubId: string): GameSave {
     version: SAVE_VERSION,
     clubId,
     seed,
+    difficulty: migrateDifficulty(difficulty),
     tactics: DEFAULT_TACTICS,
     sheet: defaultSheet(clubId),
     matches: championship.matches.map((match) => ({

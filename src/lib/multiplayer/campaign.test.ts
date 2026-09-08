@@ -86,6 +86,21 @@ describe("multiplayer campaign", () => {
     expect(tooSoon.ok).toBe(false);
   });
 
+  it("stores the host's difficulty on a new championship", () => {
+    const junior = createCampaign({
+      hostPlayerId: "host",
+      hostName: "Rory",
+      clubId: "ballyea",
+      waitHours: 24,
+      now: NOW,
+      seed: 42,
+      code: "JUNIOR",
+      difficulty: "junior",
+    });
+    expect(junior.difficulty).toBe("junior");
+    expect(twoPlayerLobby().difficulty).toBe("intermediate");
+  });
+
   it("holds preseason until every manager finishes that week's sessions", () => {
     let campaign = startedCampaign();
     campaign = trainClub(campaign, "ballyea", "skills", NOW + 10);

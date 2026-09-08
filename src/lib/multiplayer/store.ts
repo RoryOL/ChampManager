@@ -1,5 +1,5 @@
 import type { Campaign } from "../../types";
-import { tickCampaign } from "./campaign";
+import { tickCampaign, withCampaignDefaults } from "./campaign";
 
 const CAMPAIGN_KEY = "champ-manager:campaign-v1";
 const ROOMS_KEY = "champ-manager:rooms-v1";
@@ -30,7 +30,7 @@ export function persistCampaign(campaign: Campaign): void {
 export function loadCampaign(now = Date.now()): Campaign | null {
   const stored = readJson<Campaign>(CAMPAIGN_KEY);
   if (!stored || stored.version !== 1 || !stored.code) return null;
-  const ticked = tickCampaign(stored, now);
+  const ticked = tickCampaign(withCampaignDefaults(stored), now);
   if (ticked.revision !== stored.revision) persistCampaign(ticked);
   return ticked;
 }
@@ -38,7 +38,7 @@ export function loadCampaign(now = Date.now()): Campaign | null {
 export function loadRoom(code: string, now = Date.now()): Campaign | null {
   const campaign = rooms()[code];
   if (!campaign || campaign.version !== 1) return null;
-  return tickCampaign(campaign, now);
+  return tickCampaign(withCampaignDefaults(campaign), now);
 }
 
 export function clearCampaign(): void {
@@ -59,7 +59,7 @@ export function parseCampaignInvite(raw: string): Campaign | null {
   if (!trimmed) return null;
   try {
     const parsed = JSON.parse(trimmed) as Campaign;
-    if (parsed?.version === 1 && parsed.code && Array.isArray(parsed.seats)) return parsed;
+    if (parsed?.version === 1 && parsed.code && Array.isArray(parsed.seats)) return withCampaignDefaults(parsed);
   } catch {
     return null;
   }
