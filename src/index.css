@@ -1313,10 +1313,162 @@ html.native-app .device {
   margin: 0;
   border: none;
   border-radius: 0 0 10px 10px;
+  max-height: min(58vh, 520px);
+}
+
+.tactics-columns {
+  padding: 8px 10px 4px;
+  border-bottom: 1px solid var(--line);
+}
+
+.tactics-columns summary {
+  cursor: pointer;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--saffron);
+  font-weight: 700;
+  list-style: none;
+}
+
+.tactics-columns summary::-webkit-details-marker {
+  display: none;
+}
+
+.tactics-columns summary::after {
+  content: " ▾";
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.tactics-columns[open] summary::after {
+  content: " ▴";
+}
+
+.tactics-columns__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.tactics-columns__head .kicker {
+  margin: 0;
+}
+
+.tactics-columns__head .btn {
+  padding: 4px 10px;
+  font-size: 11px;
+}
+
+.tactics-columns__group {
+  display: grid;
+  gap: 4px;
+  margin: 6px 0;
+}
+
+.tactics-columns__group > span {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.tactics-columns .template-row {
+  margin: 0;
+}
+
+.player-compare {
+  padding: 8px 10px 10px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-2);
+}
+
+.player-compare .kicker {
+  margin: 0 0 6px;
+}
+
+.player-compare__scroll {
+  overflow: auto;
+  max-height: min(42vh, 360px);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.player-compare__table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.player-compare__table th,
+.player-compare__table td {
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.player-compare__table thead {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
+.player-compare__table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.player-compare__table thead th.is-sticky {
+  z-index: 4;
+  text-align: left;
+}
+
+.player-compare__table th.is-sticky {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  text-align: left;
+  background: var(--surface);
+  min-width: 108px;
+}
+
+.player-compare__table tbody th.is-sticky {
+  font-weight: 600;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.player-compare__table td {
+  text-align: center;
+  min-width: 72px;
+}
+
+.player-compare__table td.is-up {
+  color: #7dce8a;
+  font-weight: 800;
+  background: rgba(125, 206, 138, 0.16);
+}
+
+.player-compare__table td.is-down {
+  color: #ff8a8a;
+  font-weight: 700;
+  background: rgba(224, 90, 90, 0.16);
 }
 
 .squad-table-wrap {
-  overflow-x: auto;
+  overflow: auto;
+  max-height: min(62vh, 580px);
+  overscroll-behavior: contain;
   margin: 8px 0 12px;
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -1326,7 +1478,8 @@ html.native-app .device {
 .squad-table {
   width: max-content;
   min-width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: 11px;
 }
 
@@ -1339,11 +1492,21 @@ html.native-app .device {
   font-variant-numeric: tabular-nums;
 }
 
+.squad-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
 .squad-table th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
   color: var(--muted);
   font-weight: 600;
   font-size: 10px;
   letter-spacing: 0.02em;
+  background: var(--surface-2);
 }
 
 .squad-table td.num {
@@ -1351,12 +1514,19 @@ html.native-app .device {
   font-weight: 700;
 }
 
+.squad-table th.name,
 .squad-table td.name {
   text-align: left;
   position: sticky;
   left: 0;
+  z-index: 2;
   background: var(--surface);
   min-width: 132px;
+}
+
+.squad-table thead th.name {
+  z-index: 4;
+  background: var(--surface-2);
 }
 
 .squad-table td.name strong {
@@ -1406,7 +1576,9 @@ html.native-app .device {
 
 .tactics-table thead th.num,
 .tactics-table thead th.name {
-  z-index: 3;
+  z-index: 4;
+  top: 0;
+  background: var(--surface-2);
 }
 
 .tactics-table tbody tr:hover td.num,
@@ -1701,7 +1873,8 @@ html.native-app .device {
 }
 
 .chart-scroll {
-  overflow-x: auto;
+  overflow: auto;
+  max-height: min(62vh, 580px);
   margin: 8px 0 12px;
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -1724,7 +1897,8 @@ html.native-app .device {
 .player-chart {
   width: max-content;
   min-width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: 10px;
   font-variant-numeric: tabular-nums;
 }
@@ -1747,12 +1921,22 @@ html.native-app .device {
   white-space: nowrap;
 }
 
+.player-chart thead {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
 .player-chart thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
   font-size: 9px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--muted);
   font-weight: 600;
+  background: var(--surface-2);
 }
 
 .player-chart th.is-sticky,
@@ -1761,10 +1945,16 @@ html.native-app .device {
   left: 0;
   text-align: left;
   background: var(--surface);
-  z-index: 1;
+  z-index: 2;
   max-width: 108px;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.player-chart thead th.is-sticky {
+  z-index: 4;
+  top: 0;
+  background: var(--surface-2);
 }
 
 .player-chart tbody th.is-sticky {
