@@ -20,7 +20,16 @@ import type {
 } from "../../types";
 import { compactName } from "../display";
 import { briefingNews } from "../briefing";
-import { championshipFromSave } from "../gameStorage";
+import { championshipFromSave, SAVE_VERSION } from "../gameStorage";
+import {
+  applySimToClub,
+  createManagedClub,
+  ensureManagedClubs,
+  pickCpuHalfPlan,
+  prepareManagedClubForMatch,
+  tickManagedPreseasonWeek,
+  trainManagedClub,
+} from "../aiManager";
 import { momentumAt, sentOffNamesFromEvents, simulateMatch } from "../matchEngine";
 import {
   applyInjury,
@@ -105,6 +114,10 @@ function newClub(clubId: string, seed = 1): ClubRuntime {
     trainingDeltas: {},
     weekDeltas: {},
   };
+}
+
+function withAllClubs(campaign: Campaign): Campaign {
+  return { ...campaign, clubs: ensureManagedClubs(campaign.clubs, campaign.seed) };
 }
 
 export function waitLabel(hours: WaitHours): string {
@@ -219,15 +232,16 @@ export function startCampaign(
   if (campaign.seats.length < 2) return { ok: false, error: "Need at least two managers." };
   const clubs: Record<string, ClubRuntime> = {};
   const date = PRESEASON_DATES[0] ?? "";
-  for (const seat of campaign.seats) {
-    const club = newClub(seat.clubId, campaign.seed);
-    const team = seedChampionship.teams.find((item) => item.id === seat.clubId);
-    if (!team) {
-      clubs[seat.clubId] = club;
-      continue;
+  const seated = new Map(campaign.seats.map((seat) => [seat.clubId, seat]));
+  for (const team of seedChampionship.teams) {
+    const seat = seated.get(team.id);
+    if (seat) {
+      const club = newClub(team.id, campaign.seed);
+      const welcome = chairmanWelcome({ club: team, seed: campaign.seed, date });
+      clubs[team.id] = pushInbox(club, [{ ...welcome.item, id: `${welcome.item.id}:${seat.clubId}` }]);
+    } else {
+      clubs[team.id] = createManagedClub(team.id, campaign.seed);
     }
-    const welcome = chairmanWelcome({ club: team, seed: campaign.seed, date });
-    clubs[seat.clubId] = pushInbox(club, [{ ...welcome.item, id: `${welcome.item.id}:${seat.clubId}` }]);
   }
   return {
     ok: true,
@@ -244,7 +258,7 @@ export function startCampaign(
 export function saveFromCampaign(campaign: Campaign, clubId: string): GameSave {
   const club = campaign.clubs[clubId] ?? newClub(clubId, campaign.seed);
   return {
-    version: 9,
+    version: SAVE_VERSION,
     clubId,
     seed: campaign.seed,
     tactics: club.tactics,
@@ -264,6 +278,7 @@ export function saveFromCampaign(campaign: Campaign, clubId: string): GameSave {
     sessionsDone: club.sessionsDone ?? 0,
     trainingDeltas: club.trainingDeltas ?? {},
     weekDeltas: club.weekDeltas ?? {},
+    rivals: Object.fromEntries(Object.entries(campaign.clubs).filter(([id]) => id !== clubId)),
   };
 }
 
@@ -344,6 +359,9 @@ function withClubBriefing(club: ClubRuntime, clubId: string, campaign: Campaign)
   if (!match || matchPlayed(match)) return club;
   const id = `briefing-${match.id}-${clubId}`;
   if (club.inbox.some((item) => item.id === id)) return club;
+  const { homeId, awayId } = resolveMatchSides(championship, match);
+  const opponentId = homeId === clubId ? awayId : homeId;
+  const rival = opponentId ? campaign.clubs[opponentId] : undefined;
   return pushInbox(club, [
     briefingNews({
       clubId,
@@ -353,6 +371,8 @@ function withClubBriefing(club: ClubRuntime, clubId: string, campaign: Campaign)
       sheet: club.sheet,
       condition: club.condition,
       seed: campaign.seed,
+      opponentSheet: rival?.sheet,
+      opponentTactics: rival?.tactics,
     }),
   ]);
 }
@@ -619,32 +639,77 @@ function fillMissingReady(campaign: Campaign, now: number): Campaign {
 }
 
 function lockMatchday(campaign: Campaign, now: number): Campaign {
-  const championship = championshipOf(campaign);
+  let next = withAllClubs(campaign);
+  const championship = championshipOf(next);
   const batch = nextOpenBatch(championship);
   if (!batch) {
-    return bump({ ...campaign, week: { ...emptyWeek(), deadlineAt: openDeadline(campaign.waitHours, now) } });
+    return bump({ ...next, week: { ...emptyWeek(), deadlineAt: openDeadline(campaign.waitHours, now) } });
   }
-  const lives: Record<string, MatchLive> = {};
-  let matches = campaign.matches;
-  let reports = { ...campaign.reports };
+  const date = batch.matches[0]?.date ?? "";
+  const remaining = remainingWeeks(saveFromCampaign(next, campaign.seats[0]?.clubId ?? seedChampionship.teams[0].id), championship, campaign.seats[0]?.clubId ?? seedChampionship.teams[0].id);
+  let clubs = { ...next.clubs };
+  const involved = new Set<string>();
+  for (const match of batch.matches) {
+    const { homeId, awayId } = resolveMatchSides(championship, match);
+    if (homeId) involved.add(homeId);
+    if (awayId) involved.add(awayId);
+  }
+  for (const clubId of involved) {
+    if (isHumanClub(next, clubId)) continue;
+    let club = clubs[clubId] ?? createManagedClub(clubId, next.seed);
+    if (club.trainingDue) {
+      club = trainManagedClub(club, clubId, {
+        seed: next.seed,
+        phase: "season",
+        preseasonWeek: next.preseasonWeek,
+        date,
+        remainingWeeks: remaining,
+      });
+    }
+    clubs[clubId] = club;
+  }
+  next = { ...next, clubs };
   for (const match of batch.matches) {
     const { homeId, awayId } = resolveMatchSides(championship, match);
     if (!homeId || !awayId) continue;
-    const humans = [homeId, awayId].filter((id) => isHumanClub(campaign, id));
+    for (const [clubId, opponentId] of [
+      [homeId, awayId],
+      [awayId, homeId],
+    ] as const) {
+      if (isHumanClub(next, clubId)) continue;
+      const club = clubs[clubId];
+      if (!club) continue;
+      const opponent = clubs[opponentId];
+      clubs[clubId] = prepareManagedClubForMatch(
+        club,
+        clubId,
+        {
+          id: opponentId,
+          sheet: opponent?.sheet ?? defaultSheet(opponentId),
+          tactics: isHumanClub(next, opponentId) ? (opponent?.tactics ?? clubTactics(opponentId)) : clubTactics(opponentId),
+        },
+        match.id,
+        next.seed,
+      );
+    }
+  }
+  next = { ...next, clubs };
+  const lives: Record<string, MatchLive> = {};
+  for (const match of batch.matches) {
+    const { homeId, awayId } = resolveMatchSides(championship, match);
+    if (!homeId || !awayId) continue;
+    const humans = [homeId, awayId].filter((id) => isHumanClub(next, id));
     const period = humans.length > 0 ? "first" : "full";
-    const sim = simulateSides(campaign, match, homeId, awayId, period);
-    const decorated = decorateHumanMatch(campaign, sim);
+    const sim = simulateSides(next, match, homeId, awayId, period);
+    const decorated = decorateHumanMatch(next, sim);
     if (humans.length === 0) {
-      matches = writeMatch(matches, decorated.sim);
-      reports[decorated.sim.matchId] = reportFromSim(decorated.sim);
+      next = finishSim(next, decorated.sim, decorated.sim, decorated.injuries);
     } else {
       lives[match.id] = { matchId: match.id, first: decorated.sim, injuries: decorated.injuries };
     }
   }
   return bump({
-    ...campaign,
-    matches,
-    reports,
+    ...next,
     week: {
       locked: true,
       deadlineAt: openDeadline(campaign.waitHours, now),
@@ -657,13 +722,25 @@ function lockMatchday(campaign: Campaign, now: number): Campaign {
 }
 
 function lockPreseason(campaign: Campaign, now: number): Campaign {
+  const started = withAllClubs(campaign);
+  const managedIds = seedChampionship.teams.map((team) => team.id).filter((id) => !isHumanClub(started, id));
+  const remaining = Math.max(1, PRESEASON_WEEKS - campaign.preseasonWeek + 4);
+  const trained = tickManagedPreseasonWeek(started.clubs, managedIds, {
+    seed: campaign.seed,
+    week: campaign.preseasonWeek,
+    remainingWeeks: remaining,
+  });
   const week = campaign.preseasonWeek + 1;
-  const clubs = { ...campaign.clubs };
+  const clubs = { ...trained };
   const championshipWeek = week > PRESEASON_WEEKS;
-  for (const seat of campaign.seats) {
-    const club = clubs[seat.clubId];
+  for (const clubId of Object.keys(clubs)) {
+    const club = clubs[clubId];
     if (!club) continue;
     if (championshipWeek) {
+      if (!isHumanClub(started, clubId)) {
+        clubs[clubId] = { ...club, trainingDue: false, sessionsDone: 0 };
+        continue;
+      }
       const noted = pushInbox(
         { ...club, trainingDue: false, sessionsDone: 0 },
         [
@@ -676,13 +753,13 @@ function lockPreseason(campaign: Campaign, now: number): Campaign {
           }),
         ],
       );
-      clubs[seat.clubId] = withClubBriefing(noted, seat.clubId, { ...campaign, phase: "season" });
+      clubs[clubId] = withClubBriefing(noted, clubId, { ...started, phase: "season", clubs });
     } else {
-      clubs[seat.clubId] = { ...club, trainingDue: true, sessionsDone: 0 };
+      clubs[clubId] = { ...club, trainingDue: true, sessionsDone: 0 };
     }
   }
   return bump({
-    ...campaign,
+    ...started,
     phase: championshipWeek ? "season" : "preseason",
     preseasonWeek: week,
     clubs,
@@ -818,28 +895,30 @@ function finishSim(
   const matches = writeMatch(campaign.matches, sim);
   const playedCount = matches.filter((item) => item.homeScore && item.awayScore).length;
   let clubs = { ...campaign.clubs };
-  for (const seat of campaign.seats) {
-    const club = clubs[seat.clubId];
-    if (!club) continue;
-    if (seat.clubId !== sim.homeId && seat.clubId !== sim.awayId) continue;
-    const ours = seat.clubId === sim.homeId;
+  for (const clubId of [sim.homeId, sim.awayId]) {
+    const club = clubs[clubId] ?? createManagedClub(clubId, campaign.seed);
+    const ours = clubId === sim.homeId;
+    const opening = ours ? first.homeSheet : first.awaySheet;
+    if (!isHumanClub(campaign, clubId)) {
+      clubs[clubId] = applySimToClub(club, clubId, sim, campaign.seed, "competitive", opening);
+      continue;
+    }
     const ourScore = ours ? sim.homeScore : sim.awayScore;
     const theirScore = ours ? sim.awayScore : sim.homeScore;
     const result =
       scoreTotal(ourScore) > scoreTotal(theirScore) ? "win" : scoreTotal(ourScore) < scoreTotal(theirScore) ? "loss" : "draw";
-    const opening = ours ? first.homeSheet : first.awaySheet;
     const closing = ours ? sim.homeSheet : sim.awaySheet;
     const tactics = ours ? sim.homeTactics : sim.awayTactics;
-    const squad = ratedSquad(seat.clubId, campaign.seed);
-    const rolled = injuriesByClub[seat.clubId] ?? [];
+    const squad = ratedSquad(clubId, campaign.seed);
+    const rolled = injuriesByClub[clubId] ?? [];
     let condition = applyMatchFatigue(
       club.condition,
       closing.starters,
       closing.subs,
       tactics,
       squad,
-      sim.events.some((event) => event.kind === "red" && event.teamId === seat.clubId),
-      seat.clubId === sim.homeId ? (sim.homeChaseEffort ?? 0) : (sim.awayChaseEffort ?? 0),
+      sim.events.some((event) => event.kind === "red" && event.teamId === clubId),
+      clubId === sim.homeId ? (sim.homeChaseEffort ?? 0) : (sim.awayChaseEffort ?? 0),
     );
     condition = applyMatchForm(condition, squad, opening, closing, sim.players, result, campaign.seed, sim.matchId);
     const teamworked = applyTeamwork(condition, closing, club.lastSheet, "competitive");
@@ -848,13 +927,13 @@ function finishSim(
       condition = applyInjury(condition, item.name, item.injury);
     }
     const sheet = sitInjuredPlayers(closing, squad, condition);
-    const clubTeam = teamById(championship, seat.clubId);
+    const clubTeam = teamById(championship, clubId);
     const opponent = ours ? awayTeam : homeTeam;
     const items: NewsItem[] = [];
     if (clubTeam && homeTeam && awayTeam) {
       items.push(
         matchReportItem({
-          clubId: seat.clubId,
+          clubId,
           clubName: clubTeam.name,
           homeName: homeTeam.name,
           awayName: awayTeam.name,
@@ -876,7 +955,7 @@ function finishSim(
           date,
           seed: campaign.seed,
           matchId: sim.matchId,
-          ambition: ambitionFor(seat.clubId).target,
+          ambition: ambitionFor(clubId).target,
         });
         if (chair) items.push(chair);
         const press = localPressItem({
@@ -888,7 +967,7 @@ function finishSim(
           date,
           seed: campaign.seed,
           matchId: sim.matchId,
-          ambition: ambitionFor(seat.clubId).target,
+          ambition: ambitionFor(clubId).target,
           played: playedCount,
         });
         items.push(press);
@@ -905,7 +984,7 @@ function finishSim(
         }),
       );
     }
-    clubs[seat.clubId] = pushInbox(
+    clubs[clubId] = pushInbox(
       { ...club, condition, sheet, trainingDue: true, lastSheet: teamworked.lastSheet },
       items,
     );
@@ -919,12 +998,14 @@ function finishSim(
 }
 
 function autoPlan(campaign: Campaign, clubId: string, first: SimulatedMatch, side: "home" | "away"): HalfPlan {
-  const club = campaign.clubs[clubId];
-  return {
-    tactics: club?.tactics ?? (side === "home" ? first.homeTactics : first.awayTactics),
-    sheet: club?.sheet ?? (side === "home" ? first.homeSheet : first.awaySheet),
-    submittedAt: 0,
-  };
+  const club = campaign.clubs[clubId] ?? createManagedClub(clubId, campaign.seed);
+  return pickCpuHalfPlan({
+    teamId: clubId,
+    first,
+    side,
+    condition: club.condition,
+    seed: campaign.seed,
+  });
 }
 
 function tryCompleteLive(campaign: Campaign, matchId: string): Campaign {
@@ -1036,7 +1117,7 @@ function closeBatchIfDone(campaign: Campaign, now: number): Campaign {
 
 export function tickCampaign(campaign: Campaign, now = Date.now()): Campaign {
   if (campaign.phase === "lobby") return campaign;
-  let next = campaign;
+  let next = withAllClubs(campaign);
   if (!next.week.locked) {
     const pending = waitingOnWeek(next);
     if (pending.length === 0 || deadlinePassed(next, now)) {

@@ -172,7 +172,9 @@ export function SquadScreen({ save, teams, viewTeamId, onViewTeam, picked, onTap
   const ownTeam = viewTeamId === save.clubId;
   const squad = ratedSquad(viewTeamId, save.seed);
   const byName = new Map(squad.map((player) => [player.name, player]));
-  const sheet = ownTeam ? expandSheetToPanel(viewTeamId, save.sheet, save.seed) : defaultSheet(viewTeamId);
+  const sheet = ownTeam
+    ? expandSheetToPanel(viewTeamId, save.sheet, save.seed)
+    : (save.rivals[viewTeamId]?.sheet ?? defaultSheet(viewTeamId));
   const starters = sheet.starters
     .map((name) => byName.get(name))
     .filter((player): player is RatedPlayer => Boolean(player));

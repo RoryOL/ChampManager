@@ -193,4 +193,19 @@ describe("multiplayer campaign", () => {
       campaign.clubs["inagh-kilnamona"].inbox.find((item) => item.kind === "chairman")?.id,
     );
   });
+
+  it("runs computer clubs through preseason and changes their championship setup", () => {
+    const campaign = startedCampaign();
+    expect(Object.keys(campaign.clubs).length).toBe(16);
+    expect(campaign.clubs.clonlara.tactics).not.toEqual(DEFAULT_TACTICS);
+    let next = trainFullWeek(campaign, "ballyea", "skills", NOW + 10);
+    next = trainFullWeek(next, "inagh-kilnamona", "fitness", NOW + 20);
+    expect(next.preseasonWeek).toBe(2);
+    const cpu = next.clubs.clonlara;
+    expect(cpu).toBeTruthy();
+    const moved = Object.values(cpu.condition).some(
+      (row) => (row.sharpness ?? 0) > 38 || (row.fatigue ?? 0) > 0 || Boolean(row.boosts && Object.keys(row.boosts).length),
+    );
+    expect(moved).toBe(true);
+  });
 });

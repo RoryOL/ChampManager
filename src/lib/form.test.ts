@@ -171,7 +171,7 @@ describe("hidden player form", () => {
     expect(copy).not.toMatch(/\b86\b/);
   });
 
-  it("upgrades old saves to version 9 and fills missing form", () => {
+  it("upgrades old saves to version 10 and fills missing form", () => {
     const migrated = migrateSave({
       version: 8,
       clubId: "ballyea",
@@ -181,7 +181,7 @@ describe("hidden player form", () => {
       matches: [],
       inbox: [],
     });
-    expect(migrated?.version).toBe(9);
+    expect(migrated?.version).toBe(10);
     const names = ratedSquad("ballyea", 3).map((player) => player.name);
     expect(names.every((name) => typeof migrated?.condition[name]?.form === "number")).toBe(true);
     const values = new Set(names.map((name) => migrated?.condition[name]?.form));

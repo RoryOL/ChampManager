@@ -45,6 +45,13 @@ import {
 } from "../lib/multiplayer/store";
 import { clubTactics, defaultSheet, expandSheetToPanel, ratedSquad, swapPlayersInSheet } from "../lib/players";
 import { remainingMatchSubs } from "../lib/subs";
+import {
+  applySimsToRivals,
+  pickCpuHalfPlan,
+  prepareRivalsForMatches,
+  seedRivals,
+  syncRivalsAfterUserWeek,
+} from "../lib/aiManager";
 import { resolveMatchSides, teamById } from "../lib/resolve";
 import { nextBatch } from "../lib/schedule";
 import { formatScore, matchPlayed, scoreTotal, stageLabel } from "../lib/scoring";
@@ -120,6 +127,28 @@ export type LiveMatch = {
   openingSheet: TeamSheet;
   injuries: RolledInjury[];
 };
+
+function preparedRivals(save: GameSave, championship: Championship): GameSave["rivals"] {
+  const batch = nextBatch(championship, save.clubId);
+  const matches = (batch?.matches ?? []).flatMap((match) => {
+    const { homeId, awayId } = resolveMatchSides(championship, match);
+    if (!homeId || !awayId) return [];
+    return [{ id: match.id, homeId, awayId }];
+  });
+  const date =
+    batch?.matches[0]?.date ?? championship.matches.find((match) => !matchPlayed(match))?.date ?? "";
+  return prepareRivalsForMatches({
+    rivals: save.rivals ?? seedRivals(save.clubId, save.seed),
+    userClubId: save.clubId,
+    userSheet: save.sheet,
+    userTactics: save.tactics,
+    matches,
+    seed: save.seed,
+    date,
+    remainingWeeks: remainingWeeks(save, championship, save.clubId),
+    preseasonWeek: save.preseasonWeek,
+  });
+}
 
 function decorateUserMatch(
   sim: SimulatedMatch,
@@ -429,6 +458,7 @@ export function useGame() {
 
       const squad = ratedSquad(save.clubId, save.seed);
       const userSheet = sitInjuredPlayers(expandSheetToPanel(save.clubId, save.sheet, save.seed), squad, save.condition);
+      const rivals = preparedRivals(save, championship);
       let injuries: RolledInjury[] = [];
       const simulated = batch.matches
         .map((match) => {
@@ -437,16 +467,18 @@ export function useGame() {
           const isUser = homeId === save.clubId || awayId === save.clubId;
           const homeTeam = teamById(championship, homeId);
           const awayTeam = teamById(championship, awayId);
+          const homeClub = homeId === save.clubId ? null : rivals[homeId];
+          const awayClub = awayId === save.clubId ? null : rivals[awayId];
           const sim = simulateMatch({
             matchId: match.id,
             homeId,
             awayId,
-            homeSheet: homeId === save.clubId ? userSheet : defaultSheet(homeId),
-            awaySheet: awayId === save.clubId ? userSheet : defaultSheet(awayId),
-            homeTactics: homeId === save.clubId ? save.tactics : clubTactics(homeId),
-            awayTactics: awayId === save.clubId ? save.tactics : clubTactics(awayId),
-            homeCondition: homeId === save.clubId ? save.condition : undefined,
-            awayCondition: awayId === save.clubId ? save.condition : undefined,
+            homeSheet: homeId === save.clubId ? userSheet : (homeClub?.sheet ?? defaultSheet(homeId)),
+            awaySheet: awayId === save.clubId ? userSheet : (awayClub?.sheet ?? defaultSheet(awayId)),
+            homeTactics: homeId === save.clubId ? save.tactics : (homeClub?.tactics ?? clubTactics(homeId)),
+            awayTactics: awayId === save.clubId ? save.tactics : (awayClub?.tactics ?? clubTactics(awayId)),
+            homeCondition: homeId === save.clubId ? save.condition : homeClub?.condition,
+            awayCondition: awayId === save.clubId ? save.condition : awayClub?.condition,
             homeSquad: ratedSquad(homeId, save.seed),
             awaySquad: ratedSquad(awayId, save.seed),
             remainingWeeks: remainingWeeks(save, championship, save.clubId),
@@ -678,6 +710,15 @@ export function useGame() {
       });
       if (roundup) items.push(roundup);
       next = withInbox(next, items);
+      next = {
+        ...next,
+        rivals: applySimsToRivals(
+          preparedRivals(base, championship),
+          [current.user, ...current.others],
+          base.clubId,
+          base.seed,
+        ),
+      };
       commitSolo(next);
       setLive({ ...current, cursor: current.user.events.length, phase: "finished" });
     },
@@ -728,16 +769,28 @@ export function useGame() {
       const first = live.user;
       const homeTeam = homeId ? teamById(championship, homeId) : undefined;
       const awayTeam = awayId ? teamById(championship, awayId) : undefined;
+      const rivals = preparedRivals(save, championship);
+      const cpuId = homeId === save.clubId ? awayId : homeId;
+      const cpuClub = rivals[cpuId];
+      const cpuPlan = cpuClub
+        ? pickCpuHalfPlan({
+            teamId: cpuId,
+            first,
+            side: homeId === save.clubId ? "away" : "home",
+            condition: cpuClub.condition,
+            seed: save.seed,
+          })
+        : null;
       const second = simulateMatch({
         matchId: first.matchId,
         homeId,
         awayId,
-        homeSheet: homeId === save.clubId ? workingSheet : defaultSheet(homeId),
-        awaySheet: awayId === save.clubId ? workingSheet : defaultSheet(awayId),
-        homeTactics: homeId === save.clubId ? tactics : clubTactics(homeId),
-        awayTactics: awayId === save.clubId ? tactics : clubTactics(awayId),
-        homeCondition: homeId === save.clubId ? save.condition : undefined,
-        awayCondition: awayId === save.clubId ? save.condition : undefined,
+        homeSheet: homeId === save.clubId ? workingSheet : (cpuPlan?.sheet ?? defaultSheet(homeId)),
+        awaySheet: awayId === save.clubId ? workingSheet : (cpuPlan?.sheet ?? defaultSheet(awayId)),
+        homeTactics: homeId === save.clubId ? tactics : (cpuPlan?.tactics ?? clubTactics(homeId)),
+        awayTactics: awayId === save.clubId ? tactics : (cpuPlan?.tactics ?? clubTactics(awayId)),
+        homeCondition: homeId === save.clubId ? save.condition : cpuClub?.condition,
+        awayCondition: awayId === save.clubId ? save.condition : cpuClub?.condition,
         homeSquad: ratedSquad(homeId, save.seed),
         awaySquad: ratedSquad(awayId, save.seed),
         remainingWeeks: remainingWeeks(save, championship, save.clubId),
@@ -1010,6 +1063,12 @@ export function useGame() {
           }),
         );
       }
+      if (result.weekComplete) {
+        next = {
+          ...next,
+          rivals: syncRivalsAfterUserWeek(save, remainingWeeks(save, championship, save.clubId), date),
+        };
+      }
       next = withInbox(next, items);
       next = ensureMatchBriefing(next, championshipFromSave(next));
       commitSolo(next);
@@ -1145,6 +1204,12 @@ export function useGame() {
             clubName: club?.name ?? "the club",
           }),
         );
+      }
+      if (result.weekComplete) {
+        next = {
+          ...next,
+          rivals: syncRivalsAfterUserWeek(save, remainingWeeks(save, championship, save.clubId), date),
+        };
       }
       next = withInbox(next, items);
       next = ensureMatchBriefing(next, championshipFromSave(next));
