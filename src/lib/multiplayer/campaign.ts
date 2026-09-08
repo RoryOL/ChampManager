@@ -947,6 +947,7 @@ function simulateSides(
     ),
     homePrep: homeClub?.nextMatchPrep,
     awayPrep: awayClub?.nextMatchPrep,
+    stage: match.stage,
   });
 }
 

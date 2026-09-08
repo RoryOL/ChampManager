@@ -511,6 +511,7 @@ export function useGame() {
             performanceBoost: performanceBoostFor(save.difficulty, [save.clubId]),
             homePrep: homeId === save.clubId ? save.nextMatchPrep : homeClub?.nextMatchPrep,
             awayPrep: awayId === save.clubId ? save.nextMatchPrep : awayClub?.nextMatchPrep,
+            stage: match.stage,
           });
           if (!isUser) return sim;
           const decorated = decorateUserMatch(sim, save);
@@ -868,6 +869,7 @@ export function useGame() {
         performanceBoost: performanceBoostFor(save.difficulty, [save.clubId]),
         homePrep: homeId === save.clubId ? save.nextMatchPrep : cpuClub?.nextMatchPrep,
         awayPrep: awayId === save.clubId ? save.nextMatchPrep : cpuClub?.nextMatchPrep,
+        stage: live.match.stage,
       });
       const decorated = decorateUserMatch(second, save);
       const homeSecondSheet = homeId === save.clubId ? workingSheet : (cpuPlan?.sheet ?? defaultSheet(homeId));

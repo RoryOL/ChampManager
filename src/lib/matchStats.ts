@@ -140,9 +140,10 @@ export function passChain(
   carrier: string,
   completeChance: number | ((name: string) => number) = 0.72,
   fumbleFor?: (name: string) => number,
-): { credits: StatCredit[]; carrier: string; retained: boolean; copy?: string } {
+): { credits: StatCredit[]; carrier: string; retained: boolean; copy?: string; passer?: string } {
   const credits: StatCredit[] = [];
   let onBall = carrier;
+  let passer: string | undefined;
   const pool = names.length > 0 ? names : [carrier];
   const completeOf = (name: string) => (typeof completeChance === "function" ? completeChance(name) : completeChance);
   for (let i = 0; i < hops; i += 1) {
@@ -164,14 +165,15 @@ export function passChain(
       passesCompleted: completed ? 1 : 0,
     });
     if (!completed) {
-      return { credits, carrier: onBall, retained: false };
+      return { credits, carrier: onBall, retained: false, passer: onBall };
     }
     if (target && target !== onBall) {
       credits.push({ name: target, teamId, possessions: 1 });
+      passer = onBall;
       onBall = target;
     }
   }
-  return { credits, carrier: onBall, retained: true };
+  return { credits, carrier: onBall, retained: true, passer };
 }
 
 export function deliverTo(

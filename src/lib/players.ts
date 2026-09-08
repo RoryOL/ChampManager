@@ -595,7 +595,7 @@ export type SideProfile = {
 export const PUCKOUT_TARGET_INDEXES = [7, 8, 9, 10, 11];
 
 export function aerialContestRating(highFielding: number, aerialReach: number, strength: number): number {
-  return highFielding * 0.42 + aerialReach * 0.38 + strength * 0.2;
+  return aerialReach * 0.36 + highFielding * 0.34 + strength * 0.3;
 }
 
 export function puckoutTargetPool(xv: RatedPlayer[]): RatedPlayer[] {
@@ -714,7 +714,9 @@ export function sideProfile(
     average(backs.map((i) => scaled(i, ["hooking", "manMarking", "strength", "highFielding", "aerialReach"]))) ||
     12;
   let aerial =
-    average(midfield.map((i) => scaled(i, ["highFielding", "aerialReach", "strength"]))) || 12;
+    average(
+      [...forwards, ...midfield].map((i) => scaled(i, ["highFielding", "aerialReach", "strength"])),
+    ) || 12;
   let running =
     average(
       [...mids, ...forwards].map((i) =>

@@ -65,7 +65,12 @@ export function TacticControls({ tactics, onChange, compact = false, xv = [] }: 
         <h3>Build-up</h3>
         <p className="tactic-copy">
           Short passing through the lines on the left, direct long ball on the right. Currently{" "}
-          <strong>{buildLabel(tactics.build)}</strong>.
+          <strong>{buildLabel(tactics.build)}</strong>. A running game needs acceleration and off-the-ball; a long
+          ball is won with aerials, strength and high fielding. Spilled low balls are hunted with pace, first touch
+          and off-the-ball — strength wins the crowd without fouling. Vision from the back and midfield turns
+          distribution into scoring looks. Ability under pressure tells in knockouts and the closing minutes,
+          especially when chasing a leveller. Full forwards who gather it, or who have a real pace edge on their
+          man, get the look at goal.
         </p>
         <label className="dial">
           <span>Short</span>
