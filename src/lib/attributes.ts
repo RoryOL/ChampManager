@@ -341,7 +341,7 @@ export function buildLabel(value: number): string {
 }
 
 export function puckoutLabel(value: number): string {
-  if (value < 25) return "Short to the half-backs";
+  if (value < 25) return "Short to the full-back line";
   if (value < 45) return "Mostly short";
   if (value < 60) return "Mixed restarts";
   if (value < 80) return "Mostly long to a target";

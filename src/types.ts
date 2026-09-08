@@ -109,7 +109,7 @@ export type Tactics = {
   mentality: "contain" | "balanced" | "attacking";
   /** 0 = short passing / running game, 100 = direct long ball */
   build: number;
-  /** 0 = short puck-outs to half-backs, 100 = long to a midfielder or half-forward */
+  /** 0 = short puck-outs to the full-back line, 100 = long to a midfielder or half-forward */
   puckout: number;
   /** 0 = light tackling, 100 = aggressive — more hooks, more frees and bookings given away */
   aggression: number;

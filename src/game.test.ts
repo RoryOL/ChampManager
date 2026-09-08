@@ -60,7 +60,7 @@ import {
 import { aerialContestRating, clubTactics, DEFAULT_TACTICS, defaultSheet, expandSheetToPanel, matchOrderIndex, matchShirtNumber, matchSlot, pickPuckoutTarget, playerAge, ratePlayer, ratedSquad, sheetPlayers, sideStrength, swapPlayersInSheet } from "./lib/players";
 import { nextBatch } from "./lib/schedule";
 import { matchPlayed, scoreTotal } from "./lib/scoring";
-import { ATTRIBUTE_KEYS, MENTAL_KEYS } from "./lib/attributes";
+import { ATTRIBUTE_KEYS, MENTAL_KEYS, puckoutLabel } from "./lib/attributes";
 import { applyMatchFatigue, applyTeamwork, applyTraining, applyFullTrainingWeek, applyWeekSession, averageMatchOverall, bankedLift, boostTotal, clampFatigue, defaultCondition, fitnessOf, formatBoostDelta, isOvertrained, liftSquadForPrep, matchFatigueDelta, matchStat, MIN_MATCH_FITNESS, recoverBetweenMatches, sessionForSlot, tableLift, TRAINABLE_KEYS, trainedOverallLift, trainedRatings, trainedStat, trainingDelta, trainingGainFactor, weekCoachCopy } from "./lib/training";
 import { buildPreMatchBriefing } from "./lib/briefing";
 import type { PlayerMatchStats, PlayerRatings, RatedPlayer, Score, Tactics } from "./types";
@@ -805,6 +805,7 @@ describe("match engine", () => {
     expect(vsSweeperFb).toBe(148);
     expect(vsTradFb).toBe(84);
     expect(shortPuckoutTakeChance(0.12, "sweeper")).toBeGreaterThan(shortPuckoutTakeChance(0.12, "traditional"));
+    expect(puckoutLabel(12)).toBe("Short to the full-back line");
   });
 
   it("leans on goals more from a direct long-ball game than a running game", () => {
