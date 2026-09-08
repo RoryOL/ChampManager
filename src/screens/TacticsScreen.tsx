@@ -61,37 +61,38 @@ export function TacticsScreen({ save, onChange, onSwap, onSetSheet }: Props) {
   return (
     <div className="screen">
       <p className="hint">
-        Whole panel is available. Fifteen start; five substitutions on the day. Tap two names, then Swap — it will not
-        move until you confirm.
+        Whole panel is available. Fifteen start; five substitutions on the day. Tap two names, then Swap beside the
+        list — it will not move until you confirm.
       </p>
-      <h3 className="list-title">Match-day panel</h3>
-      <SwapConfirmBar
-        first={first}
-        second={second}
-        onSwap={confirmSwap}
-        onClear={() => {
-          setFirst(null);
-          setSecond(null);
-        }}
-        hint="Pick two names, then tap Swap. A second tap on the same name drops him from the pair."
-      />
       <div className="row-actions">
         <button type="button" className="btn" onClick={askCoach}>
           Ask the coach to pick the team
         </button>
       </div>
-      <div className="squad-table-wrap tactics-table-wrap">
+      <h3 className="list-title">Match-day panel</h3>
+      <div className="tactics-pick">
+        <SwapConfirmBar
+          first={first}
+          second={second}
+          onSwap={confirmSwap}
+          onClear={() => {
+            setFirst(null);
+            setSecond(null);
+          }}
+          hint="Pick two names in the list, then Swap. A second tap on the same name drops him from the pair."
+        />
+        <div className="squad-table-wrap tactics-table-wrap">
         <table className="squad-table tactics-table">
           <thead>
             <tr>
               <th className="num">#</th>
               <th className="name">Player</th>
               <th>Slot</th>
+              <th>Pref</th>
               <th className="ovr">Ovr</th>
               <th>Fit</th>
               <th>Avg</th>
               <th>Last</th>
-              <th>Pos</th>
               <th>Age</th>
               {ATTRIBUTE_KEYS.map((key) => (
                 <th key={key} title={ATTRIBUTE_LABELS[key]}>
@@ -125,11 +126,11 @@ export function TacticsScreen({ save, onChange, onSwap, onSetSheet }: Props) {
                     {isInjured(condition) ? <em>Out</em> : null}
                   </td>
                   <td>{onField ? slot : "Bench"}</td>
+                  <td>{player.position}</td>
                   <td className={`ovr ${toneClass(overallDelta)}`}>{ratings.overall}</td>
                   <td>{fitnessOf(condition)}</td>
                   <td>{formatMatchRating(season.minutes > 0 ? season.rating : undefined)}</td>
                   <td>{formatMatchRating(last)}</td>
-                  <td>{player.position}</td>
                   <td>{player.age}</td>
                   {ATTRIBUTE_KEYS.map((key) => (
                     <td key={key} className={toneClass(trainingDelta(condition, key))}>
@@ -141,6 +142,7 @@ export function TacticsScreen({ save, onChange, onSwap, onSetSheet }: Props) {
             })}
           </tbody>
         </table>
+        </div>
       </div>
       <TacticControls tactics={save.tactics} onChange={onChange} xv={xv} />
     </div>

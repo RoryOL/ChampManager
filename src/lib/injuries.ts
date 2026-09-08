@@ -282,6 +282,7 @@ export function subEventFor(injury: RolledInjury, incoming: string): MatchEvent 
     playerName: incoming,
     kind: "sub",
     text: `${incoming} is on for ${injury.name}.`,
+    replacedName: injury.name,
   };
 }
 

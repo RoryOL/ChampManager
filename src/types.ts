@@ -302,6 +302,8 @@ export type MatchEvent = {
   text: string;
   momentum?: number;
   credits?: StatCredit[];
+  /** Player who came off when kind is "sub". */
+  replacedName?: string;
 };
 
 export type PlayerMatchStats = {
@@ -372,6 +374,7 @@ export type MatchReport = {
   coachReport: string[];
   climate?: MatchClimate;
   shots?: ShotAttempt[];
+  events?: MatchEvent[];
 };
 
 export type SimulatedMatch = {

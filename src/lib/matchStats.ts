@@ -359,6 +359,7 @@ export function reportFromSim(sim: SimulatedMatch): MatchReport {
     coachReport: sim.coachReport,
     climate: sim.climate,
     shots: sim.shots,
+    events: sim.events.filter((event) => event.kind === "sub" || event.kind === "injury" || event.kind === "red"),
   };
 }
 

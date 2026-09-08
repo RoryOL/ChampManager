@@ -42,7 +42,7 @@ import { applyMatchFatigue, applyTeamwork, applyTraining, applyFullTrainingWeek,
 import { buildPreMatchBriefing } from "./lib/briefing";
 import type { PlayerMatchStats, Score, Tactics } from "./types";
 import { nextSwapPick } from "./components/SwapConfirmBar";
-import { MATCH_SUB_LIMIT, isSubstitutionSwap, remainingMatchSubs } from "./lib/subs";
+import { MATCH_SUB_LIMIT, appearanceOf, isSubstitutionSwap, remainingMatchSubs, sheetChangeSubEvents } from "./lib/subs";
 import { keepClubSheet, remainingInjuryBudget, sitInjuredPlayers } from "./lib/injuries";
 
 describe("new game championship", () => {
@@ -2172,6 +2172,53 @@ describe("match shirts and swap confirmation", () => {
     expect(matchOrderIndex(sheet, sheet.subs[0])).toBe(15);
     expect(matchShirtNumber(sheet, "Nobody")).toBeUndefined();
     expect(sheet.subs.length).toBe(ratedSquad("ballyea").length - 15);
+  });
+
+  it("keeps kickoff shirt numbers after a player comes on", () => {
+    const sheet = defaultSheet("ballyea");
+    const outgoing = sheet.starters[14]!;
+    const incoming = sheet.subs[0]!;
+    const next = swapPlayersInSheet(sheet, outgoing, incoming);
+    expect(matchShirtNumber(next, incoming)).toBe(15);
+    expect(matchShirtNumber(sheet, incoming)).toBe(16);
+    expect(matchShirtNumber(sheet, outgoing)).toBe(15);
+  });
+
+  it("marks a first-half injury off with a cross and the replacement on", () => {
+    const sheet = defaultSheet("ballyea");
+    const outgoing = sheet.starters[0]!;
+    const incoming = sheet.subs[0]!;
+    const events = [
+      { minute: 12, teamId: "ballyea", playerName: outgoing, kind: "injury" as const, text: `${outgoing} is down.`, momentum: 50 },
+      {
+        minute: 12,
+        teamId: "ballyea",
+        playerName: incoming,
+        replacedName: outgoing,
+        kind: "sub" as const,
+        text: `${incoming} is on for ${outgoing}.`,
+        momentum: 50,
+      },
+    ];
+    expect(appearanceOf(events, "ballyea", incoming, sheet, sheet)).toEqual({ onMinute: 12 });
+    expect(appearanceOf(events, "ballyea", outgoing, sheet, sheet)).toEqual({
+      offMinute: 12,
+      offKind: "injury",
+    });
+  });
+
+  it("records half-time bench swaps as on/off at 32", () => {
+    const sheet = defaultSheet("ballyea");
+    const outgoing = sheet.starters[10]!;
+    const incoming = sheet.subs[2]!;
+    const next = swapPlayersInSheet(sheet, outgoing, incoming);
+    const events = sheetChangeSubEvents(sheet, next, "ballyea", 32);
+    expect(events).toHaveLength(1);
+    expect(events[0]?.playerName).toBe(incoming);
+    expect(events[0]?.replacedName).toBe(outgoing);
+    expect(appearanceOf(events, "ballyea", incoming, sheet, next)).toEqual({ onMinute: 32 });
+    expect(appearanceOf(events, "ballyea", outgoing, sheet, next)).toEqual({ offMinute: 32, offKind: "sub" });
+    expect(sheetChangeSubEvents(sheet, sheet, "ballyea", 32)).toEqual([]);
   });
 
   it("counts only starter-to-bench moves as substitutions", () => {

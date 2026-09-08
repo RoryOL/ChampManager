@@ -45,7 +45,7 @@ import {
   persistCampaign,
 } from "../lib/multiplayer/store";
 import { clubTactics, defaultSheet, expandSheetToPanel, ratedSquad, swapPlayersInSheet } from "../lib/players";
-import { remainingMatchSubs } from "../lib/subs";
+import { remainingMatchSubs, prependHalfTimeSubs } from "../lib/subs";
 import {
   applySimsToRivals,
   pickCpuHalfPlan,
@@ -833,7 +833,13 @@ export function useGame() {
         performanceBoost: performanceBoostFor(save.difficulty, [save.clubId]),
       });
       const decorated = decorateUserMatch(second, save);
-      const combined = combineHalves(first, decorated.sim, {
+      const homeSecondSheet = homeId === save.clubId ? workingSheet : (cpuPlan?.sheet ?? defaultSheet(homeId));
+      const awaySecondSheet = awayId === save.clubId ? workingSheet : (cpuPlan?.sheet ?? defaultSheet(awayId));
+      const withHtSubs = {
+        ...decorated.sim,
+        events: prependHalfTimeSubs(first, decorated.sim, { home: homeSecondSheet, away: awaySecondSheet }),
+      };
+      const combined = combineHalves(first, withHtSubs, {
         clubId: save.clubId,
         homeName: homeTeam ? compactName(homeTeam) : "Home",
         awayName: awayTeam ? compactName(awayTeam) : "Away",
