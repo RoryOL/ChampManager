@@ -12,7 +12,7 @@ import {
 } from "../lib/attributes";
 import { compactName } from "../lib/display";
 import { formatPair, seasonStatsFor } from "../lib/matchStats";
-import { defaultSheet, matchOrderIndex, matchShirtNumber, ratedSquad } from "../lib/players";
+import { defaultSheet, expandSheetToPanel, matchOrderIndex, matchShirtNumber, ratedSquad } from "../lib/players";
 import { FORMATION_ROWS } from "../lib/squads";
 import { conditionFor, fitnessOf, isOvertrained, matchRatings, toneClass, trainedRatings, trainingDelta } from "../lib/training";
 import { injuryLine, isInjured } from "../lib/injuries";
@@ -172,7 +172,7 @@ export function SquadScreen({ save, teams, viewTeamId, onViewTeam, picked, onTap
   const ownTeam = viewTeamId === save.clubId;
   const squad = ratedSquad(viewTeamId, save.seed);
   const byName = new Map(squad.map((player) => [player.name, player]));
-  const sheet = ownTeam ? save.sheet : defaultSheet(viewTeamId);
+  const sheet = ownTeam ? expandSheetToPanel(viewTeamId, save.sheet, save.seed) : defaultSheet(viewTeamId);
   const starters = sheet.starters
     .map((name) => byName.get(name))
     .filter((player): player is RatedPlayer => Boolean(player));
@@ -201,8 +201,8 @@ export function SquadScreen({ save, teams, viewTeamId, onViewTeam, picked, onTap
     <div className="screen">
       <p className="hint">
         {ownTeam
-          ? "Numbers are today's fifteen (1–15) and the rest of the panel. Tap a row for the full card — match fitness and sharpness sit there. Training lifts show as small green or red deltas. Swaps are on Tactics."
-          : "Scouting view — inspect any championship panel. Numbers follow that club's likely fifteen. You cannot change their team from here."}
+          ? "Tap a row for the full card. Swaps are on Tactics. Green and red are training lifts."
+          : "Scouting view — inspect any championship panel. You cannot change their team from here."}
       </p>
       <div className="club-strip">
         {teams.map((team) => (

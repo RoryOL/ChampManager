@@ -43,7 +43,7 @@ import {
   parseCampaignInvite,
   persistCampaign,
 } from "../lib/multiplayer/store";
-import { clubTactics, defaultSheet, ratedSquad, swapPlayersInSheet } from "../lib/players";
+import { clubTactics, defaultSheet, expandSheetToPanel, ratedSquad, swapPlayersInSheet } from "../lib/players";
 import { remainingMatchSubs } from "../lib/subs";
 import { resolveMatchSides, teamById } from "../lib/resolve";
 import { nextBatch } from "../lib/schedule";
@@ -384,7 +384,7 @@ export function useGame() {
   const swapPlayers = useCallback(
     (first: string, second: string) => {
       if (!save) return;
-      const sheet = swapPlayersInSheet(save.sheet, first, second);
+      const sheet = swapPlayersInSheet(expandSheetToPanel(save.clubId, save.sheet, save.seed), first, second);
       if (campaign && activeSeat) {
         commitCampaign(withClubSheet(campaign, activeSeat.clubId, sheet));
       } else {
@@ -398,10 +398,11 @@ export function useGame() {
   const setSheet = useCallback(
     (sheet: TeamSheet) => {
       if (!save) return;
+      const next = expandSheetToPanel(save.clubId, sheet, save.seed);
       if (campaign && activeSeat) {
-        commitCampaign(withClubSheet(campaign, activeSeat.clubId, sheet));
+        commitCampaign(withClubSheet(campaign, activeSeat.clubId, next));
       } else {
-        commitSolo(withSheet(save, sheet));
+        commitSolo(withSheet(save, next));
       }
       setPicked(null);
     },
@@ -427,7 +428,7 @@ export function useGame() {
       if (!batch) return null;
 
       const squad = ratedSquad(save.clubId, save.seed);
-      const userSheet = sitInjuredPlayers(save.sheet, squad, save.condition);
+      const userSheet = sitInjuredPlayers(expandSheetToPanel(save.clubId, save.sheet, save.seed), squad, save.condition);
       let injuries: RolledInjury[] = [];
       const simulated = batch.matches
         .map((match) => {
