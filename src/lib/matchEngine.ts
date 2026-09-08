@@ -951,7 +951,7 @@ export function simulateMatch(options: {
       return { won: false, name: hunter.name, index: hunter.index, rival: rival.name, foul: true };
     }
     return {
-      won,
+      won: win,
       name: win ? hunter.name : rival.name,
       index: win ? hunter.index : rival.index,
       rival: rival.name,
@@ -1622,7 +1622,6 @@ export function simulateMatch(options: {
       } else {
         const spilled = contestBreak(teamId, names, defendingId, oppNames, fielderPick.name);
         if (spilled.foul) {
-          const oppProfile = teamId === options.homeId ? opp : profile;
           push({
             minute,
             teamId,
@@ -1635,7 +1634,7 @@ export function simulateMatch(options: {
               { name: spilled.name, teamId, tacklesAttempted: 1, freesConceded: 1 },
             ]),
           });
-          attemptSetPiece(defendingId, "shortFree", oppProfile, minute, false);
+          attemptSetPiece(defendingId, "shortFree", opp, minute, false);
           return;
         }
         if (!spilled.won) {
@@ -1736,16 +1735,19 @@ export function simulateMatch(options: {
           push({
             minute,
             teamId,
-            playerName: moved.carrier,
+            playerName: spilled.foul ? spilled.name : moved.carrier,
             kind: "turnover",
             text: spilled.foul
               ? `${spilled.name} shoves ${spilled.rival} off the break and concedes a free.`
               : moved.copy ?? `${moved.carrier} miscontrols the ball.`,
-            credits: mergeCredits([...pendingCredits.splice(0, pendingCredits.length), ...moved.credits]),
+            credits: mergeCredits([
+              ...pendingCredits.splice(0, pendingCredits.length),
+              ...moved.credits,
+              ...(spilled.foul ? [{ name: spilled.name, teamId, tacklesAttempted: 1, freesConceded: 1 }] : []),
+            ]),
           });
           if (spilled.foul) {
-            const oppProfile = teamId === options.homeId ? opp : profile;
-            attemptSetPiece(defendingId, "shortFree", oppProfile, minute, false);
+            attemptSetPiece(defendingId, "shortFree", opp, minute, false);
           } else if (random() < 0.12) attemptSideline(defendingId, "midfield", minute);
           return;
         }
