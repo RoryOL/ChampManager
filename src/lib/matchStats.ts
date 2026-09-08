@@ -14,7 +14,7 @@ import { XV_SLOTS, type AttributeKey } from "./attributes";
 import { buildCoachReport } from "./coach";
 import { formValue } from "./form";
 import { ratedSquad, sideTeamwork } from "./players";
-import { conditionFor, fitnessOf, matchFatigueDelta, matchRatings } from "./training";
+import { clampFatigue, conditionFor, fitnessOf, matchFatigueDelta, matchRatings } from "./training";
 
 const STAT_FIELDS = [
   "possessions",
@@ -324,14 +324,14 @@ export function statsFromEvents(
     const position = found?.player.position ?? slotOf(row.teamId, row.name);
     const chaseEffort = row.teamId === options.homeId ? (options.homeChaseEffort ?? 0) : (options.awayChaseEffort ?? 0);
     const drain = matchFatigueDelta(minutes, tactics, position, row.started, found?.player.age, false, chaseEffort);
-    const fatigue = Math.max(0, Math.min(100, condition.fatigue + drain));
+    const fatigue = clampFatigue(condition.fatigue + drain);
     const groundCovered = Math.round(minutes * (0.072 + workrate * 0.0032) * 10) / 10;
     return {
       ...row,
       minutes,
       groundCovered,
       fatigue,
-      fitness: Math.max(0, Math.min(100, 100 - fatigue)),
+      fitness: fitnessOf({ fatigue, sharpness: 50 }),
       overall,
       rating: playerMatchRating({ ...row, minutes }),
       mood: formValue(condition),

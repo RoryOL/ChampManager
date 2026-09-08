@@ -9,7 +9,7 @@ import { NEWS_KIND_LABEL } from "../lib/news";
 import { resolveMatchSides, teamById, teamGroup } from "../lib/resolve";
 import { formatDate, stageLabel } from "../lib/scoring";
 import { buildPreMatchBriefing } from "../lib/briefing";
-import { averageFitness, averageMatchOverall, averageSharpness, DEFAULT_WEEK_SHAPE, MATCH_PREP_OPTIONS, matchPrepTitle, PRESEASON_WEEKS } from "../lib/training";
+import { averageFitness, averageMatchOverall, averageSharpness, DEFAULT_WEEK_SHAPE, MATCH_PREP_OPTIONS, matchPrepTitle, MIN_MATCH_FITNESS, PRESEASON_WEEKS } from "../lib/training";
 import { ratedSquad } from "../lib/players";
 import { rollClimate, climateSummary } from "../lib/weather";
 
@@ -172,7 +172,7 @@ export function HomeScreen({
           Panel fitness {fitness} · sharpness {sharpness}
         </h3>
         <div className="attr-bar fatigue-bar">
-          <i className={fitness <= 22 ? "is-warn" : ""} style={{ width: `${fitness}%` }} />
+          <i className={fitness <= MIN_MATCH_FITNESS ? "is-warn" : ""} style={{ width: `${fitness}%` }} />
         </div>
         <p className="xv-form">
           Championship XV match rating {form.match}

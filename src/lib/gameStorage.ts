@@ -8,6 +8,7 @@ import { ambitionFor, migrateNewsItem } from "./news";
 import { withStartingForm } from "./form";
 import {
   clampBoost,
+  clampFatigue,
   defaultCondition,
   DEFAULT_INTENSITY,
   DEFAULT_WEEK_SHAPE,
@@ -293,8 +294,9 @@ export function migrateSave(raw: unknown): GameSave | null {
 function clampConditionBoosts(condition: Record<string, PlayerCondition>): Record<string, PlayerCondition> {
   const next: Record<string, PlayerCondition> = {};
   for (const [name, current] of Object.entries(condition)) {
+    const fatigue = clampFatigue(current.fatigue);
     if (!current.boosts) {
-      next[name] = current;
+      next[name] = fatigue === current.fatigue ? current : { ...current, fatigue };
       continue;
     }
     const boosts: AttributeBoosts = {};
@@ -302,7 +304,7 @@ function clampConditionBoosts(condition: Record<string, PlayerCondition>): Recor
       const value = current.boosts[key];
       if (typeof value === "number" && value !== 0) boosts[key] = clampBoost(value);
     }
-    next[name] = { ...current, boosts };
+    next[name] = { ...current, fatigue, boosts };
   }
   return next;
 }

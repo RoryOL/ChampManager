@@ -51,6 +51,12 @@ describe("injuries", () => {
     const fresh = injuryChance(kid, { fatigue: 0, sharpness: 70 }, "match");
     expect(veteran.age).toBeGreaterThan(kid.age);
     expect(tired).toBeGreaterThan(fresh);
+    expect(injuryChance(veteran, { fatigue: 50, sharpness: 30 }, "match")).toBeGreaterThan(
+      injuryChance(veteran, { fatigue: 20, sharpness: 30 }, "match"),
+    );
+    expect(injuryChance(veteran, { fatigue: 80, sharpness: 30 }, "match")).toBe(
+      injuryChance(veteran, { fatigue: 50, sharpness: 30 }, "match"),
+    );
     expect(injuryChance(veteran, { fatigue: 82, sharpness: 30 }, "training", "challenge", "intense")).toBeGreaterThan(
       injuryChance(veteran, { fatigue: 82, sharpness: 30 }, "training", "recovery", "intense"),
     );
