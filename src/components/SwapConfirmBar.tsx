@@ -20,21 +20,24 @@ type Props = {
 };
 
 export function SwapConfirmBar({ first, second, onSwap, onClear, disabled = false, hint }: Props) {
-  const selected = first ? `${first}${second ? ` and ${second}` : ""}` : null;
   return (
     <div className="swap-bar">
-      <p className="hint hint--tight">
-        {hint ?? "Tap two players, then Swap to change positions or bring someone on."}
-        {selected ? ` Selected: ${selected}.` : ""}
-      </p>
-      <div className="row-actions">
-        <button type="button" className="btn" disabled={!first || !second || disabled} onClick={onSwap}>
-          Swap
-        </button>
-        <button type="button" className="btn btn--ghost" disabled={!first && !second} onClick={onClear}>
-          Clear
-        </button>
+      <div className="swap-bar__row">
+        <p className="swap-bar__picks">
+          <span className={first ? "is-set" : ""}>{first ?? "First player"}</span>
+          <span className="swap-bar__swap">↔</span>
+          <span className={second ? "is-set" : ""}>{second ?? "Second player"}</span>
+        </p>
+        <div className="row-actions">
+          <button type="button" className="btn" disabled={!first || !second || disabled} onClick={onSwap}>
+            Swap
+          </button>
+          <button type="button" className="btn btn--ghost" disabled={!first && !second} onClick={onClear}>
+            Clear
+          </button>
+        </div>
       </div>
+      {hint ? <p className="hint hint--tight">{hint}</p> : null}
     </div>
   );
 }

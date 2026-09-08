@@ -138,13 +138,47 @@ export function MatchScreen({
       awaySquad={awaySquad}
       homeCondition={homeId === save.clubId ? save.condition : undefined}
       awayCondition={awayId === save.clubId ? save.condition : undefined}
-      homeSheet={homeId === save.clubId && atHalfTime ? htSheet : live.user.homeSheet}
-      awaySheet={awayId === save.clubId && atHalfTime ? htSheet : live.user.awaySheet}
+      homeSheet={
+        homeId === save.clubId && atHalfTime
+          ? htSheet
+          : live.phase === "finished"
+            ? (live.user.homeClosingSheet ?? live.user.homeSheet)
+            : live.user.homeSheet
+      }
+      awaySheet={
+        awayId === save.clubId && atHalfTime
+          ? htSheet
+          : live.phase === "finished"
+            ? (live.user.awayClosingSheet ?? live.user.awaySheet)
+            : live.user.awaySheet
+      }
+      numberHomeSheet={live.openingHomeSheet}
+      numberAwaySheet={live.openingAwaySheet}
+      events={live.user.events.slice(0, live.cursor)}
       compact={live.phase !== "finished" && !atHalfTime}
       interactive={atHalfTime}
       picked={[htFirst, htSecond].filter((name): name is string => Boolean(name))}
       onTapPlayer={atHalfTime ? tapHt : undefined}
       pickerClubId={atHalfTime ? save.clubId : undefined}
+      toolbar={
+        atHalfTime ? (
+          <SwapConfirmBar
+            first={htFirst}
+            second={htSecond}
+            onSwap={confirmHtSwap}
+            disabled={Boolean(htFirst && htSecond && isSubstitutionSwap(htSheet, htFirst, htSecond) && remainingSubs <= 0)}
+            onClear={() => {
+              setHtFirst(null);
+              setHtSecond(null);
+            }}
+            hint={
+              remainingSubs <= 0
+                ? "No substitutions left — you can still shuffle the fifteen."
+                : "Pick two names below, then Swap."
+            }
+          />
+        ) : undefined
+      }
     />
   ) : null;
 
@@ -255,24 +289,9 @@ export function MatchScreen({
         <div className="ht-panel">
           <h3>Half-time</h3>
           <p className="hint">
-            Pick two names in your grid and tap Swap to change a position or bring someone on. You have {remainingSubs} of{" "}
-            {MATCH_SUB_LIMIT} substitutions left. Shirt numbers are 1–15 and 16+ on the bench.
+            Pick two names in your grid and tap Swap beside it. You have {remainingSubs} of {MATCH_SUB_LIMIT}{" "}
+            substitutions left. Shirt numbers stay from kickoff — a 16 stays 16 if he comes on.
           </p>
-          <SwapConfirmBar
-            first={htFirst}
-            second={htSecond}
-            onSwap={confirmHtSwap}
-            disabled={Boolean(htFirst && htSecond && isSubstitutionSwap(htSheet, htFirst, htSecond) && remainingSubs <= 0)}
-            onClear={() => {
-              setHtFirst(null);
-              setHtSecond(null);
-            }}
-            hint={
-              remainingSubs <= 0
-                ? "No substitutions left — you can still shuffle the fifteen. Positions do not change until you confirm."
-                : "Pick two names in the grid, then tap Swap. Positions do not change until you confirm."
-            }
-          />
           {statsPanel}
           <TacticControls tactics={htTactics} onChange={setHtTactics} compact xv={htXv} />
         </div>

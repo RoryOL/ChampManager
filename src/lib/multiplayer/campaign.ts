@@ -57,7 +57,7 @@ import {
   recoveryNews,
 } from "../news";
 import { clubTactics, DEFAULT_TACTICS, defaultSheet, expandSheetToPanel, ratedSquad } from "../players";
-import { remainingMatchSubs } from "../subs";
+import { prependHalfTimeSubs, remainingMatchSubs } from "../subs";
 import { resolveMatchSides, teamById } from "../resolve";
 import { nextBatch, nextOpenBatch } from "../schedule";
 import { formatScore, matchPlayed, scoreTotal, stageLabel } from "../scoring";
@@ -1058,9 +1058,13 @@ function tryCompleteLive(campaign: Campaign, matchId: string): Campaign {
     start: live.first,
   });
   const decorated = decorateHumanMatch(campaign, second);
+  const withHtSubs = {
+    ...decorated.sim,
+    events: prependHalfTimeSubs(live.first, decorated.sim, { home: homePlan.sheet, away: awayPlan.sheet }),
+  };
   const homeTeam = teamById(championship, live.first.homeId);
   const awayTeam = teamById(championship, live.first.awayId);
-  const combined = combineHalves(live.first, decorated.sim, {
+  const combined = combineHalves(live.first, withHtSubs, {
     clubId: homeHuman ? live.first.homeId : live.first.awayId,
     homeName: homeTeam ? compactName(homeTeam) : "Home",
     awayName: awayTeam ? compactName(awayTeam) : "Away",

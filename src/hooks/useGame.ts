@@ -45,7 +45,7 @@ import {
   persistCampaign,
 } from "../lib/multiplayer/store";
 import { clubTactics, defaultSheet, expandSheetToPanel, ratedSquad, swapPlayersInSheet } from "../lib/players";
-import { remainingMatchSubs } from "../lib/subs";
+import { remainingMatchSubs, prependHalfTimeSubs } from "../lib/subs";
 import {
   applySimsToRivals,
   pickCpuHalfPlan,
@@ -129,6 +129,8 @@ export type LiveMatch = {
   cursor: number;
   phase: LivePhase;
   openingSheet: TeamSheet;
+  openingHomeSheet: TeamSheet;
+  openingAwaySheet: TeamSheet;
   injuries: RolledInjury[];
 };
 
@@ -518,6 +520,8 @@ export function useGame() {
           cursor: 0,
           phase: "finished" as const,
           openingSheet: userSheet,
+          openingHomeSheet: simulated[0].homeSheet,
+          openingAwaySheet: simulated[0].awaySheet,
           injuries,
         };
       }
@@ -530,6 +534,8 @@ export function useGame() {
         cursor: 0,
         phase: mode === "first" ? "first" : "finished",
         openingSheet: userSheet,
+        openingHomeSheet: user.homeSheet,
+        openingAwaySheet: user.awaySheet,
         injuries,
       };
     },
@@ -558,6 +564,8 @@ export function useGame() {
         cursor: startSecond ? Math.max(halfIndex, 1) : 0,
         phase: startSecond ? "second" : "first",
         openingSheet: save.sheet,
+        openingHomeSheet: row.first.homeSheet,
+        openingAwaySheet: row.first.awaySheet,
         injuries: row.injuries?.[activeSeat.clubId] ?? [],
       });
       return;
@@ -833,7 +841,13 @@ export function useGame() {
         performanceBoost: performanceBoostFor(save.difficulty, [save.clubId]),
       });
       const decorated = decorateUserMatch(second, save);
-      const combined = combineHalves(first, decorated.sim, {
+      const homeSecondSheet = homeId === save.clubId ? workingSheet : (cpuPlan?.sheet ?? defaultSheet(homeId));
+      const awaySecondSheet = awayId === save.clubId ? workingSheet : (cpuPlan?.sheet ?? defaultSheet(awayId));
+      const withHtSubs = {
+        ...decorated.sim,
+        events: prependHalfTimeSubs(first, decorated.sim, { home: homeSecondSheet, away: awaySecondSheet }),
+      };
+      const combined = combineHalves(first, withHtSubs, {
         clubId: save.clubId,
         homeName: homeTeam ? compactName(homeTeam) : "Home",
         awayName: awayTeam ? compactName(awayTeam) : "Away",

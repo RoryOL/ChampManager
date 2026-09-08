@@ -1,5 +1,5 @@
-import { useState } from "react";
-import type { PlayerCondition, PlayerMatchStats, RatedPlayer, TeamMatchStats, TeamSheet } from "../types";
+import { useState, type ReactNode } from "react";
+import type { MatchEvent, PlayerCondition, PlayerMatchStats, RatedPlayer, TeamMatchStats, TeamSheet } from "../types";
 import { formatPair } from "../lib/matchStats";
 import { PlayerMatchTable } from "./PlayerMatchTable";
 
@@ -22,6 +22,10 @@ type Props = {
   picked?: string[];
   onTapPlayer?: (name: string) => void;
   pickerClubId?: string;
+  numberHomeSheet?: TeamSheet;
+  numberAwaySheet?: TeamSheet;
+  events?: MatchEvent[];
+  toolbar?: ReactNode;
 };
 
 function TeamRow({
@@ -61,6 +65,10 @@ export function MatchStatsPanel({
   picked = [],
   onTapPlayer,
   pickerClubId,
+  numberHomeSheet,
+  numberAwaySheet,
+  events = [],
+  toolbar,
 }: Props) {
   const [team, setTeam] = useState<"home" | "away">("home");
   const homePlayers = players.filter((player) => player.teamId === homeId);
@@ -122,11 +130,14 @@ export function MatchStatsPanel({
           {awayName}
         </button>
       </div>
+      {toolbar}
       <PlayerMatchTable
         teamName={team === "home" ? homeName : awayName}
         squad={team === "home" ? homeSquad : awaySquad}
         stats={team === "home" ? homePlayers : awayPlayers}
         sheet={team === "home" ? homeSheet : awaySheet}
+        numberSheet={team === "home" ? (numberHomeSheet ?? homeSheet) : (numberAwaySheet ?? awaySheet)}
+        events={events}
         condition={team === "home" ? homeCondition : awayCondition}
         showAttributes={!compact}
         interactive={interactive && (team === "home" ? homeId : awayId) === pickerClubId}
@@ -134,9 +145,9 @@ export function MatchStatsPanel({
         onTap={onTapPlayer}
       />
       {compact ? (
-        <p className="hint hint--tight">Listed in match position order. Shirt numbers are 1–15 and 16+ on the bench.</p>
+        <p className="hint hint--tight">Listed in kickoff shirt order. Numbers stay 1–15 and 16+ from the start; ↑ on, ↓ off, × injured.</p>
       ) : interactive ? (
-        <p className="hint hint--tight">Tap two of your lads in the grid, then Swap. Swipe sideways for every rating.</p>
+        <p className="hint hint--tight">Tap two of your lads in the grid, then Swap above. Shirt numbers stay from kickoff.</p>
       ) : (
         <p className="hint hint--tight">Swipe the table sideways for every rating and match stat.</p>
       )}

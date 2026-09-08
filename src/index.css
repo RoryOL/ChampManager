@@ -736,11 +736,58 @@ html.native-app .device {
 }
 
 .swap-bar {
-  margin: 0 0 10px;
+  margin: 0;
+  padding: 8px 10px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  z-index: 4;
+}
+
+.swap-bar__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.swap-bar__picks {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.swap-bar__picks span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 42%;
+}
+
+.swap-bar__picks span.is-set {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.swap-bar__swap {
+  color: var(--saffron);
+  flex: 0 0 auto;
 }
 
 .swap-bar .row-actions {
-  margin-top: 4px;
+  margin: 0;
+  flex: 0 0 auto;
+}
+
+.swap-bar .hint {
+  margin: 4px 0 0;
 }
 
 .swap-bar .btn:disabled {
@@ -1246,6 +1293,23 @@ html.native-app .device {
   background: #3a2d33;
 }
 
+.tactics-pick {
+  margin: 8px 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.tactics-pick .swap-bar {
+  border-radius: 10px 10px 0 0;
+}
+
+.tactics-pick .squad-table-wrap {
+  margin: 0;
+  border: none;
+  border-radius: 0 0 10px 10px;
+}
+
 .squad-table-wrap {
   overflow-x: auto;
   margin: 8px 0 12px;
@@ -1639,6 +1703,19 @@ html.native-app .device {
   background: var(--surface);
 }
 
+.match-stats .swap-bar {
+  margin: 8px 0 0;
+  border: 1px solid var(--line);
+  border-bottom: none;
+  border-radius: 10px 10px 0 0;
+}
+
+.match-stats .swap-bar + .chart-scroll {
+  margin-top: 0;
+  border-top: none;
+  border-radius: 0 0 10px 10px;
+}
+
 .player-chart {
   width: max-content;
   min-width: 100%;
@@ -1709,9 +1786,35 @@ html.native-app .device {
   font-weight: 700;
 }
 
-.player-chart td.is-down {
-  color: #f0a3a3;
+.player-chart td.sub-cell {
+  text-align: left;
+}
+
+.sub-marks {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 1em;
+}
+
+.sub-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.sub-mark.is-on {
+  color: #7dce8a;
+}
+
+.sub-mark.is-off {
+  color: #f0a3a3;
+}
+
+.sub-mark.is-injury {
+  color: #f0a3a3;
 }
 
 .weather-banner {
