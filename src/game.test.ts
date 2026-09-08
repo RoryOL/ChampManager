@@ -24,6 +24,16 @@ import {
   markerSlot,
   paceMismatch,
   runningLookBoost,
+  breakHuntRating,
+  breakWinChance,
+  breakFoulChance,
+  collectLowBallChance,
+  passVisionBonus,
+  visionScoringLookChance,
+  stageFromMatchId,
+  knockoutOccasion,
+  occasionPressure,
+  underPressureMul,
   scoreFromEvents,
   redOnFoulChance,
   reshapeTo625,
@@ -397,6 +407,36 @@ describe("match engine", () => {
     expect(runningLookBoost(unmarked, true).goal).toBeGreaterThan(runningLookBoost(unmarked, false).goal);
     expect(runningLookBoost(unmarked, true).closer).toBeGreaterThan(runningLookBoost(1, true).closer);
     expect(runningLookBoost(1.5, true).goal).toBe(0);
+  });
+
+  it("hunts breaking balls with pace, first touch and off-the-ball, and strength in the crowd", () => {
+    expect(breakHuntRating(18, 18, 18, 18)).toBeGreaterThan(breakHuntRating(9, 9, 9, 9) + 8);
+    expect(collectLowBallChance(18)).toBeGreaterThan(collectLowBallChance(8) + 0.2);
+    expect(breakWinChance(18, 11, 18, 10)).toBeGreaterThan(breakWinChance(11, 18, 10, 18));
+    expect(breakFoulChance(8, 18)).toBeGreaterThan(breakFoulChance(18, 8));
+  });
+
+  it("turns extra vision into completed passes and scoring looks", () => {
+    expect(passVisionBonus(18)).toBeGreaterThan(passVisionBonus(10));
+    expect(visionScoringLookChance(18)).toBeGreaterThan(visionScoringLookChance(11));
+    expect(visionScoringLookChance(10)).toBe(0);
+  });
+
+  it("raises under-pressure finishing in knockouts and the closing spell, especially for levellers", () => {
+    expect(stageFromMatchId("final")).toBe("final");
+    expect(stageFromMatchId("sf-1")).toBe("semi-final");
+    expect(stageFromMatchId("qf-2")).toBe("quarter-final");
+    expect(stageFromMatchId("final:et1")).toBe("final");
+    expect(stageFromMatchId("g1-r1-a")).toBe("group");
+    expect(knockoutOccasion("final")).toBe(1);
+    expect(knockoutOccasion("semi-final")).toBeGreaterThan(knockoutOccasion("quarter-final"));
+    expect(knockoutOccasion("group")).toBe(0);
+    expect(occasionPressure(58, "group")).toBeGreaterThan(0);
+    expect(occasionPressure(20, "final")).toBe(1);
+    expect(occasionPressure(20, "group")).toBe(0);
+    expect(underPressureMul(20, 1, true)).toBeGreaterThan(underPressureMul(8, 1, true));
+    expect(underPressureMul(18, 1, true)).toBeGreaterThan(underPressureMul(18, 1, false));
+    expect(underPressureMul(18, 0, true)).toBe(1);
   });
 
   it("only picks a puck-out target from midfield or the half-forward line", () => {
@@ -808,6 +848,165 @@ describe("match engine", () => {
     const plodding = tally(slow, softMark);
     expect(burst.close).toBeGreaterThan(plodding.close);
     expect(burst.goals + burst.close).toBeGreaterThan(held.goals + held.close);
+  });
+
+  it("lets hunters with pace and first touch pick up spilled low balls", () => {
+    const sheet = defaultSheet("ballyea");
+    const hunters = new Set(sheet.starters.slice(7, 15));
+    const base = sheetPlayers("ballyea", sheet);
+    const lively = patchLine(base, hunters, {
+      speed: 18,
+      acceleration: 18,
+      offTheBall: 18,
+      firstTouch: 8,
+      strength: 14,
+    });
+    const sluggish = patchLine(base, hunters, {
+      speed: 8,
+      acceleration: 8,
+      offTheBall: 8,
+      firstTouch: 8,
+      strength: 14,
+    });
+    const long: Tactics = { ...DEFAULT_TACTICS, build: 92, puckout: 82 };
+    const tally = (squad: RatedPlayer[]) => {
+      let breaks = 0;
+      for (let seed = 1; seed <= 24; seed += 1) {
+        const result = simulateMatch({
+          matchId: "g1-r1-a",
+          homeId: "ballyea",
+          awayId: "inagh-kilnamona",
+          homeTactics: long,
+          awayTactics: DEFAULT_TACTICS,
+          homeSquad: squad,
+          climate: { sky: "sunny", windStrength: 8, windAngle: 12 },
+          seed,
+        });
+        breaks += result.events.filter(
+          (event) =>
+            event.teamId === "ballyea" && /hunts the breaking ball|picks up the break/i.test(event.text),
+        ).length;
+      }
+      return breaks;
+    };
+    expect(tally(lively)).toBeGreaterThan(tally(sluggish));
+  });
+
+  it("lets stronger hunters win the crowd without conceding frees", () => {
+    const sheet = defaultSheet("ballyea");
+    const hunters = new Set(sheet.starters.slice(7, 15));
+    const awayBacks = new Set(defaultSheet("inagh-kilnamona").starters.slice(1, 9));
+    const home = sheetPlayers("ballyea", sheet);
+    const away = sheetPlayers("inagh-kilnamona", defaultSheet("inagh-kilnamona"));
+    const strong = patchLine(home, hunters, {
+      strength: 18,
+      speed: 16,
+      acceleration: 16,
+      offTheBall: 16,
+      firstTouch: 8,
+    });
+    const weak = patchLine(home, hunters, {
+      strength: 7,
+      speed: 16,
+      acceleration: 16,
+      offTheBall: 16,
+      firstTouch: 8,
+    });
+    const bulkyAway = patchLine(away, awayBacks, { strength: 17 });
+    const long: Tactics = { ...DEFAULT_TACTICS, build: 92, puckout: 82 };
+    const tally = (squad: RatedPlayer[]) => {
+      let fouls = 0;
+      let wins = 0;
+      for (let seed = 1; seed <= 24; seed += 1) {
+        const result = simulateMatch({
+          matchId: "g1-r1-a",
+          homeId: "ballyea",
+          awayId: "inagh-kilnamona",
+          homeTactics: long,
+          awayTactics: DEFAULT_TACTICS,
+          homeSquad: squad,
+          awaySquad: bulkyAway,
+          climate: { sky: "sunny", windStrength: 8, windAngle: 12 },
+          seed,
+        });
+        for (const event of result.events) {
+          if (event.teamId !== "ballyea") continue;
+          if (/barges|shoves .* off the break|concedes a free/i.test(event.text)) fouls += 1;
+          if (/hunts the breaking ball|picks up the break/i.test(event.text)) wins += 1;
+        }
+      }
+      return { fouls, wins };
+    };
+    const tough = tally(strong);
+    const soft = tally(weak);
+    expect(tough.wins).toBeGreaterThan(soft.wins);
+    expect(soft.fouls).toBeGreaterThan(tough.fouls);
+  });
+
+  it("completes more passes and closer looks when the distributors have vision", () => {
+    const sheet = defaultSheet("ballyea");
+    const distributors = new Set(sheet.starters.slice(0, 9));
+    const base = sheetPlayers("ballyea", sheet);
+    const sighted = patchLine(base, distributors, { vision: 18, passing: 16 });
+    const blind = patchLine(base, distributors, { vision: 7, passing: 16 });
+    const running: Tactics = { ...DEFAULT_TACTICS, build: 18, puckout: 22 };
+    const tally = (squad: RatedPlayer[]) => {
+      let completed = 0;
+      let close = 0;
+      for (let seed = 1; seed <= 20; seed += 1) {
+        const result = simulateMatch({
+          matchId: "g1-r1-a",
+          homeId: "ballyea",
+          awayId: "inagh-kilnamona",
+          homeTactics: running,
+          awayTactics: DEFAULT_TACTICS,
+          homeSquad: squad,
+          climate: { sky: "sunny", windStrength: 8, windAngle: 12 },
+          seed,
+        });
+        completed += result.players
+          .filter((player) => player.teamId === "ballyea")
+          .reduce((sum, player) => sum + player.passesCompleted, 0);
+        close += result.shots.filter((shot) => shot.teamId === "ballyea" && shot.distance <= 24).length;
+      }
+      return { completed, close };
+    };
+    const sharp = tally(sighted);
+    const dull = tally(blind);
+    expect(sharp.completed).toBeGreaterThan(dull.completed);
+    expect(sharp.close).toBeGreaterThan(dull.close);
+  });
+
+  it("lets high under-pressure players score more levellers in a final when behind", () => {
+    const sheet = defaultSheet("ballyea");
+    const names = new Set(sheet.starters);
+    const squad = sheetPlayers("ballyea", sheet);
+    const ice = patchLine(squad, names, { underPressure: 19, composure: 12, shooting: 14 });
+    const rattled = patchLine(squad, names, { underPressure: 6, composure: 12, shooting: 14 });
+    const tally = (homeSquad: RatedPlayer[]) => {
+      let scores = 0;
+      for (let seed = 1; seed <= 28; seed += 1) {
+        const result = simulateMatch({
+          matchId: "final",
+          stage: "final",
+          homeId: "ballyea",
+          awayId: "inagh-kilnamona",
+          homeTactics: { ...DEFAULT_TACTICS, build: 22 },
+          awayTactics: DEFAULT_TACTICS,
+          homeSquad,
+          climate: { sky: "sunny", windStrength: 8, windAngle: 12 },
+          period: "second",
+          startHome: { goals: 0, points: 10 },
+          startAway: { goals: 0, points: 11 },
+          seed,
+        });
+        scores += result.events.filter(
+          (event) => event.teamId === "ballyea" && (event.kind === "point" || event.kind === "goal"),
+        ).length;
+      }
+      return scores;
+    };
+    expect(tally(ice)).toBeGreaterThan(tally(rattled));
   });
 
   it("stops the first half on the half-time whistle", () => {

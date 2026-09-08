@@ -42,6 +42,7 @@ export function simulateChampionship(options: {
         gameSeed: options.seed,
         balance,
         period: "full",
+        stage: match.stage,
       });
       if (knockout) {
         for (let extra = 1; extra < 8 && scoreTotal(sim.homeScore) === scoreTotal(sim.awayScore); extra += 1) {
@@ -59,6 +60,7 @@ export function simulateChampionship(options: {
             gameSeed: options.seed,
             balance,
             period: "full",
+            stage: match.stage,
           });
         }
         if (scoreTotal(sim.homeScore) === scoreTotal(sim.awayScore)) {
