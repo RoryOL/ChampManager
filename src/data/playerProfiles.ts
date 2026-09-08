@@ -48,7 +48,7 @@ export const GRADE_LABEL: Record<PlayerGrade, string> = {
  */
 const LISTINGS: Record<string, Listing[]> = {
   ballyea: [
-    { name: "Tony Kelly", grade: "A", age: 32, position: "MF", overallMin: 19, overallMax: 20, note: "Current Clare senior — All-Star, 2013 All-Ireland" },
+    { name: "Tony Kelly", grade: "A", age: 32, position: "MF", overallMin: 19, overallMax: 20, note: "Current Clare senior — All-Star, 2013 and 2024 All-Ireland; elite pace and shooting" },
     { name: "Paul Flanagan", grade: "B", age: 33, position: "FB", overallMin: 13, overallMax: 16, note: "Former Clare senior full-back, retired from the county in 2025" },
     { name: "Jack Browne", grade: "B", age: 33, position: "HB", overallMin: 13, overallMax: 15 },
     { name: "Gearoid O'Connell", grade: "B", age: 32, position: "HB", overallMin: 12, overallMax: 15 },
@@ -61,7 +61,7 @@ const LISTINGS: Record<string, Listing[]> = {
     { name: "Morgan Garry", grade: "D", age: 26, position: "HB" },
     { name: "Dara Kennedy", grade: "D", age: 24, position: "HF" },
     { name: "Mossy Gavin", grade: "D", age: 28, position: "HF" },
-    { name: "Cian Kirby", grade: "C", age: 23, position: "FF", note: "Clare U20 2024 (shoulder injury that spring)" },
+    { name: "Cian Kirby", grade: "C", age: 23, position: "FF", note: "Clare U20 2024; Ballyea's second marksman in the 2025 SHC" },
     { name: "Fiachra Kirby", grade: "D", age: 22, position: "HF" },
     { name: "Eoin O'Connor", grade: "D", age: 25, position: "HF" },
     { name: "Aaron Griffin", grade: "D", age: 24, position: "FF" },
@@ -72,7 +72,7 @@ const LISTINGS: Record<string, Listing[]> = {
     { name: "Oisin Griffin", grade: "D", age: 23, position: "GK", number: 16, note: "2025 SHC quarter-final substitute" },
   ],
   "inagh-kilnamona": [
-    { name: "David Fitzgerald", grade: "A", age: 30, position: "MF", overallMin: 16, overallMax: 18, note: "Current Clare senior midfielder" },
+    { name: "David Fitzgerald", grade: "A", age: 30, position: "MF", overallMin: 16, overallMax: 18, note: "Current Clare senior — engine and scoring from play" },
     { name: "Aidan McCarthy", grade: "B", age: 27, position: "FF", overallMin: 14, overallMax: 16, note: "Former Clare senior free-taker, left the 2026 county panel" },
     { name: "Shane Woods", grade: "A", age: 23, position: "FB", overallMin: 15, overallMax: 16, note: "Current Clare senior" },
     { name: "Sean Rynne", grade: "A", age: 22, position: "MF", overallMin: 15, overallMax: 16, note: "Current Clare senior; captained Clare minors" },
@@ -99,8 +99,8 @@ const LISTINGS: Record<string, Listing[]> = {
   ],
   clonlara: [
     { name: "John Conlon", grade: "A", age: 37, position: "HF", overallMin: 16, overallMax: 18, note: "Current Clare senior — 2013 All-Ireland winner" },
-    { name: "Diarmuid Stritch", grade: "A", age: 21, position: "HF", overallMin: 15, overallMax: 16, note: "Current Clare senior, from the U20 production line" },
-    { name: "Ian Galvin", grade: "B", age: 30, position: "FF", overallMin: 13, overallMax: 16, note: "Former Clare senior corner-forward" },
+    { name: "Diarmuid Stritch", grade: "A", age: 21, position: "HF", overallMin: 15, overallMax: 16, note: "Current Clare senior — pace and striking from the U20 production line" },
+    { name: "Ian Galvin", grade: "B", age: 30, position: "FF", overallMin: 13, overallMax: 16, note: "Former Clare senior corner-forward — pace and finishing" },
     { name: "Colm Galvin", grade: "B", age: 33, position: "MF", overallMin: 13, overallMax: 16, note: "Former Clare senior; 2013 All-Ireland winner" },
     { name: "Micheál O'Loughlin", grade: "B", age: 29, position: "FF", overallMin: 13, overallMax: 16 },
     { name: "Dylan McMahon", grade: "B", age: 24, position: "HB", overallMin: 12, overallMax: 15, note: "Former Clare senior panellist; Clare U20 2019" },
@@ -253,7 +253,7 @@ const LISTINGS: Record<string, Listing[]> = {
     { name: "Cian Cremins", grade: "D", age: 22, position: "HF", number: 19, note: "2025 SHC group-stage substitute" },
   ],
   "clooney-quin": [
-    { name: "Peter Duggan", grade: "A", age: 32, position: "HF", overallMin: 17, overallMax: 19, note: "Current Clare senior — All-Star forward" },
+    { name: "Peter Duggan", grade: "A", age: 32, position: "HF", overallMin: 17, overallMax: 19, note: "Current Clare senior — All-Star target man; frees and sidelines" },
     { name: "Ryan Taylor", grade: "A", age: 26, position: "MF", overallMin: 15, overallMax: 17, note: "Current Clare senior" },
     { name: "Jack O'Neill", grade: "A", age: 21, position: "HF", overallMin: 15, overallMax: 16, note: "Current Clare senior; U20 leader" },
     { name: "John Cahill", grade: "C", age: 21, position: "HB", overallMin: 12, overallMax: 15, note: "Clare U20 captain" },
@@ -265,7 +265,7 @@ const LISTINGS: Record<string, Listing[]> = {
     { name: "Darragh Keogh", grade: "C", age: 24, position: "HB", note: "Clare U20 2022" },
     { name: "Conor Grogan", grade: "D", age: 27, position: "FB" },
     { name: "Matthew Corbett", grade: "D", age: 24, position: "MF" },
-    { name: "Jerry O'Connor", grade: "D", age: 23, position: "HF" },
+    { name: "Jerry O'Connor", grade: "D", age: 23, position: "HF", note: "Clooney-Quin top scorer from play in the 2025 SHC" },
     { name: "Callum Hassett", grade: "C", age: 23, position: "FF", overallMin: 11, overallMax: 14, note: "Clooney-Quin minor captain; Clare U20 2024 (leg injury)" },
     { name: "Darragh McNamara", grade: "C", age: 20, position: "FF", note: "First year out of minor in 2025; 2025 SHC semi-final starter" },
     { name: "Sam Scanlan", grade: "C", age: 23, position: "FF", overallMin: 11, overallMax: 14, note: "Clare minor; 2025 SHC semi-final and final corner-forward" },

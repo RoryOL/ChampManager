@@ -106,7 +106,9 @@ describe("player ratings", () => {
     expect(kelly?.ratings.overall).toBeGreaterThanOrEqual(17);
     expect(kelly?.ratings.frees).toBeGreaterThanOrEqual(17);
     expect(kelly?.ratings.vision).toBeGreaterThanOrEqual(17);
-    expect(kelly?.ratings.shooting).toBeGreaterThanOrEqual(16);
+    expect(kelly?.ratings.shooting).toBeGreaterThanOrEqual(18);
+    expect(kelly?.ratings.speed).toBeGreaterThanOrEqual(16);
+    expect(kelly?.ratings.acceleration).toBeGreaterThanOrEqual(16);
     expect(kelly?.ratings.teamwork).toBeGreaterThanOrEqual(12);
     expect(ratePlayer("ballyea", "Tony Kelly", 7).overall).toBe(
       ratePlayer("ballyea", "Tony Kelly", 7).overall,
@@ -205,6 +207,44 @@ describe("player ratings", () => {
     expect(odonnell!.ratings.manMarking).toBeLessThan(14);
     expect(odonnell!.ratings.puckoutReach).toBeLessThan(12);
     expect(odonnell!.ratings.manMarking).toBeLessThan(odonnell!.ratings.shooting);
+  });
+
+  it("floors well-covered 2024-26 traits from match reports and leaves namesakes alone", () => {
+    const kelly = ratedSquad("ballyea").find((player) => player.name === "Tony Kelly");
+    expect(kelly!.ratings.speed).toBeGreaterThanOrEqual(17);
+    expect(kelly!.ratings.shooting).toBeGreaterThanOrEqual(18);
+    expect(kelly!.ratings.acceleration).toBeGreaterThanOrEqual(16);
+
+    const duggan = ratedSquad("clooney-quin").find((player) => player.name === "Peter Duggan");
+    expect(duggan!.ratings.sidelines).toBeGreaterThanOrEqual(16);
+    expect(duggan!.ratings.aerialReach).toBeGreaterThanOrEqual(16);
+    expect(duggan!.ratings.frees).toBeGreaterThanOrEqual(16);
+
+    const stritch = ratedSquad("clonlara").find((player) => player.name === "Diarmuid Stritch");
+    expect(stritch!.ratings.speed).toBeGreaterThanOrEqual(16);
+    expect(stritch!.ratings.firstTouch).toBeGreaterThanOrEqual(15);
+    expect(stritch!.ratings.shooting).toBeGreaterThanOrEqual(15);
+
+    const galvin = ratedSquad("clonlara").find((player) => player.name === "Ian Galvin");
+    expect(galvin!.ratings.shooting).toBeGreaterThanOrEqual(15);
+    expect(galvin!.ratings.speed).toBeGreaterThanOrEqual(15);
+
+    const fitz = ratedSquad("inagh-kilnamona").find((player) => player.name === "David Fitzgerald");
+    const namesake = ratedSquad("clonlara").find((player) => player.name === "David Fitzgerald");
+    expect(fitz!.ratings.shooting).toBeGreaterThanOrEqual(15);
+    expect(fitz!.ratings.stamina).toBeGreaterThanOrEqual(17);
+    expect(namesake?.grade).toBe("D");
+    expect(namesake!.ratings.overall).toBeLessThanOrEqual(12);
+    expect(namesake!.ratings.stamina).toBeLessThan(fitz!.ratings.stamina);
+
+    const kirby = ratedSquad("ballyea").find((player) => player.name === "Cian Kirby");
+    expect(kirby!.ratings.shooting).toBeGreaterThanOrEqual(15);
+
+    const oconnor = ratedSquad("clooney-quin").find((player) => player.name === "Jerry O'Connor");
+    expect(oconnor!.ratings.shooting).toBeGreaterThanOrEqual(15);
+
+    const coote = ratedSquad("ballyea").find((player) => player.name === "Barry Coote");
+    expect(coote?.grade).toBe("D");
   });
 
   it("keeps high-rated defenders from carrying elite finishing numbers", () => {

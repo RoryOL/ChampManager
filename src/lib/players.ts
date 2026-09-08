@@ -30,17 +30,24 @@ import { latestLineup, squadFor } from "./squads";
 import { isInjured, slotFit } from "./injuries";
 import { conditionFor, fitnessOf, matchStat } from "./training";
 
+/**
+ * Named floors from 2024–26 Clare Echo, Examiner, Irish Times, RTÉ, The42 and GAA
+ * match reports. Keys are player names, or `teamId:name` when the same spelling
+ * appears at more than one club. Players without coverage keep their rolled ratings.
+ */
 const STAR_BIAS: Record<string, Partial<Record<AttributeKey, number>>> = {
   "Tony Kelly": {
     frees: 19,
     vision: 19,
+    shooting: 19,
     strikingDistance: 18,
-    shooting: 18,
     passing: 18,
     composure: 18,
-    teamwork: 17,
     firstTouch: 18,
     underPressure: 18,
+    speed: 18,
+    acceleration: 17,
+    teamwork: 17,
     sidelines: 16,
   },
   "Shane O'Donnell": {
@@ -56,10 +63,13 @@ const STAR_BIAS: Record<string, Partial<Record<AttributeKey, number>>> = {
   "Peter Duggan": {
     frees: 18,
     strikingDistance: 18,
-    shooting: 17,
     aerialReach: 18,
+    sidelines: 17,
+    shooting: 17,
+    strength: 16,
     highFielding: 16,
     composure: 16,
+    workrate: 15,
   },
   "John Conlon": {
     workrate: 18,
@@ -78,8 +88,17 @@ const STAR_BIAS: Record<string, Partial<Record<AttributeKey, number>>> = {
     speed: 16,
   },
   "Aidan McCarthy": { frees: 18, composure: 17, strikingDistance: 16, underPressure: 16 },
-  "Danny Russell": { frees: 17, strikingDistance: 16, composure: 16, offTheBall: 15 },
-  "David Fitzgerald": { stamina: 18, workrate: 17, speed: 16, highFielding: 16, passing: 15 },
+  "Danny Russell": { frees: 17, shooting: 17, strikingDistance: 16, composure: 16, offTheBall: 15 },
+  "inagh-kilnamona:David Fitzgerald": {
+    stamina: 18,
+    workrate: 17,
+    shooting: 16,
+    speed: 16,
+    highFielding: 16,
+    strikingDistance: 16,
+    offTheBall: 16,
+    passing: 15,
+  },
   "Diarmuid Ryan": { speed: 17, aerialReach: 16, stamina: 16, strikingDistance: 15 },
   "Podge Collins": { firstTouch: 17, workrate: 17, vision: 16, offTheBall: 16 },
   "Conor Cleary": { strength: 17, manMarking: 17, aerialReach: 16, hooking: 16 },
@@ -87,9 +106,50 @@ const STAR_BIAS: Record<string, Partial<Record<AttributeKey, number>>> = {
   "Adam Hogan": { manMarking: 17, hooking: 16, speed: 15, underPressure: 15 },
   "Eibhear Quilligan": { puckoutReach: 17, highFielding: 16, composure: 15, aerialReach: 15 },
   "Niall Deasy": { frees: 17, composure: 16, strikingDistance: 15 },
-  "David Reidy": { frees: 16, passing: 16, vision: 15 },
+  "David Reidy": { frees: 16, passing: 16, workrate: 16, composure: 16, vision: 15, shooting: 15 },
   "Cathal Malone": { stamina: 16, workrate: 16, highFielding: 15 },
   "Seadna Morey": { manMarking: 16, hooking: 15, speed: 15 },
+  "Diarmuid Stritch": {
+    speed: 17,
+    acceleration: 17,
+    firstTouch: 16,
+    shooting: 16,
+    strikingDistance: 16,
+    composure: 15,
+  },
+  "Sean Rynne": { shooting: 16, workrate: 16, offTheBall: 16, speed: 15 },
+  "Ian Galvin": { shooting: 16, speed: 16, acceleration: 16, firstTouch: 15, composure: 15 },
+  "Cian Kirby": { shooting: 16, composure: 15 },
+  "Fiachra Kirby": { shooting: 15, speed: 15, acceleration: 15 },
+  "Jack Browne": { workrate: 16, aerialReach: 15, highFielding: 15, teamwork: 15 },
+  "Jimmy Corry": { workrate: 16, teamwork: 16, passing: 15 },
+  "Cillian Duggan": { puckoutReach: 16, passing: 16, composure: 15 },
+  "Tadhg Ó hUallacháin": { workrate: 16, speed: 15 },
+  "Morgan Garry": { manMarking: 16, passing: 15 },
+  "Darragh Keogh": { passing: 16, workrate: 15 },
+  "Jerry O'Connor": { shooting: 16, composure: 15, offTheBall: 15 },
+  "Darragh McNamara": { offTheBall: 16, shooting: 15 },
+  "Marco Cleary": { shooting: 16, acceleration: 15, firstTouch: 15 },
+  "Oran Cahill": { stamina: 16, workrate: 15, shooting: 14 },
+  "Aaron Fitzgerald": { manMarking: 16, hooking: 15 },
+  "Robert Loftus": { manMarking: 16, workrate: 15 },
+  "Liam Corry": { manMarking: 16, hooking: 15 },
+  "Paul Flanagan": { manMarking: 17, composure: 15 },
+  "Gearoid O'Connell": { workrate: 16, stamina: 16, passing: 15 },
+  "Callum Hassett": { shooting: 15, offTheBall: 15 },
+  "Sam Scanlan": { shooting: 15, offTheBall: 15 },
+  "Darragh Stack": { composure: 16, highFielding: 16 },
+  "Ryan Taylor": { workrate: 16, passing: 16, stamina: 15 },
+  "Jack O'Neill": { passing: 16, highFielding: 15, shooting: 15, vision: 15 },
+  "John Conneally": { manMarking: 16, workrate: 15 },
+  "Shane Woods": { manMarking: 16, composure: 15 },
+  "Eamonn Foudy": { composure: 16, highFielding: 16, puckoutReach: 15 },
+  "Kealan Guyler": { workrate: 15, passing: 15, shooting: 14 },
+  "Niall O'Farrell": { strikingDistance: 16, aerialReach: 15, firstTouch: 15 },
+  "Darragh Lohan": { manMarking: 16, workrate: 15 },
+  "Dylan McMahon": { speed: 15, strikingDistance: 15, workrate: 15 },
+  "Micheál O'Loughlin": { frees: 16, strikingDistance: 16 },
+  "Seán McNamara": { manMarking: 15 },
 };
 
 export const DEFAULT_TACTICS: Tactics = {
@@ -241,7 +301,7 @@ export function ratePlayer(teamId: string, name: string, index: number, gameSeed
   }
   const familiarity = familiarityFor(seed, position, floor);
   alignRoleStats(ratings, familiarity, position, target, seed);
-  const bias = STAR_BIAS[name];
+  const bias = STAR_BIAS[`${teamId}:${name}`] ?? STAR_BIAS[name];
   if (bias) {
     for (const [key, value] of Object.entries(bias) as [AttributeKey, number][]) {
       const lifted = Math.max(ratings[key], value);
