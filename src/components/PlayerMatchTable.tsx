@@ -77,14 +77,18 @@ export function PlayerMatchTable({
           </tr>
         </thead>
         <tbody>
-          {rows.map(({ row, player, ratings, number, slot }) => {
+          {          rows.map(({ row, player, ratings, number, slot }) => {
             const selected = pickedSet.has(row.name);
             const overallDelta = ratings && player ? ratings.overall - player.ratings.overall : 0;
+            const onSheet = sheet
+              ? sheet.starters.includes(row.name) || sheet.subs.includes(row.name)
+              : true;
+            const canTap = Boolean(interactive && onTap && onSheet);
             return (
               <tr
                 key={`${row.teamId}:${row.name}`}
-                className={[interactive ? "is-interactive" : "", selected ? "is-picked" : ""].filter(Boolean).join(" ")}
-                onClick={interactive && onTap ? () => onTap(row.name) : undefined}
+                className={[canTap ? "is-interactive" : "", selected ? "is-picked" : ""].filter(Boolean).join(" ")}
+                onClick={canTap ? () => onTap?.(row.name) : undefined}
               >
                 <th className="is-sticky">{number ? `${number} ${row.name}` : row.name}</th>
                 <td>{slot && slot !== "SUB" ? slot : slot === "SUB" ? "SUB" : player?.position ?? ""}</td>

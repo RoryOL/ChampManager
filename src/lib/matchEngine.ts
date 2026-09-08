@@ -17,12 +17,15 @@ import { buildCoachReport, liveCoachTip } from "./coach";
 import { applyFormChance, formValue, fumbleChance } from "./form";
 import { mergeCredits, passChain, deliverTo, statsFromEvents } from "./matchStats";
 import {
+  closingSheetFromSlots,
   injuryText,
+  MATCH_INJURY_CAP,
+  MATCH_INJURY_PER_TEAM,
   rollMatchInjuries,
   subEventFor,
   type RolledInjury,
 } from "./injuries";
-import { clubTactics, defaultSheet, pickPuckoutTarget, sheetPlayers, sideProfile, sideTeamwork, aerialContestRating, type SideProfile } from "./players";
+import { clubTactics, defaultSheet, expandSheetToPanel, pickPuckoutTarget, sheetPlayers, sideProfile, sideTeamwork, aerialContestRating, type SideProfile } from "./players";
 import { MATCH_SUB_LIMIT } from "./subs";
 import {
   conversionContext,
@@ -450,6 +453,7 @@ export function simulateMatch(options: {
   awaySquad?: RatedPlayer[];
   remainingWeeks?: number;
   remainingSubs?: { home?: number; away?: number };
+  injuryBudget?: { total: number; home: number; away: number };
   forcedRemovals?: { minute: number; teamId: string; name: string; kind: "red" | "injury" }[];
   performanceBoost?: { clubIds: string[]; amount: number };
   homePrep?: MatchPrep;
@@ -461,8 +465,8 @@ export function simulateMatch(options: {
   const statRng = createRng(seedFrom(`${seedKey}:stats`));
   const climate = climateOf(options.climate ?? rollClimate(options.seed, options.matchId));
   const shots: ShotAttempt[] = [];
-  const homeSheet = options.homeSheet ?? defaultSheet(options.homeId);
-  const awaySheet = options.awaySheet ?? defaultSheet(options.awayId);
+  const homeSheet = expandSheetToPanel(options.homeId, options.homeSheet ?? defaultSheet(options.homeId), options.gameSeed);
+  const awaySheet = expandSheetToPanel(options.awayId, options.awaySheet ?? defaultSheet(options.awayId), options.gameSeed);
   const homeTactics = options.homeTactics ?? clubTactics(options.homeId);
   const awayTactics = options.awayTactics ?? clubTactics(options.awayId);
   const homeDirect = clampDial(homeTactics.build) / 100;
@@ -619,7 +623,8 @@ export function simulateMatch(options: {
     if (incoming && slot >= 0 && remaining > 0) {
       slots[slot] = incoming;
       const subIndex = subs.indexOf(incoming);
-      if (subIndex >= 0) subs.splice(subIndex, 1);
+      if (subIndex >= 0) subs[subIndex] = name;
+      else subs.push(name);
       beginStint(teamId, incoming, minute);
       push(subEventFor(rolled, incoming));
       if (teamId === options.homeId) homeSubsLeft -= 1;
@@ -633,33 +638,55 @@ export function simulateMatch(options: {
   for (const name of homeNames) beginStint(options.homeId, name, startMinute);
   for (const name of awayNames) beginStint(options.awayId, name, startMinute);
 
+  const injuryBudget = options.injuryBudget ?? {
+    total: MATCH_INJURY_CAP,
+    home: MATCH_INJURY_PER_TEAM,
+    away: MATCH_INJURY_PER_TEAM,
+  };
+  const homeRolled = options.homeSquad
+    ? rollMatchInjuries({
+        clubId: options.homeId,
+        squad: rawHomeRoster,
+        condition: options.homeCondition ?? {},
+        seed: options.seed,
+        matchId: options.matchId,
+        period,
+        remainingWeeks: options.remainingWeeks ?? 12,
+        teamId: options.homeId,
+        maxCount: Math.min(injuryBudget.home, injuryBudget.total),
+        played: homeSheet.starters.map((name) => ({ name, minutes: periodMinutes, started: true })),
+      })
+    : [];
+  const awayRolled = options.awaySquad
+    ? rollMatchInjuries({
+        clubId: options.awayId,
+        squad: rawAwayRoster,
+        condition: options.awayCondition ?? {},
+        seed: options.seed,
+        matchId: options.matchId,
+        period,
+        remainingWeeks: options.remainingWeeks ?? 12,
+        teamId: options.awayId,
+        maxCount: Math.min(injuryBudget.away, injuryBudget.total),
+        played: awaySheet.starters.map((name) => ({ name, minutes: periodMinutes, started: true })),
+      })
+    : [];
+  const orderRng = createRng(seedFrom(`${seedKey}:injury-pick`));
+  const randomPool = orderRng() < 0.5 ? [...homeRolled, ...awayRolled] : [...awayRolled, ...homeRolled];
+  const pickedInjuries: RolledInjury[] = [];
+  let homeInjuryCount = 0;
+  let awayInjuryCount = 0;
+  for (const item of randomPool) {
+    const isHome = item.event.teamId === options.homeId;
+    if (pickedInjuries.length >= injuryBudget.total) break;
+    if (isHome && homeInjuryCount >= injuryBudget.home) continue;
+    if (!isHome && awayInjuryCount >= injuryBudget.away) continue;
+    pickedInjuries.push(item);
+    if (isHome) homeInjuryCount += 1;
+    else awayInjuryCount += 1;
+  }
   const scheduledInjuries = [
-    ...(options.homeSquad
-      ? rollMatchInjuries({
-          clubId: options.homeId,
-          squad: rawHomeRoster,
-          condition: options.homeCondition ?? {},
-          seed: options.seed,
-          matchId: options.matchId,
-          period,
-          remainingWeeks: options.remainingWeeks ?? 12,
-          teamId: options.homeId,
-          played: homeSheet.starters.map((name) => ({ name, minutes: periodMinutes, started: true })),
-        })
-      : []),
-    ...(options.awaySquad
-      ? rollMatchInjuries({
-          clubId: options.awayId,
-          squad: rawAwayRoster,
-          condition: options.awayCondition ?? {},
-          seed: options.seed,
-          matchId: options.matchId,
-          period,
-          remainingWeeks: options.remainingWeeks ?? 12,
-          teamId: options.awayId,
-          played: awaySheet.starters.map((name) => ({ name, minutes: periodMinutes, started: true })),
-        })
-      : []),
+    ...pickedInjuries,
     ...(options.forcedRemovals ?? [])
       .filter((item) => item.kind === "injury")
       .map((item) => {
@@ -1578,6 +1605,9 @@ export function simulateMatch(options: {
       : options.homeCondition,
   });
 
+  const homeClosingSheet = closingSheetFromSlots(homeSheet, homeSlots, homeSubs, homeOut);
+  const awayClosingSheet = closingSheetFromSlots(awaySheet, awaySlots, awaySubs, awayOut);
+
   return {
     matchId: options.matchId,
     homeId: options.homeId,
@@ -1589,6 +1619,8 @@ export function simulateMatch(options: {
     awayTactics,
     homeSheet,
     awaySheet,
+    homeClosingSheet,
+    awayClosingSheet,
     homeStats: tallied.homeStats,
     awayStats: tallied.awayStats,
     players: tallied.players,

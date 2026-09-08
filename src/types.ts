@@ -388,6 +388,8 @@ export type SimulatedMatch = {
   awayTactics: Tactics;
   homeSheet: TeamSheet;
   awaySheet: TeamSheet;
+  homeClosingSheet?: TeamSheet;
+  awayClosingSheet?: TeamSheet;
   homeStats: TeamMatchStats;
   awayStats: TeamMatchStats;
   players: PlayerMatchStats[];

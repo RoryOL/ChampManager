@@ -50,7 +50,7 @@ export function injuryChance(
   }
   let chance =
     context === "match"
-      ? 0.055
+      ? 0.028
       : focus === "challenge"
         ? 0.08
         : focus === "fitness"
@@ -170,20 +170,93 @@ export function bestBenchForSlot(
   return [...candidates].sort((a, b) => slotFit(byName.get(b)!, slotIndex) - slotFit(byName.get(a)!, slotIndex))[0];
 }
 
+export const MATCH_INJURY_CAP = 2;
+export const MATCH_INJURY_PER_TEAM = 1;
+
+export function remainingInjuryBudget(
+  events: MatchEvent[],
+  homeId: string,
+  awayId: string,
+): { total: number; home: number; away: number } {
+  const home = events.filter((event) => event.kind === "injury" && event.teamId === homeId).length;
+  const away = events.filter((event) => event.kind === "injury" && event.teamId === awayId).length;
+  return {
+    total: Math.max(0, MATCH_INJURY_CAP - home - away),
+    home: Math.max(0, MATCH_INJURY_PER_TEAM - home),
+    away: Math.max(0, MATCH_INJURY_PER_TEAM - away),
+  };
+}
+
+export function closingSheetOf(
+  sim: {
+    homeId: string;
+    awayId: string;
+    homeSheet: TeamSheet;
+    awaySheet: TeamSheet;
+    homeClosingSheet?: TeamSheet;
+    awayClosingSheet?: TeamSheet;
+  },
+  clubId: string,
+): TeamSheet {
+  if (clubId === sim.homeId) return sim.homeClosingSheet ?? sim.homeSheet;
+  if (clubId === sim.awayId) return sim.awayClosingSheet ?? sim.awaySheet;
+  return sim.homeSheet;
+}
+
+export function keepClubSheet(sheet: TeamSheet, squad: RatedPlayer[]): TeamSheet {
+  const known = new Set(squad.map((player) => player.name));
+  const seen = new Set<string>();
+  const starters: string[] = [];
+  const subs: string[] = [];
+  for (const name of [...sheet.starters, ...sheet.subs]) {
+    if (!known.has(name) || seen.has(name)) continue;
+    seen.add(name);
+    if (starters.length < 15) starters.push(name);
+    else subs.push(name);
+  }
+  if (starters.length < 15) {
+    for (const player of squad) {
+      if (seen.has(player.name)) continue;
+      starters.push(player.name);
+      seen.add(player.name);
+      if (starters.length >= 15) break;
+    }
+  }
+  return { starters, subs };
+}
+
+export function closingSheetFromSlots(
+  opening: TeamSheet,
+  slots: string[],
+  subs: string[],
+  out: Iterable<string> = [],
+): TeamSheet {
+  const starters = [...slots];
+  const bench = [...subs];
+  const listed = new Set([...starters, ...bench]);
+  for (const name of [...opening.starters, ...opening.subs, ...out]) {
+    if (!name || listed.has(name)) continue;
+    bench.push(name);
+    listed.add(name);
+  }
+  return { starters, subs: bench };
+}
+
 export function sitInjuredPlayers(
   sheet: TeamSheet,
   squad: RatedPlayer[],
   condition: Record<string, PlayerCondition>,
   extraNames: string[] = [],
 ): TeamSheet {
+  const cleaned = keepClubSheet(sheet, squad);
   const out = new Set([
-    ...extraNames,
+    ...extraNames.filter((name) => squad.some((player) => player.name === name)),
     ...squad.filter((player) => isInjured(condition[player.name])).map((player) => player.name),
   ]);
-  if (out.size === 0) return sheet;
+  if (out.size === 0) return cleaned;
   const healthy = squad.filter((player) => !out.has(player.name));
-  const starters = [...sheet.starters];
-  const subs = [...sheet.subs];
+  const starters = [...cleaned.starters];
+  const subs = [...cleaned.subs];
   const taken = () => new Set([...starters, ...subs]);
 
   const nextHealthy = () => healthy.find((player) => !taken().has(player.name))?.name;
@@ -199,7 +272,7 @@ export function sitInjuredPlayers(
     if (subIndex >= 0) subs[subIndex] = name;
     else subs.push(name);
   }
-  return { starters, subs };
+  return keepClubSheet({ starters, subs }, squad);
 }
 
 export function subEventFor(injury: RolledInjury, incoming: string): MatchEvent {
@@ -240,6 +313,7 @@ export function rollMatchInjuries(options: {
   remainingWeeks: number;
   teamId: string;
   played: { name: string; minutes: number; started: boolean }[];
+  maxCount?: number;
 }): RolledInjury[] {
   const random = createRng(seedFrom(`${options.seed}:${options.matchId}:${options.period}:injuries`));
   const minMinute = options.period === "second" ? 32 : 4;
@@ -254,8 +328,9 @@ export function rollMatchInjuries(options: {
     .filter((item): item is { player: RatedPlayer; row: (typeof options.played)[number] } => Boolean(item))
     .filter(({ player }) => !isInjured(options.condition[player.name]));
 
+  const cap = Math.max(0, options.maxCount ?? 2);
   for (const { player, row } of candidates) {
-    if (rolled.length >= 2) break;
+    if (rolled.length >= cap) break;
     const chance = injuryChance(player, options.condition[player.name] ?? { fatigue: 0, sharpness: 38 }, "match");
     const weight = row.started ? 1 : 0.55;
     if (random() > chance * weight) continue;

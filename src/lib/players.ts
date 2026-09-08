@@ -420,10 +420,6 @@ export function swapPlayersInSheet(sheet: TeamSheet, first: string, second: stri
   } else if (j >= 0 && a >= 0) {
     starters[j] = first;
     subs[a] = second;
-  } else if (i >= 0) {
-    starters[i] = second;
-  } else if (j >= 0) {
-    starters[j] = first;
   }
   return { starters, subs };
 }

@@ -18,8 +18,10 @@ import { compactName } from "./display";
 import { applyMatchForm, formValue, withStartingForm } from "./form";
 import {
   applyInjury,
+  closingSheetOf,
   injuredNamesFromEvents,
   isInjured,
+  keepClubSheet,
   sitInjuredPlayers,
 } from "./injuries";
 import { simulateMatch } from "./matchEngine";
@@ -201,13 +203,18 @@ export function pickCpuSheet(options: {
         slotScore(right, index, options.condition[right.name], right.name === incumbent) -
         slotScore(left, index, options.condition[left.name], left.name === incumbent),
     );
-    const pick = ranked[0]?.name ?? incumbent;
+    const pick =
+      ranked[0]?.name ??
+      (incumbent && !used.has(incumbent) ? incumbent : undefined) ??
+      squad.find((player) => !used.has(player.name))?.name;
     if (!pick) continue;
     starters.push(pick);
     used.add(pick);
   }
-  const remaining = squad.filter((player) => !used.has(player.name) && !unavailable.has(player.name));
-  const rankedSubs = [...remaining].sort((left, right) => {
+  const leftover = squad.filter((player) => !used.has(player.name));
+  const healthyRest = leftover.filter((player) => !unavailable.has(player.name));
+  const injuredRest = leftover.filter((player) => unavailable.has(player.name));
+  const rankedSubs = [...healthyRest].sort((left, right) => {
     const leftKeep = seated.subs.includes(left.name) ? 8 : 0;
     const rightKeep = seated.subs.includes(right.name) ? 8 : 0;
     const leftGk = left.position === "GK" ? 6 : 0;
@@ -217,8 +224,7 @@ export function pickCpuSheet(options: {
       (left.ratings.overall + formValue(options.condition[left.name]) * 0.08 + leftKeep + leftGk)
     );
   });
-  const subs = rankedSubs.slice(0, 5).map((player) => player.name);
-  return { starters, subs };
+  return { starters, subs: [...rankedSubs.map((player) => player.name), ...injuredRest.map((player) => player.name)] };
 }
 
 export function pickCpuTactics(options: {
@@ -327,7 +333,7 @@ export function pickCpuHalfPlan(options: {
   const ourScore = ours ? options.first.homeScore : options.first.awayScore;
   const theirScore = ours ? options.first.awayScore : options.first.homeScore;
   const gap = scoreTotal(theirScore) - scoreTotal(ourScore);
-  const opening = ours ? options.first.homeSheet : options.first.awaySheet;
+  const lastSheet = closingSheetOf(options.first, options.teamId);
   const openingTactics = ours ? options.first.homeTactics : options.first.awayTactics;
   const theirTactics = ours ? options.first.awayTactics : options.first.homeTactics;
   const hurt = injuredNamesFromEvents(options.first.events, options.teamId);
@@ -336,7 +342,7 @@ export function pickCpuHalfPlan(options: {
     condition: options.condition,
     seed: options.seed,
     matchKey: `${options.first.matchId}:second`,
-    lastSheet: opening,
+    lastSheet,
     extraNames: hurt,
   });
   if (skill === "scout") {
@@ -506,14 +512,14 @@ export function applySimToClub(
 ): ClubRuntime {
   if (clubId !== sim.homeId && clubId !== sim.awayId) return club;
   const ours = clubId === sim.homeId;
-  const closing = ours ? sim.homeSheet : sim.awaySheet;
-  const opening = openingSheet ?? closing;
+  const squad = ratedSquad(clubId, seed);
+  const closing = keepClubSheet(closingSheetOf(sim, clubId), squad);
+  const opening = keepClubSheet(openingSheet ?? (ours ? sim.homeSheet : sim.awaySheet), squad);
   const tactics = ours ? sim.homeTactics : sim.awayTactics;
   const ourScore = ours ? sim.homeScore : sim.awayScore;
   const theirScore = ours ? sim.awayScore : sim.homeScore;
   const result =
     scoreTotal(ourScore) > scoreTotal(theirScore) ? "win" : scoreTotal(ourScore) < scoreTotal(theirScore) ? "loss" : "draw";
-  const squad = ratedSquad(clubId, seed);
   const chase = ours ? (sim.homeChaseEffort ?? 0) : (sim.awayChaseEffort ?? 0);
   let condition = applyMatchFatigue(
     club.condition,

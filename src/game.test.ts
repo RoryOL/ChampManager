@@ -34,7 +34,7 @@ import {
   withChaseTactics,
   yellowOnFoulChance,
 } from "./lib/matchEngine";
-import { clubTactics, DEFAULT_TACTICS, defaultSheet, expandSheetToPanel, matchOrderIndex, matchShirtNumber, matchSlot, pickPuckoutTarget, playerAge, ratePlayer, ratedSquad, sheetPlayers, sideStrength } from "./lib/players";
+import { clubTactics, DEFAULT_TACTICS, defaultSheet, expandSheetToPanel, matchOrderIndex, matchShirtNumber, matchSlot, pickPuckoutTarget, playerAge, ratePlayer, ratedSquad, sheetPlayers, sideStrength, swapPlayersInSheet } from "./lib/players";
 import { nextBatch } from "./lib/schedule";
 import { matchPlayed, scoreTotal } from "./lib/scoring";
 import { ATTRIBUTE_KEYS } from "./lib/attributes";
@@ -43,6 +43,7 @@ import { buildPreMatchBriefing } from "./lib/briefing";
 import type { PlayerMatchStats, Score, Tactics } from "./types";
 import { nextSwapPick } from "./components/SwapConfirmBar";
 import { MATCH_SUB_LIMIT, isSubstitutionSwap, remainingMatchSubs } from "./lib/subs";
+import { keepClubSheet, remainingInjuryBudget, sitInjuredPlayers } from "./lib/injuries";
 
 describe("new game championship", () => {
   it("starts with every tie unplayed", () => {
@@ -513,6 +514,65 @@ describe("match engine", () => {
     expect(minutes).toBeLessThan(40);
   });
 
+  it("keeps the first-half injury replacement on the closing sheet", () => {
+    const sheet = defaultSheet("ballyea");
+    const hurt = sheet.starters[0]!;
+    const incoming = sheet.subs[0]!;
+    const first = simulateMatch({
+      matchId: "g1-r1-a",
+      homeId: "ballyea",
+      awayId: "inagh-kilnamona",
+      homeSheet: sheet,
+      period: "first",
+      seed: 5,
+      forcedRemovals: [{ minute: 12, teamId: "ballyea", name: hurt, kind: "injury" }],
+    });
+    expect(first.homeSheet.starters[0]).toBe(hurt);
+    expect(first.homeClosingSheet?.starters[0]).toBe(incoming);
+    expect(first.homeClosingSheet?.subs).toContain(hurt);
+    const seated = sitInjuredPlayers(first.homeClosingSheet ?? first.homeSheet, ratedSquad("ballyea"), {}, [hurt]);
+    expect(seated.starters[0]).toBe(incoming);
+  });
+
+  it("rolls at most two injuries across both halves", () => {
+    let total = 0;
+    const n = 36;
+    for (let seed = 1; seed <= n; seed += 1) {
+      const first = simulateMatch({
+        matchId: `inj-${seed}`,
+        homeId: "ballyea",
+        awayId: "kilmaley",
+        homeSquad: ratedSquad("ballyea", 3),
+        awaySquad: ratedSquad("kilmaley", 3),
+        period: "first",
+        seed,
+        gameSeed: 3,
+      });
+      const second = simulateMatch({
+        matchId: `inj-${seed}`,
+        homeId: "ballyea",
+        awayId: "kilmaley",
+        homeSquad: ratedSquad("ballyea", 3),
+        awaySquad: ratedSquad("kilmaley", 3),
+        homeSheet: first.homeClosingSheet ?? first.homeSheet,
+        awaySheet: first.awayClosingSheet ?? first.awaySheet,
+        period: "second",
+        climate: first.climate,
+        startHome: first.homeScore,
+        startAway: first.awayScore,
+        seed,
+        gameSeed: 3,
+        injuryBudget: remainingInjuryBudget(first.events, "ballyea", "kilmaley"),
+      });
+      const count =
+        first.events.filter((event) => event.kind === "injury").length +
+        second.events.filter((event) => event.kind === "injury").length;
+      expect(count).toBeLessThanOrEqual(2);
+      total += count;
+    }
+    expect(total / n).toBeLessThan(2);
+  });
+
   it("caps injury replacements at five substitutions", () => {
     const sheet = defaultSheet("ballyea");
     const hurt = sheet.starters.slice(8, 14);
@@ -532,6 +592,19 @@ describe("match engine", () => {
     const ours = result.events.filter((event) => event.teamId === "ballyea");
     expect(ours.filter((event) => event.kind === "injury")).toHaveLength(hurt.length);
     expect(ours.filter((event) => event.kind === "sub")).toHaveLength(MATCH_SUB_LIMIT);
+  });
+
+  it("drops opposing names from a mixed sheet and will not swap in outsiders", () => {
+    const squad = ratedSquad("ballyea");
+    const sheet = defaultSheet("ballyea");
+    const foreign = defaultSheet("kilmaley").starters[0]!;
+    const mixed = { starters: [...sheet.starters], subs: [...sheet.subs.slice(0, 4), foreign] };
+    const cleaned = keepClubSheet(mixed, squad);
+    expect([...cleaned.starters, ...cleaned.subs]).not.toContain(foreign);
+    expect(cleaned.starters).toHaveLength(15);
+    const swapped = swapPlayersInSheet(sheet, sheet.starters[0]!, foreign);
+    expect(swapped.starters[0]).toBe(sheet.starters[0]);
+    expect([...swapped.starters, ...swapped.subs]).not.toContain(foreign);
   });
 
   it("books low-composure players more readily, and wet weather adds a few more cards", () => {

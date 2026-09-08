@@ -11,7 +11,7 @@ import { ShotMap } from "../components/ShotMap";
 import { WeatherBanner } from "../components/WeatherBanner";
 import { liveStats } from "../lib/matchStats";
 import { ratedSquad, sheetPlayers, swapPlayersInSheet } from "../lib/players";
-import { injuredNamesFromEvents, isInjured, sitInjuredPlayers } from "../lib/injuries";
+import { closingSheetOf, injuredNamesFromEvents, isInjured } from "../lib/injuries";
 import { resolveMatchSides, teamById } from "../lib/resolve";
 import { formatScore } from "../lib/scoring";
 import { SwapConfirmBar, nextSwapPick } from "../components/SwapConfirmBar";
@@ -60,7 +60,7 @@ export function MatchScreen({
   const [speed, setSpeed] = useState<(typeof SPEEDS)[number]["id"]>("slow");
   const [pane, setPane] = useState<"call" | "stats">("call");
   const [htTactics, setHtTactics] = useState<Tactics>(save.tactics);
-  const [htSheet, setHtSheet] = useState<TeamSheet>(live.openingSheet);
+  const [htSheet, setHtSheet] = useState<TeamSheet>(() => closingSheetOf(live.user, save.clubId));
   const [htFirst, setHtFirst] = useState<string | null>(null);
   const [htSecond, setHtSecond] = useState<string | null>(null);
   const interval = SPEEDS.find((item) => item.id === speed)?.ms ?? 1100;
@@ -76,17 +76,16 @@ export function MatchScreen({
     if (live.phase === "finished") setPane("stats");
   }, [live.phase]);
 
-  const squad = useMemo(() => ratedSquad(save.clubId, save.seed), [save.clubId, save.seed]);
   const homeSquad = useMemo(() => (homeId ? ratedSquad(homeId, save.seed) : []), [homeId, save.seed]);
   const awaySquad = useMemo(() => (awayId ? ratedSquad(awayId, save.seed) : []), [awayId, save.seed]);
   const htXv = useMemo(() => sheetPlayers(save.clubId, htSheet, save.seed), [htSheet, save.clubId, save.seed]);
 
   useEffect(() => {
     if (live.phase !== "half-time") return;
-    const hurt = injuredNamesFromEvents(live.user.events.slice(0, live.cursor), save.clubId);
-    if (hurt.length === 0) return;
-    setHtSheet((current) => sitInjuredPlayers(current, squad, save.condition, hurt));
-  }, [live.cursor, live.phase, live.user.events, save.clubId, save.condition, squad]);
+    setHtSheet(closingSheetOf(live.user, save.clubId));
+    setHtFirst(null);
+    setHtSecond(null);
+  }, [live.phase, save.clubId, live.user.matchId]);
   const chart = liveStats(live.user, Math.max(live.cursor, 1), {
     home: homeId === save.clubId ? save.condition : undefined,
     away: awayId === save.clubId ? save.condition : undefined,
@@ -100,6 +99,8 @@ export function MatchScreen({
   );
 
   const tapHt = (name: string) => {
+    const onSheet = htSheet.starters.includes(name) || htSheet.subs.includes(name);
+    if (!onSheet) return;
     const next = nextSwapPick(htFirst, htSecond, name);
     setHtFirst(next.first);
     setHtSecond(next.second);
@@ -108,7 +109,14 @@ export function MatchScreen({
   const confirmHtSwap = () => {
     if (!htFirst || !htSecond) return;
     const inSheet = (player: string) => htSheet.starters.includes(player) || htSheet.subs.includes(player);
-    if ((isInjured(save.condition[htFirst]) && !inSheet(htFirst)) || (isInjured(save.condition[htSecond]) && !inSheet(htSecond))) {
+    if (!inSheet(htFirst) || !inSheet(htSecond)) return;
+    const hurt = new Set(injuredNamesFromEvents(live.user.events.slice(0, live.cursor), save.clubId));
+    if (
+      hurt.has(htFirst) ||
+      hurt.has(htSecond) ||
+      isInjured(save.condition[htFirst]) ||
+      isInjured(save.condition[htSecond])
+    ) {
       return;
     }
     if (isSubstitutionSwap(htSheet, htFirst, htSecond) && remainingSubs <= 0) return;
