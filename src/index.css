@@ -1237,6 +1237,11 @@ html.native-app .device {
   font-weight: 700;
 }
 
+.training-table th.ovr,
+.training-table td.ovr {
+  font-weight: 800;
+}
+
 .training-table .col-check,
 .training-table .col-player {
   position: sticky;

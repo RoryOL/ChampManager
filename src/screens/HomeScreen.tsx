@@ -32,6 +32,7 @@ type Props = {
   onReadNews: (id: string) => void;
   onOpenMatch: (matchId: string) => void;
   onOpenPlayer: (name: string) => void;
+  onOpenTeam?: (teamId: string) => void;
   onOpenTraining?: () => void;
   onSetWeekShape?: (shape: WeekShape) => void;
   onRunWeek?: (shape: WeekShape) => void;
@@ -101,6 +102,7 @@ export function HomeScreen({
   onReadNews,
   onOpenMatch,
   onOpenPlayer,
+  onOpenTeam,
   onOpenTraining,
   onSetWeekShape,
   onRunWeek,
@@ -109,6 +111,9 @@ export function HomeScreen({
   const club = teamById(championship, save.clubId);
   const group = teamGroup(championship, save.clubId);
   const sides = nextMatch ? resolveMatchSides(championship, nextMatch) : null;
+  const opponentId =
+    sides && (sides.homeId === save.clubId ? sides.awayId : sides.awayId === save.clubId ? sides.homeId : null);
+  const opponent = opponentId ? teamById(championship, opponentId) : undefined;
   const [openId, setOpenId] = useState<string | null>(null);
   const squad = ratedSquad(save.clubId, save);
   const names = squad.map((player) => player.name);
@@ -194,6 +199,17 @@ export function HomeScreen({
                 Instant result
               </button>
             )}
+            {opponent && onOpenTeam ? (
+              <button type="button" className="btn btn--ghost" onClick={() => onOpenTeam(opponent.id)}>
+                Open {compactName(opponent)} squad
+              </button>
+            ) : null}
+          </div>
+        ) : !preseason && nextMatch && opponent && onOpenTeam ? (
+          <div className="row-actions">
+            <button type="button" className="btn btn--ghost" onClick={() => onOpenTeam(opponent.id)}>
+              Open {compactName(opponent)} squad
+            </button>
           </div>
         ) : null}
         {!preseason && !nextMatch && batchLabel && !campaign ? (

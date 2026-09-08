@@ -1,25 +1,25 @@
 import { useEffect, useMemo, useState } from "react";
-import type { GameSave, Tactics, TeamSheet } from "../types";
+import type { Championship, GameSave, Match, Tactics, TeamSheet } from "../types";
 import { SwapConfirmBar, nextSwapPick } from "../components/SwapConfirmBar";
 import { TacticControls } from "../components/TacticControls";
-import {
-  ATTRIBUTE_KEYS,
-  ATTRIBUTE_LABELS,
-  ATTRIBUTE_SHORT,
-} from "../lib/attributes";
+import { compactName } from "../lib/display";
 import { isInjured } from "../lib/injuries";
 import { formatMatchRating, lastMatchRating, seasonStatsFor } from "../lib/matchStats";
 import { coachPickSheet, expandSheetToPanel, matchShirtNumber, matchSlot, ratedSquad, sheetPlayers } from "../lib/players";
-import { conditionFor, fitnessOf, matchRatings, toneClass, trainingDelta } from "../lib/training";
+import { resolveMatchSides, teamById } from "../lib/resolve";
+import { conditionFor, fitnessOf, matchRatings, toneClass } from "../lib/training";
 
 type Props = {
   save: GameSave;
+  championship?: Championship;
+  nextMatch?: Match | null;
   onChange: (tactics: Tactics) => void;
   onSwap: (first: string, second: string) => void;
   onSetSheet: (sheet: TeamSheet) => void;
+  onOpenTeam?: (teamId: string) => void;
 };
 
-export function TacticsScreen({ save, onChange, onSwap, onSetSheet }: Props) {
+export function TacticsScreen({ save, championship, nextMatch, onChange, onSwap, onSetSheet, onOpenTeam }: Props) {
   const squad = useMemo(() => ratedSquad(save.clubId, save), [save]);
   const byName = useMemo(() => new Map(squad.map((player) => [player.name, player])), [squad]);
   const [first, setFirst] = useState<string | null>(null);
@@ -28,6 +28,10 @@ export function TacticsScreen({ save, onChange, onSwap, onSetSheet }: Props) {
   const xv = sheetPlayers(save.clubId, sheet, save);
   const names = [...sheet.starters, ...sheet.subs];
   const matchIds = save.matches.map((match) => match.id);
+  const sides = championship && nextMatch ? resolveMatchSides(championship, nextMatch) : null;
+  const opponentId =
+    sides && (sides.homeId === save.clubId ? sides.awayId : sides.awayId === save.clubId ? sides.homeId : null);
+  const opponent = championship && opponentId ? teamById(championship, opponentId) : undefined;
 
   useEffect(() => {
     const full = expandSheetToPanel(save.clubId, save.sheet, save);
@@ -68,6 +72,11 @@ export function TacticsScreen({ save, onChange, onSwap, onSetSheet }: Props) {
         <button type="button" className="btn" onClick={askCoach}>
           Ask the coach to pick the team
         </button>
+        {opponent && onOpenTeam ? (
+          <button type="button" className="btn btn--ghost" onClick={() => onOpenTeam(opponent.id)}>
+            Open {compactName(opponent)} squad
+          </button>
+        ) : null}
       </div>
       <h3 className="list-title">Match-day panel</h3>
       <div className="tactics-pick">
@@ -94,11 +103,6 @@ export function TacticsScreen({ save, onChange, onSwap, onSetSheet }: Props) {
               <th>Avg</th>
               <th>Last</th>
               <th>Age</th>
-              {ATTRIBUTE_KEYS.map((key) => (
-                <th key={key} title={ATTRIBUTE_LABELS[key]}>
-                  {ATTRIBUTE_SHORT[key]}
-                </th>
-              ))}
             </tr>
           </thead>
           <tbody>
@@ -132,11 +136,6 @@ export function TacticsScreen({ save, onChange, onSwap, onSetSheet }: Props) {
                   <td>{formatMatchRating(season.minutes > 0 ? season.rating : undefined)}</td>
                   <td>{formatMatchRating(last)}</td>
                   <td>{player.age}</td>
-                  {ATTRIBUTE_KEYS.map((key) => (
-                    <td key={key} className={toneClass(trainingDelta(condition, key))}>
-                      {ratings[key]}
-                    </td>
-                  ))}
                 </tr>
               );
             })}

@@ -3,7 +3,7 @@ import type { GameSave, MatchPrep, PlayerPlan, TrainingIntensity, WeekSession, W
 import { Toast } from "../components/Toast";
 import { TrainingMixEditor } from "../components/TrainingMixEditor";
 import { WeekShapePicker } from "../components/WeekShapePicker";
-import { ATTRIBUTE_LABELS } from "../lib/attributes";
+import { ATTRIBUTE_LABELS, ATTRIBUTE_SHORT } from "../lib/attributes";
 import { isInjured } from "../lib/injuries";
 import { ratedSquad } from "../lib/players";
 import {
@@ -11,6 +11,7 @@ import {
   MATCH_PREP_OPTIONS,
   PRESEASON_WEEKS,
   SQUAD_TEMPLATES,
+  TRAINABLE_KEYS,
   applyIntensityToPlayers,
   applyTemplateToPlayers,
   bankedLift,
@@ -27,6 +28,8 @@ import {
   sessionForSlot,
   sessionsPerWeek,
   tableLift,
+  trainedOverallLift,
+  trainedRatings,
   trainedStat,
   type SquadTemplateId,
 } from "../lib/training";
@@ -40,8 +43,6 @@ type Props = {
   onSetIntensity: (intensity: TrainingIntensity) => void;
   onSetWeekShape: (shape: WeekShape) => void;
 };
-
-const TABLE_KEYS = ["shooting", "passing", "hooking", "speed", "teamwork"] as const;
 
 function liftClass(value: number): string {
   if (value > 0) return "is-lift-up";
@@ -249,7 +250,8 @@ export function TrainingScreen({ save, onBack, onTrain, onMatchPrep, onSetPlans,
       <section className="card card--compact">
         <p className="kicker">Panel</p>
         <p className="hint hint--tight">
-          Green and red show banked training, including small lifts that have not ticked the profile number yet.
+          Every stat training can move is here. Overall uses the same weights as the profile, including small banked
+          lifts that have not ticked the integer yet.
         </p>
         <div className="training-table-wrap">
           <table className="training-table">
@@ -260,8 +262,11 @@ export function TrainingScreen({ save, onBack, onTrain, onMatchPrep, onSetPlans,
                 <th>Schedule</th>
                 <th>Intensity</th>
                 <th>Fit</th>
-                {TABLE_KEYS.map((key) => (
-                  <th key={key}>{ATTRIBUTE_LABELS[key]}</th>
+                <th className="ovr">Ovr</th>
+                {TRAINABLE_KEYS.map((key) => (
+                  <th key={key} title={ATTRIBUTE_LABELS[key]}>
+                    {ATTRIBUTE_SHORT[key]}
+                  </th>
                 ))}
               </tr>
             </thead>
@@ -272,6 +277,9 @@ export function TrainingScreen({ save, onBack, onTrain, onMatchPrep, onSetPlans,
                 const checked = names.has(player.name);
                 const last = save.trainingDeltas?.[player.name] ?? {};
                 const playerIntensity = planIntensity(plan, intensity);
+                const trained = trainedRatings(player, condition);
+                const overallLift = tableLift(trainedOverallLift(player, condition.boosts), trainedOverallLift(player, last));
+                const overallAmount = formatBoostDelta(overallLift);
                 return (
                   <tr key={player.name} className={checked ? "is-selected" : ""}>
                     <td className="col-check">
@@ -287,7 +295,11 @@ export function TrainingScreen({ save, onBack, onTrain, onMatchPrep, onSetPlans,
                     <td>{mixAbbrev(plan.mix)}</td>
                     <td>{plan.intensity || plan.recovery ? intensityTitle(playerIntensity) : `Squad · ${intensityTitle(intensity)}`}</td>
                     <td>{fitnessOf(condition)}</td>
-                    {TABLE_KEYS.map((key) => {
+                    <td className={`ovr ${liftClass(overallLift)}`}>
+                      {trained.overall}
+                      {overallAmount ? <small>{overallAmount}</small> : null}
+                    </td>
+                    {TRAINABLE_KEYS.map((key) => {
                       const value = trainedStat(player.ratings[key], condition, key);
                       const lift = tableLift(bankedLift(condition, key), last[key] ?? 0);
                       const amount = formatBoostDelta(lift);

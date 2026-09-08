@@ -1,5 +1,6 @@
-import type { GameSave, PlayerCondition, PlayerMatchStats, RatedPlayer, Team } from "../types";
+import type { Championship, GameSave, Match, PlayerCondition, PlayerMatchStats, RatedPlayer, Team } from "../types";
 import { ClubBadge } from "../components/ClubBadge";
+import { TeamFixtureList } from "../components/TeamFixtureList";
 import {
   ATTRIBUTE_GROUPS,
   ATTRIBUTE_KEYS,
@@ -19,12 +20,14 @@ import { injuryLine, isInjured } from "../lib/injuries";
 
 type Props = {
   save: GameSave;
+  championship: Championship;
   teams: Team[];
   viewTeamId: string;
   onViewTeam: (teamId: string) => void;
   picked: string | null;
   onTapPlayer: (name: string) => void;
   onOpenTraining?: () => void;
+  onOpenMatch?: (match: Match) => void;
 };
 
 function deltaClass(delta: number): string {
@@ -168,7 +171,17 @@ function PlayerDetail({
   );
 }
 
-export function SquadScreen({ save, teams, viewTeamId, onViewTeam, picked, onTapPlayer, onOpenTraining }: Props) {
+export function SquadScreen({
+  save,
+  championship,
+  teams,
+  viewTeamId,
+  onViewTeam,
+  picked,
+  onTapPlayer,
+  onOpenTraining,
+  onOpenMatch,
+}: Props) {
   const ownTeam = viewTeamId === save.clubId;
   const squad = ratedSquad(viewTeamId, save);
   const byName = new Map(squad.map((player) => [player.name, player]));
@@ -203,22 +216,9 @@ export function SquadScreen({ save, teams, viewTeamId, onViewTeam, picked, onTap
     <div className="screen">
       <p className="hint">
         {ownTeam
-          ? "Tap a row for the full card. Swaps are on Tactics. Green and red are training lifts."
-          : "Scouting view — inspect any championship panel. You cannot change their team from here."}
+          ? "Tap a row for the full card. Swaps are on Tactics. Green and red are training lifts. Other clubs are on the Table tab."
+          : "Scouting view — inspect the championship panel. You cannot change their team from here. Other clubs are on the Table tab."}
       </p>
-      <div className="club-strip">
-        {teams.map((team) => (
-          <button
-            key={team.id}
-            type="button"
-            className={viewTeamId === team.id ? "is-active" : ""}
-            onClick={() => onViewTeam(team.id)}
-          >
-            <ClubBadge team={team} size="sm" variant="crest" />
-            {compactName(team)}
-          </button>
-        ))}
-      </div>
       {viewed ? (
         <section className="club-banner club-banner--overview">
           <span
@@ -236,6 +236,10 @@ export function SquadScreen({ save, teams, viewTeamId, onViewTeam, picked, onTap
           {ownTeam && onOpenTraining ? (
             <button type="button" className="btn" onClick={onOpenTraining}>
               Training
+            </button>
+          ) : !ownTeam ? (
+            <button type="button" className="btn btn--ghost" onClick={() => onViewTeam(save.clubId)}>
+              Your squad
             </button>
           ) : null}
         </section>
@@ -343,6 +347,14 @@ export function SquadScreen({ save, teams, viewTeamId, onViewTeam, picked, onTap
             />
           </div>
         </div>
+      ) : null}
+      {onOpenMatch ? (
+        <TeamFixtureList
+          championship={championship}
+          teamId={viewTeamId}
+          reports={save.reports}
+          onOpenMatch={onOpenMatch}
+        />
       ) : null}
     </div>
   );

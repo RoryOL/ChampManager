@@ -264,7 +264,7 @@ export function playerAge(teamId: string, name: string, index = 0): number {
   return profileFor(teamId, name, index >= 15).age;
 }
 
-export function computeOverall(
+export function computeOverallRaw(
   ratings: Record<AttributeKey, number>,
   familiarity: PositionFamiliarity,
   position: PositionLine,
@@ -279,7 +279,15 @@ export function computeOverall(
   }
   weighted += familiarity[position] * 0.65;
   total += 0.65;
-  return clampStat(Math.round(weighted / Math.max(total, 1)));
+  return weighted / Math.max(total, 1);
+}
+
+export function computeOverall(
+  ratings: Record<AttributeKey, number>,
+  familiarity: PositionFamiliarity,
+  position: PositionLine,
+): number {
+  return clampStat(Math.round(computeOverallRaw(ratings, familiarity, position)));
 }
 
 export function buildRatedSquad(teamId: string, gameSeed?: number): RatedPlayer[] {

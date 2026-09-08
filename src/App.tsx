@@ -128,6 +128,7 @@ export default function App() {
                 setFixtureId(null);
                 setPage("squad");
               }}
+              onOpenTeam={openTeam}
               onOpenTraining={() => setPage("training")}
               onSetWeekShape={game.setWeekShape}
               onRunWeek={game.trainFullWeek}
@@ -137,6 +138,7 @@ export default function App() {
           {page === "squad" && (
             <SquadScreen
               save={game.save}
+              championship={game.championship}
               teams={game.championship.teams}
               viewTeamId={game.viewTeamId ?? game.save.clubId}
               onViewTeam={(teamId) => {
@@ -146,6 +148,7 @@ export default function App() {
               picked={game.picked}
               onTapPlayer={game.tapPlayer}
               onOpenTraining={() => setPage("training")}
+              onOpenMatch={openMatch}
             />
           )}
           {page === "training" && (
@@ -162,9 +165,12 @@ export default function App() {
           {page === "tactics" && (
             <TacticsScreen
               save={game.save}
+              championship={game.championship}
+              nextMatch={game.nextUserMatch}
               onChange={game.setTactics}
               onSwap={game.swapPlayers}
               onSetSheet={game.setSheet}
+              onOpenTeam={openTeam}
             />
           )}
           {page === "fixtures" && selectedMatch && game.save ? (
@@ -187,6 +193,10 @@ export default function App() {
             page={page}
             onChange={(next) => {
               if (next !== "fixtures") setFixtureId(null);
+              if (next === "squad" && game.save) {
+                game.setViewTeamId(game.save.clubId);
+                game.setPicked(null);
+              }
               setPage(next);
             }}
           />

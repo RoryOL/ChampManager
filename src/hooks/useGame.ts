@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { seedChampionship } from "../data/championship";
 import { compactName } from "../lib/display";
-import { momentumAt, sentOffNamesFromEvents, simulateMatch } from "../lib/matchEngine";
+import { momentumAt, bookedNamesFromEvents, sentOffNamesFromEvents, simulateMatch } from "../lib/matchEngine";
 import { combineHalves, reportFromSim } from "../lib/matchStats";
 import { applyMatchForm } from "../lib/form";
 import {
@@ -838,6 +838,7 @@ export function useGame() {
         awaySquad: ratedSquad(awayId, save),
         remainingWeeks: remainingWeeks(save, championship, save.clubId),
         sentOff: sentOffNamesFromEvents(first.events),
+        booked: bookedNamesFromEvents(first.events),
         clubId: save.clubId,
         homeName: homeTeam ? compactName(homeTeam) : homeId,
         awayName: awayTeam ? compactName(awayTeam) : awayId,

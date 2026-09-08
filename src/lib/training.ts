@@ -26,7 +26,7 @@ import {
   tickInjuries,
   type RolledInjury,
 } from "./injuries";
-import { clampStat, computeOverall, ratedSquad } from "./players";
+import { clampStat, computeOverallRaw, ratedSquad } from "./players";
 
 export const PRESEASON_WEEKS = 6;
 
@@ -58,6 +58,12 @@ export const TRAINING_TYPE_KEYS: Record<TrainingType, AttributeKey[]> = {
   physical: ["strength", "speed", "acceleration"],
   setpieces: ["frees", "sidelines", "puckoutReach"],
 };
+
+/** Profile stats that mixed training or teamwork can actually move. */
+export const TRAINABLE_KEYS: AttributeKey[] = [
+  ...TRAINING_TYPES.flatMap((type) => TRAINING_TYPE_KEYS[type]),
+  "teamwork",
+];
 
 export const TRAINING_TYPE_OPTIONS: { value: TrainingType; title: string; copy: string }[] = [
   { value: "defensive", title: "Defensive", copy: "Tackling / hooking and man marking." },
@@ -569,13 +575,30 @@ export function formatBoostDelta(value: number): string {
   return shown < 0 ? `-${body}` : `+${body}`;
 }
 
+export function ratingsWithBoosts(
+  ratings: RatedPlayer["ratings"],
+  boosts?: AttributeBoosts,
+): Record<AttributeKey, number> {
+  const next = {} as Record<AttributeKey, number>;
+  for (const key of ATTRIBUTE_KEYS) {
+    next[key] = ratings[key] + (boosts?.[key] ?? 0);
+  }
+  return next;
+}
+
+export function trainedOverallLift(player: RatedPlayer, boosts?: AttributeBoosts): number {
+  const natural = computeOverallRaw(player.ratings, player.ratings.familiarity, player.position);
+  const live = computeOverallRaw(ratingsWithBoosts(player.ratings, boosts), player.ratings.familiarity, player.position);
+  return snapBoost(live - natural);
+}
+
 export function matchRatings(player: RatedPlayer, condition: PlayerCondition): RatedPlayer["ratings"] {
   const ratings = {} as Record<AttributeKey, number>;
   for (const key of ATTRIBUTE_KEYS) {
     ratings[key] = matchStat(player.ratings[key], condition, key);
   }
-  const natural = computeOverall(player.ratings, player.ratings.familiarity, player.position);
-  const live = computeOverall(ratings, player.ratings.familiarity, player.position);
+  const natural = computeOverallRaw(player.ratings, player.ratings.familiarity, player.position);
+  const live = computeOverallRaw(ratings, player.ratings.familiarity, player.position);
   return {
     ...player.ratings,
     ...ratings,
@@ -588,12 +611,11 @@ export function trainedRatings(player: RatedPlayer, condition: PlayerCondition):
   for (const key of ATTRIBUTE_KEYS) {
     ratings[key] = trainedStat(player.ratings[key], condition, key);
   }
-  const natural = computeOverall(player.ratings, player.ratings.familiarity, player.position);
-  const live = computeOverall(ratings, player.ratings.familiarity, player.position);
+  const lift = trainedOverallLift(player, condition.boosts);
   return {
     ...player.ratings,
     ...ratings,
-    overall: clampStat(player.ratings.overall + (live - natural)),
+    overall: clampStat(player.ratings.overall + lift),
   };
 }
 
