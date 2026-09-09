@@ -1,7 +1,7 @@
+import { existsSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { createAvatar } from "@dicebear/core";
-import * as adventurer from "@dicebear/adventurer";
-import { generatedLook, lookForPlayer, portraitHair } from "./playerLooks";
+import { generatedLook, lookForPlayer } from "./playerLooks";
+import { PORTRAIT_FACES, portraitId } from "./portraitPack";
 import { ratedSquad } from "./players";
 
 describe("generated player portraits", () => {
@@ -13,12 +13,17 @@ describe("generated player portraits", () => {
     expect(new Set(looks).size).toBeGreaterThan(10);
   });
 
-  it("builds an svg portrait from a name", () => {
-    const svg = createAvatar(adventurer, {
-      seed: "Tony Kelly",
-      hair: portraitHair("quiff"),
-    }).toString();
-    expect(svg).toContain("<svg");
-    expect(svg.length).toBeGreaterThan(500);
+  it("picks a photoreal face that matches known traits", () => {
+    expect(portraitId("Tony Kelly", 32)).toMatch(/sandy_quiff/);
+    expect(portraitId("Shane O'Donnell", 28)).toBe("fair_shaggy_none");
+    expect(portraitId("Tony Kelly", 32)).toBe(portraitId("Tony Kelly", 32));
+    const ids = ratedSquad("clooney-quin").map((player) => portraitId(player.name, player.age));
+    expect(new Set(ids).size).toBeGreaterThan(8);
+  });
+
+  it("ships a jpeg for every face in the pack", () => {
+    for (const face of PORTRAIT_FACES) {
+      expect(existsSync(`public/portraits/${face.id}.jpg`)).toBe(true);
+    }
   });
 });
