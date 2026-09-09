@@ -108,8 +108,8 @@ describe("hidden player form", () => {
     const copy = notes.join(" ");
     expect(copy).toContain(hot);
     expect(copy).toContain(cold);
-    expect(copy).toMatch(/vein of form/i);
-    expect(copy).toMatch(/out of sorts/i);
+    expect(copy).toMatch(/vein of form|flying|hurling in the legs/i);
+    expect(copy).toMatch(/out of sorts|off colour|yard off it/i);
     expect(copy).not.toMatch(/\b84\b/);
     expect(copy).not.toMatch(/\b18\b/);
   });
@@ -167,7 +167,7 @@ describe("hidden player form", () => {
     });
     const copy = notes.join(" ");
     expect(copy).toContain("Tony Kelly");
-    expect(copy).toMatch(/vein of form/i);
+    expect(copy).toMatch(/vein of form|flying|hurling in the legs/i);
     expect(copy).not.toMatch(/\b86\b/);
   });
 

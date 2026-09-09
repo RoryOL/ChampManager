@@ -27,6 +27,7 @@ import {
   type RolledInjury,
 } from "./injuries";
 import { clampStat, computeOverallRaw, ratedSquad } from "./players";
+import { createRng, pickOne, seedFrom } from "./rng";
 
 export const PRESEASON_WEEKS = 6;
 
@@ -104,7 +105,7 @@ export const MATCH_PREP_OPTIONS: { value: MatchPrep; title: string; copy: string
   {
     value: "shooting",
     title: "Shot selection",
-    copy: "When to pull the trigger and how clean the strike is.",
+    copy: "When to let fly and how clean the strike is.",
   },
   {
     value: "marking",
@@ -799,21 +800,64 @@ export function weekCoachCopy(
     .filter((item) => item.net > -0.02 && item.net < 0.05 && !standouts.some((star) => star.name === item.name))
     .slice(0, 3);
 
-  const parts: string[] = [`${label} is in the book.`];
+  const random = createRng(
+    seedFrom(
+      `${label}:${standouts.map((item) => item.name).join(",")}:${poor.map((item) => item.name).join(",")}`,
+    ),
+  );
+  const parts: string[] = [
+    pickOne(random, [
+      `${label} is in the book.`,
+      `${label} is done — the work is banked whether the clipboard shows it yet or not.`,
+      `${label} is ticked off. Now it is about who took it and who hid.`,
+    ]),
+  ];
   if (standouts.length > 0) {
-    parts.push(`${joinNames(standouts.map((item) => item.name))} trained particularly well.`);
+    const who = joinNames(standouts.map((item) => item.name));
+    parts.push(
+      pickOne(random, [
+        `${who} trained particularly well.`,
+        `${who} put in a serious session — the striking and running showed.`,
+        `${who} looked sharp in the drills; that work will travel to championship day.`,
+      ]),
+    );
   }
   if (poor.length > 0) {
+    const who = joinNames(poor.map((item) => item.name));
     parts.push(
-      `${joinNames(poor.map((item) => item.name))} did not take the work as well — neglected areas drifted.`,
+      pickOne(random, [
+        `${who} did not take the work as well — neglected areas drifted.`,
+        `${who} looked heavy; a couple of areas slipped and will need a lighter mix.`,
+        `${who} did not take the work. Address it in the next session before it shows on a Sunday.`,
+      ]),
     );
   } else if (quiet.length > 0 && standouts.length > 0) {
-    parts.push(`${joinNames(quiet.map((item) => item.name))} barely moved.`);
+    const who = joinNames(quiet.map((item) => item.name));
+    parts.push(
+      pickOne(random, [
+        `${who} barely moved.`,
+        `${who} went through the motions — no lift, no slide.`,
+        `${who} ${quiet.length === 1 ? "was" : "were"} honest enough without leaving a mark on the week.`,
+      ]),
+    );
   } else if (standouts.length === 0) {
-    parts.push("The panel was even enough; nobody stood out and nobody fell away much.");
+    parts.push(
+      pickOne(random, [
+        "The panel was even enough; nobody stood out and nobody fell away much.",
+        "A level week. No stars in training, no passengers either.",
+        "Honest graft, little to pick between them.",
+      ]),
+    );
   }
-  parts.push(...formCoachNotes(condition));
-  parts.push("Small lifts stack over sessions even when the profile numbers have not ticked yet.");
+  parts.push(...formCoachNotes(condition, undefined, seedFrom(label)));
+  parts.push(
+    pickOne(random, [
+      "Small lifts stack over sessions even when the profile numbers have not ticked yet.",
+      "The banked work will show on championship day, not always on the clipboard.",
+      "Keep the intensity honest — fitness and first touch are built in weeks like this.",
+      "Do not chase numbers. The next throw-in will tell you if the week landed.",
+    ]),
+  );
 
   const tone =
     standouts.length > 0 && poor.length === 0

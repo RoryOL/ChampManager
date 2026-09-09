@@ -148,9 +148,9 @@ export function MatchStatsPanel({
         onTap={onTapPlayer}
       />
       {compact ? (
-        <p className="hint hint--tight">Listed in kickoff shirt order. Numbers stay 1–15 and 16+ from the start; ↑ on, ↓ off, × injured.</p>
+        <p className="hint hint--tight">Listed in throw-in shirt order. Numbers stay 1–15 and 16+ from the start; ↑ on, ↓ off, × injured.</p>
       ) : interactive ? (
-        <p className="hint hint--tight">Tap two of your lads in the grid, then Swap above. Shirt numbers stay from kickoff.</p>
+        <p className="hint hint--tight">Tap two of your lads in the grid, then Swap above. Shirt numbers stay from the throw-in.</p>
       ) : (
         <p className="hint hint--tight">Swipe the table sideways for match stats. Overall is the profile rating for the day.</p>
       )}

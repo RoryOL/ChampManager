@@ -460,7 +460,7 @@ describe("match engine", () => {
     expect(targetedPuckoutWinChance(9, 12, 18, false)).toBeGreaterThan(targetedPuckoutWinChance(9, 12, 18, true));
   });
 
-  it("wins long balls with aerials, strength and high fielding, and the kicker's passing", () => {
+  it("wins long balls with aerials, strength and high fielding, and the striker's passing", () => {
     expect(aerialContestRating(16, 16, 16)).toBeGreaterThan(aerialContestRating(10, 10, 10));
     expect(aerialContestRating(12, 18, 12)).toBeGreaterThan(aerialContestRating(12, 10, 12));
     expect(aerialContestRating(12, 12, 18)).toBeGreaterThan(aerialContestRating(12, 12, 10));
@@ -2411,8 +2411,8 @@ describe("training", () => {
     expect(copy.title).toMatch(/coach/i);
     expect(copy.body).toContain(squad[0]!.name);
     expect(copy.body).toContain(squad[1]!.name);
-    expect(copy.body).toMatch(/trained particularly well/i);
-    expect(copy.body).toMatch(/did not take the work/i);
+    expect(copy.body).toMatch(/trained particularly well|serious session|looked sharp/i);
+    expect(copy.body).toMatch(/did not take the work|looked heavy/i);
   });
 });
 
@@ -2743,6 +2743,64 @@ describe("match intel", () => {
     expect(notes.join(" ")).toMatch(/teamwork/i);
   });
 
+  it("varies the post-match verdict instead of repeating the same opener", () => {
+    const firsts = new Set<string>();
+    for (const points of [6, 8, 10, 12, 14, 16, 18, 21]) {
+      const notes = buildCoachReport({
+        clubId: "ballyea",
+        homeId: "ballyea",
+        awayId: "inagh-kilnamona",
+        homeName: "Ballyea",
+        awayName: "Inagh-Kilnamona",
+        homeTactics: DEFAULT_TACTICS,
+        awayTactics: DEFAULT_TACTICS,
+        homeStats: {
+          teamId: "ballyea",
+          possessions: 20,
+          passesAttempted: 36,
+          passesCompleted: 24,
+          shots: 9,
+          scores: 5,
+          highFieldingAttempted: 6,
+          highFieldingWon: 3,
+          puckoutsWon: 4,
+          puckoutsAttempted: 7,
+          tacklesAttempted: 8,
+          tacklesWon: 4,
+          groundCovered: 88,
+          fatigue: 38,
+          fitness: 62,
+          overall: 13,
+          rating: 6.4,
+        },
+        awayStats: {
+          teamId: "inagh-kilnamona",
+          possessions: 18,
+          passesAttempted: 32,
+          passesCompleted: 22,
+          shots: 8,
+          scores: 5,
+          highFieldingAttempted: 6,
+          highFieldingWon: 3,
+          puckoutsWon: 4,
+          tacklesAttempted: 7,
+          tacklesWon: 3,
+          groundCovered: 86,
+          fatigue: 40,
+          fitness: 60,
+          overall: 13,
+          rating: 6,
+        },
+        homeScore: { goals: 1, points },
+        awayScore: { goals: 1, points: 12 },
+        players: [],
+        events: [],
+      });
+      firsts.add(notes[0]!);
+    }
+    expect(firsts.size).toBeGreaterThanOrEqual(3);
+  });
+
   it("moves hidden form from the display, not from sitting on the bench", () => {
     const squad = ratedSquad("ballyea");
     const sheet = defaultSheet("ballyea");
@@ -3024,7 +3082,7 @@ describe("match shirts and swap confirmation", () => {
     expect(sheet.subs.length).toBe(ratedSquad("ballyea").length - 15);
   });
 
-  it("keeps kickoff shirt numbers after a player comes on", () => {
+  it("keeps throw-in shirt numbers after a player comes on", () => {
     const sheet = defaultSheet("ballyea");
     const outgoing = sheet.starters[14]!;
     const incoming = sheet.subs[0]!;

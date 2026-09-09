@@ -90,7 +90,7 @@ export default function App() {
           onContinueSecond={game.continueSecondHalf}
           onSkipRest={game.skipRest}
           onSetTactics={game.setTactics}
-          onStartKickoff={game.startKickoff}
+          onStartThrowIn={game.startThrowIn}
           waitingOn={game.waitingHalf.filter((seat) => seat.clubId !== game.save?.clubId)}
           onPassDevice={game.passDevice}
           passSeats={game.localSeats.filter((seat) => seat.playerId !== game.activeSeat?.playerId)}

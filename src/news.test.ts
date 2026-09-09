@@ -3,6 +3,7 @@ import { seedChampionship } from "./data/championship";
 import { applyInjury, bestBenchForSlot, injuryChance, insertInjuryEvents, isInjured, rollInjuryWeeks, sitInjuredPlayers, tickInjuries } from "./lib/injuries";
 import {
   ambitionFor,
+  chairmanAfterMatch,
   chairmanWelcome,
   clubRank,
   localPressItem,
@@ -229,6 +230,100 @@ describe("match and press news", () => {
     });
     expect(press.kind).toBe("press");
     expect(press.tone).toBe("negative");
+  });
+
+  it("writes a longer press note that names a club man for the Clare panel", () => {
+    const sim = simulateMatch({
+      matchId: "g1-r1-a",
+      homeId: "ballyea",
+      awayId: "kilmaley",
+      seed: 21,
+    });
+    const club = seedChampionship.teams.find((team) => team.id === "ballyea")!;
+    const opponent = seedChampionship.teams.find((team) => team.id === "kilmaley")!;
+    const ours = sim.players.filter((row) => row.teamId === "ballyea" && row.minutes > 0);
+    const ourTotal = sim.homeId === "ballyea" ? sim.homeScore : sim.awayScore;
+    const theirTotal = sim.homeId === "ballyea" ? sim.awayScore : sim.homeScore;
+    const margin =
+      ourTotal.goals * 3 + ourTotal.points - (theirTotal.goals * 3 + theirTotal.points);
+    const press = localPressItem({
+      club,
+      opponent,
+      ourScore: ourTotal,
+      theirScore: theirTotal,
+      result: margin > 0 ? "win" : margin < 0 ? "loss" : "draw",
+      date: "2026-07-24",
+      seed: 21,
+      matchId: sim.matchId,
+      ambition: "canon",
+      played: 1,
+      players: sim.players,
+    });
+    const top = [...ours].sort((a, b) => b.rating - a.rating)[0];
+    expect(press.body.length).toBeGreaterThan(280);
+    expect(press.body).toMatch(/throw-in|puck-out|sliotar|hurling/i);
+    expect(press.body).toMatch(/brought into the Clare|Clare senior panel|county call-up|Banner panel|Banner set-up/i);
+    expect(top).toBeTruthy();
+    expect(press.body).toContain(top!.name);
+  });
+});
+
+describe("chairman after a championship day", () => {
+  const club = seedChampionship.teams.find((team) => team.id === "ballyea")!;
+  const opponent = seedChampionship.teams.find((team) => team.id === "broadford")!;
+
+  it("goes over the top after a statement win", () => {
+    const titles = new Set<string>();
+    const bodies = new Set<string>();
+    for (let seed = 1; seed <= 24; seed += 1) {
+      const item = chairmanAfterMatch({
+        club,
+        opponent,
+        ourScore: { goals: 3, points: 22 },
+        theirScore: { goals: 0, points: 9 },
+        result: "win",
+        date: "2026-08-01",
+        seed,
+        matchId: `ott-${seed}`,
+        ambition: "canon",
+      });
+      expect(item).toBeTruthy();
+      expect(item!.tone).toBe("positive");
+      expect(item!.body).toMatch(
+        /finest hour|hurling from the gods|genius|immortals|open-top|kiss every|poetry|transformed this place|monuments|coming home/i,
+      );
+      titles.add(item!.title);
+      bodies.add(item!.body);
+    }
+    expect(titles.size).toBeGreaterThanOrEqual(4);
+    expect(bodies.size).toBeGreaterThanOrEqual(4);
+  });
+
+  it("cuts after a hiding", () => {
+    const titles = new Set<string>();
+    const bodies = new Set<string>();
+    for (let seed = 1; seed <= 24; seed += 1) {
+      const item = chairmanAfterMatch({
+        club,
+        opponent,
+        ourScore: { goals: 0, points: 7 },
+        theirScore: { goals: 2, points: 24 },
+        result: "loss",
+        date: "2026-08-01",
+        seed,
+        matchId: `cut-${seed}`,
+        ambition: "canon",
+      });
+      expect(item).toBeTruthy();
+      expect(item!.tone).toBe("negative");
+      expect(item!.body).toMatch(
+        /embarrassment|soft as butter|laughing|disgrace|humiliated|wrong man|waste my winter|schoolboy|worst hour|delusional|stood there/i,
+      );
+      titles.add(item!.title);
+      bodies.add(item!.body);
+    }
+    expect(titles.size).toBeGreaterThanOrEqual(4);
+    expect(bodies.size).toBeGreaterThanOrEqual(4);
   });
 });
 

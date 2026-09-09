@@ -1074,6 +1074,7 @@ function finishSim(
           matchId: sim.matchId,
           ambition: ambitionFor(clubId).target,
           played: playedCount,
+          players: sim.players,
         });
         items.push(press);
       }
