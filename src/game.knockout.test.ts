@@ -12,7 +12,7 @@ import {
 } from "./lib/knockout";
 import { applyKnockoutExtraTime, simulateMatch } from "./lib/matchEngine";
 import { championshipFromSave, newSave } from "./lib/gameStorage";
-import { defaultSheet, ratedSquad } from "./lib/players";
+import { defaultSheet } from "./lib/players";
 import { resolveMatchSides, resolveTeamId } from "./lib/resolve";
 
 describe("knockout extra time and replays", () => {
