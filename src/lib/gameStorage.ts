@@ -17,6 +17,7 @@ import {
   isMatchPrep,
   squadNames,
 } from "./training";
+import { migrateManMarks } from "./manMarking";
 import type {
   AmbitionTarget,
   AttributeBoosts,
@@ -38,7 +39,7 @@ import type {
   WeekShape,
 } from "../types";
 
-export const SAVE_VERSION = 14;
+export const SAVE_VERSION = 15;
 
 const STORAGE_KEY = "champ-manager:game-v1";
 
@@ -55,6 +56,7 @@ type LegacyTactics = {
   shortFreeTaker?: string;
   sidelineTaker?: string;
   puckoutTarget?: string;
+  manMarks?: Record<string, string>;
 };
 
 function isTactics(value: unknown): value is Tactics {
@@ -87,6 +89,7 @@ export function migrateTactics(raw: unknown): Tactics {
       shortFreeTaker: raw.shortFreeTaker,
       sidelineTaker: raw.sidelineTaker,
       puckoutTarget: raw.puckoutTarget,
+      manMarks: migrateManMarks(raw.manMarks),
     };
   }
   const legacy = (raw ?? {}) as LegacyTactics;
@@ -123,6 +126,7 @@ export function migrateTactics(raw: unknown): Tactics {
     shortFreeTaker: legacy.shortFreeTaker,
     sidelineTaker: legacy.sidelineTaker,
     puckoutTarget: (legacy as { puckoutTarget?: string }).puckoutTarget,
+    manMarks: migrateManMarks((legacy as { manMarks?: unknown }).manMarks),
   };
 }
 
@@ -225,7 +229,8 @@ export function migrateSave(raw: unknown): GameSave | null {
     parsed.version !== 11 &&
     parsed.version !== 12 &&
     parsed.version !== 13 &&
-    parsed.version !== 14
+    parsed.version !== 14 &&
+    parsed.version !== 15
   ) {
     return null;
   }

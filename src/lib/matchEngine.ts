@@ -31,6 +31,7 @@ import {
 } from "./injuries";
 import { clubTactics, defaultSheet, expandSheetToPanel, pickPuckoutTarget, sheetPlayers, sideProfile, sideTeamwork, aerialContestRating, type SideProfile } from "./players";
 import { MATCH_SUB_LIMIT, remainingMatchSubs } from "./subs";
+import { applyManMarkShape, markNegation, resolveMarker } from "./manMarking";
 import { knockoutNeedsExtraTime, periodClock } from "./knockout";
 import {
   attackingTop,
@@ -49,6 +50,8 @@ import { scoreTotal } from "./scoring";
 import { liftSquadRatings } from "./difficulty";
 import { conditionFor, fitnessOf, fitnessTiredness, liftSquadForPrep, matchStat } from "./training";
 import { climateOf, passCompleteChance, puckoutWindAdjust, rollClimate, withWindFor } from "./weather";
+
+export { markerSlot } from "./manMarking";
 
 const POINT_KINDS: ReadonlySet<MatchEventKind> = new Set(["point", "free", "sixtyFive", "sideline"]);
 
@@ -241,13 +244,6 @@ export function longBallWinChance(fielder: number, marker: number, found: boolea
   return Math.min(0.82, Math.max(0.16, 0.48 + (fielder - marker) * 0.038 + spill + (found ? 0.05 : 0)));
 }
 
-/** Full-back 1–3 mark full-forwards 12–14; half-backs 4–6 mark half-forwards 9–11. */
-export function markerSlot(forwardIndex: number): number {
-  if (forwardIndex >= 12) return Math.min(3, Math.max(1, forwardIndex - 11));
-  if (forwardIndex >= 9) return Math.min(6, Math.max(4, forwardIndex - 5));
-  if (forwardIndex >= 7) return forwardIndex === 7 ? 4 : 6;
-  return Math.max(1, Math.min(6, forwardIndex));
-}
 
 export function paceMismatch(
   speed: number,
@@ -255,10 +251,11 @@ export function paceMismatch(
   markerSpeed: number,
   markerAcceleration: number,
   manMarking: number,
+  extraCover = 0,
 ): number {
   const attack = speed * 0.46 + acceleration * 0.54;
   const cover = markerSpeed * 0.36 + markerAcceleration * 0.36 + manMarking * 0.28;
-  return attack - cover;
+  return attack - cover - extraCover;
 }
 
 export function runningLookBoost(mismatch: number, fullForward: boolean): {
@@ -748,10 +745,12 @@ export function simulateMatch(options: {
   const climate = climateOf(options.climate ?? rollClimate(options.seed, options.matchId));
   const shots: ShotAttempt[] = [];
   const ratings = { seed: options.gameSeed, balance: options.balance };
-  const homeSheet = expandSheetToPanel(options.homeId, options.homeSheet ?? defaultSheet(options.homeId), ratings);
-  const awaySheet = expandSheetToPanel(options.awayId, options.awaySheet ?? defaultSheet(options.awayId), ratings);
+  const homeBase = expandSheetToPanel(options.homeId, options.homeSheet ?? defaultSheet(options.homeId), ratings);
+  const awayBase = expandSheetToPanel(options.awayId, options.awaySheet ?? defaultSheet(options.awayId), ratings);
   const homeTactics = options.homeTactics ?? clubTactics(options.homeId, options.balance);
   const awayTactics = options.awayTactics ?? clubTactics(options.awayId, options.balance);
+  const homeSheet = applyManMarkShape(homeBase, awayBase, homeTactics.manMarks);
+  const awaySheet = applyManMarkShape(awayBase, homeBase, awayTactics.manMarks);
   const homeDirect = clampDial(homeTactics.build) / 100;
   const awayDirect = clampDial(awayTactics.build) / 100;
   const homeLongPuck = clampDial(homeTactics.puckout) / 100;
@@ -1036,10 +1035,14 @@ export function simulateMatch(options: {
       random,
       (index) => huntRatingOf(attackingId, attNames[index] ?? ""),
     );
-    const rival = pickIndexed(defNames, backAndMidIndices(defNames), random, (index) => {
-      const player = playerOf(defId, defNames[index] ?? "");
-      return huntRatingOf(defId, defNames[index] ?? "") + (player?.ratings.manMarking ?? 11) * 0.12;
-    });
+    const rivalAssigned = resolveMarker(hunter.index, hunter.name, defNames, tacticsFor(defId).manMarks);
+    const rival =
+      rivalAssigned.assigned && defNames.includes(rivalAssigned.name)
+        ? { name: rivalAssigned.name, index: Math.max(0, defNames.indexOf(rivalAssigned.name)) }
+        : pickIndexed(defNames, backAndMidIndices(defNames), random, (index) => {
+            const player = playerOf(defId, defNames[index] ?? "");
+            return huntRatingOf(defId, defNames[index] ?? "") + (player?.ratings.manMarking ?? 11) * 0.12;
+          });
     const hunterP = playerOf(attackingId, hunter.name);
     const rivalP = playerOf(defId, rival.name);
     const win =
@@ -1694,15 +1697,22 @@ export function simulateMatch(options: {
         return Math.max(0.14, aerial) * ff;
       });
       const fielderPick = found ? targetPick : pickIndexed(names, forwardIndices(names), random);
+      const fielderMark = resolveMarker(fielderPick.index, fielderPick.name, oppNames, oppTactics.manMarks);
       const markerName =
-        oppNames[markerSlot(fielderPick.index)] ?? pickName(oppNames.slice(1, 7), random);
+        fielderMark.name || pickName(oppNames.slice(1, 7), random);
+      const markCut = markNegation(playerOf(defendingId, markerName)?.ratings ?? { manMarking: 12 }, fielderMark.assigned);
       const collected = lowBall
         ? random() <
           applyFormChance(
             collectLowBallChance(playerOf(teamId, fielderPick.name)?.ratings.firstTouch ?? 11),
             formOf(teamId, fielderPick.name),
           )
-        : random() < longBallWinChance(contestAerial(teamId, fielderPick.name), contestAerial(defendingId, markerName), found);
+        : random() <
+          longBallWinChance(
+            contestAerial(teamId, fielderPick.name),
+            contestAerial(defendingId, markerName) + markCut.aerialBoost,
+            found,
+          );
       pendingCredits.push({
         name: kickerPick.name,
         teamId,
@@ -1905,14 +1915,17 @@ export function simulateMatch(options: {
     const striking = shooter?.ratings.strikingDistance ?? 12;
     const composure = shooter?.ratings.composure ?? 12;
     const finishing = shooter?.ratings.shooting ?? striking;
-    const markerName = oppNames[markerSlot(shooterIndex)] ?? "";
+    const shooterMark = resolveMarker(shooterIndex, playerName, oppNames, oppTactics.manMarks);
+    const markerName = shooterMark.name;
     const marker = playerOf(defendingId, markerName);
+    const markCut = markNegation(marker?.ratings ?? { manMarking: 12 }, shooterMark.assigned);
     const mismatch = paceMismatch(
       shooter?.ratings.speed ?? 11,
       shooter?.ratings.acceleration ?? 11,
       marker?.ratings.speed ?? 11,
       marker?.ratings.acceleration ?? 11,
       marker?.ratings.manMarking ?? 12,
+      markCut.extraCover,
     );
     const paceBoost = origin === "press" ? { closer: 0, goal: 0, convert: 0 } : runningLookBoost(mismatch, shooterIndex >= 12);
     const runShare = origin === "press" ? 0 : 1 - direct;
@@ -1977,7 +1990,8 @@ export function simulateMatch(options: {
         paceBoost.convert * runShare +
         visionLook * 0.06) *
       pressureMul *
-      numbers.convert;
+      numbers.convert *
+      (1 - markCut.convertCut);
     const goalChance =
       (goalChanceFromDistance(distanceM, sweeperCut) *
         fiveForwardCut *
@@ -1991,7 +2005,8 @@ export function simulateMatch(options: {
         (chase.huntGoals && distanceM < 26 ? 0.08 : 0) +
         paceBoost.goal * runShare +
         visionLook * 0.03) *
-      (levelling ? pressureMul : 1 + (pressureMul - 1) * 0.5);
+      (levelling ? pressureMul : 1 + (pressureMul - 1) * 0.5) *
+      (1 - markCut.convertCut);
     const flush = (extra: StatCredit[]) =>
       mergeCredits([...pendingCredits.splice(0, pendingCredits.length), ...moved.credits, ...intoShooter, ...extra]);
     const record = (kind: ShotAttempt["kind"], scored: boolean) => {

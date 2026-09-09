@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { seedChampionship } from "../data/championship";
 import { compactName } from "../lib/display";
 import { momentumAt, bookedNamesFromEvents, sentOffNamesFromEvents, simulateMatch, straightRedNamesFromEvents, applyKnockoutExtraTime } from "../lib/matchEngine";
-import { combineHalves, reportFromSim } from "../lib/matchStats";
+import { combineHalves, emptyTeamStats, reportFromSim } from "../lib/matchStats";
 import { applyMatchForm } from "../lib/form";
 import {
   addSeat,
@@ -96,6 +96,7 @@ import {
   weekCoachCopy,
 } from "../lib/training";
 import { ensureMatchBriefing } from "../lib/briefing";
+import { rollClimate } from "../lib/weather";
 import {
   championshipFromSave,
   clearSave,
@@ -459,7 +460,7 @@ export function useGame() {
 
   const swapPlayers = useCallback(
     (first: string, second: string) => {
-      if (!save) return;
+      if (!save || live?.phase === "kickoff") return;
       const sheet = swapPlayersInSheet(expandSheetToPanel(save.clubId, save.sheet, save.seed), first, second);
       if (campaign && activeSeat) {
         commitCampaign(withClubSheet(campaign, activeSeat.clubId, sheet));
@@ -468,12 +469,12 @@ export function useGame() {
       }
       setPicked(null);
     },
-    [activeSeat, campaign, commitCampaign, commitSolo, save],
+    [activeSeat, campaign, commitCampaign, commitSolo, live?.phase, save],
   );
 
   const setSheet = useCallback(
     (sheet: TeamSheet) => {
-      if (!save) return;
+      if (!save || live?.phase === "kickoff") return;
       const next = expandSheetToPanel(save.clubId, sheet, save.seed);
       if (campaign && activeSeat) {
         commitCampaign(withClubSheet(campaign, activeSeat.clubId, next));
@@ -482,7 +483,7 @@ export function useGame() {
       }
       setPicked(null);
     },
-    [activeSeat, campaign, commitCampaign, commitSolo, save],
+    [activeSeat, campaign, commitCampaign, commitSolo, live?.phase, save],
   );
 
   const tapPlayer = useCallback((name: string) => {
@@ -615,9 +616,66 @@ export function useGame() {
       });
       return;
     }
+    const batch = nextBatch(championship, save.clubId);
+    const match = batch?.userMatch;
+    if (!batch || !match) {
+      const next = beginBatch("first");
+      if (next) setLive({ ...next, phase: "first", cursor: 0 });
+      return;
+    }
+    const { homeId, awayId } = resolveMatchSides(championship, match);
+    if (!homeId || !awayId) return;
+    const rivals = preparedRivals(save, championship);
+    commitSolo({ ...save, rivals });
+    const squad = ratedSquad(save.clubId, save);
+    const userSheet = sitInjuredPlayers(expandSheetToPanel(save.clubId, save.sheet, save.seed), squad, save.condition);
+    const homeClub = homeId === save.clubId ? null : rivals[homeId];
+    const awayClub = awayId === save.clubId ? null : rivals[awayId];
+    const homeSheet =
+      homeId === save.clubId
+        ? userSheet
+        : expandSheetToPanel(homeId, homeClub?.sheet ?? defaultSheet(homeId), save.seed);
+    const awaySheet =
+      awayId === save.clubId
+        ? userSheet
+        : expandSheetToPanel(awayId, awayClub?.sheet ?? defaultSheet(awayId), save.seed);
+    const homeTactics = homeId === save.clubId ? save.tactics : (homeClub?.tactics ?? clubTactics(homeId, save.balance));
+    const awayTactics = awayId === save.clubId ? save.tactics : (awayClub?.tactics ?? clubTactics(awayId, save.balance));
+    setLive({
+      user: {
+        matchId: match.id,
+        homeId,
+        awayId,
+        homeScore: { goals: 0, points: 0 },
+        awayScore: { goals: 0, points: 0 },
+        events: [],
+        homeTactics,
+        awayTactics,
+        homeSheet,
+        awaySheet,
+        homeStats: emptyTeamStats(homeId),
+        awayStats: emptyTeamStats(awayId),
+        players: [],
+        coachReport: [],
+        climate: rollClimate(save.seed, match.id),
+        shots: [],
+      },
+      others: [],
+      label: batch.label,
+      match,
+      cursor: 0,
+      phase: "kickoff",
+      openingSheet: userSheet,
+      openingHomeSheet: homeSheet,
+      openingAwaySheet: awaySheet,
+      injuries: [],
+    });
+  }, [activeSeat, beginBatch, campaign, championship, commitSolo, save]);
+
+  const startKickoff = useCallback(() => {
     const next = beginBatch("first");
     if (next) setLive({ ...next, phase: "first", cursor: 0 });
-  }, [activeSeat, beginBatch, campaign, championship, save]);
+  }, [beginBatch]);
 
   const finishLive = useCallback(
     (current: LiveMatch, extras?: { sheet?: TeamSheet; base?: GameSave }) => {
@@ -1036,6 +1094,7 @@ export function useGame() {
     setLive((current) => {
       if (
         !current ||
+        current.phase === "kickoff" ||
         current.phase === "finished" ||
         current.phase === "half-time" ||
         current.phase === "half-wait" ||
@@ -1479,13 +1538,14 @@ export function useGame() {
     await navigator.clipboard.writeText(exportCampaign(campaign));
   }, [campaign]);
 
-  const batch = save && save.phase === "season" ? nextBatch(championship, save.clubId) : null;
+  const fixtureBatch = save ? nextBatch(championship, save.clubId) : null;
+  const batch = save && save.phase === "season" ? fixtureBatch : null;
   const liveRow = campaign && activeSeat ? liveForClub(campaign, activeSeat.clubId) : undefined;
   const liveMatch = liveRow
     ? championship.matches.find((match) => match.id === liveRow.matchId)
     : undefined;
   const nextUserMatch =
-    liveRow && liveMatch && !matchPlayed(liveMatch) ? liveMatch : batch?.userMatch ?? null;
+    liveRow && liveMatch && !matchPlayed(liveMatch) ? liveMatch : fixtureBatch?.userMatch ?? null;
   const playedCount = championship.matches.filter(matchPlayed).length;
   const waitingHalf = liveRow && liveMatch && !matchPlayed(liveMatch)
     ? waitingOnSecondHalf(campaign!, liveRow.matchId)
@@ -1524,6 +1584,7 @@ export function useGame() {
     swapPlayers,
     setPicked,
     goToMatch,
+    startKickoff,
     skipMatch,
     advanceLive,
     closeLive,

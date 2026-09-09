@@ -64,6 +64,7 @@ import {
   shortPuckoutTakeChance,
   keeperSaveChance,
 } from "./lib/matchEngine";
+import { applyManMarkShape, markNegation, resolveMarker, sanitizeManMarks } from "./lib/manMarking";
 import { aerialContestRating, clubTactics, DEFAULT_TACTICS, defaultSheet, expandSheetToPanel, matchOrderIndex, matchShirtNumber, matchSlot, pickPuckoutTarget, playerAge, ratePlayer, ratedSquad, sheetPlayers, sideStrength, sideTeamwork, swapPlayersInSheet } from "./lib/players";
 import { nextBatch } from "./lib/schedule";
 import { matchPlayed, scoreTotal } from "./lib/scoring";
@@ -472,6 +473,51 @@ describe("match engine", () => {
     expect(markerSlot(12)).toBe(1);
     expect(markerSlot(14)).toBe(3);
     expect(markerSlot(10)).toBe(5);
+  });
+
+  it("lets a named defender pick up an attacker and pushes a full-back onto the half-back line", () => {
+    const us = defaultSheet("ballyea");
+    const them = defaultSheet("eire-og");
+    const fullBack = us.starters[2]!;
+    const halfForward = them.starters[10]!;
+    const marks = sanitizeManMarks({ [fullBack]: halfForward }, us.starters, them.starters);
+    expect(marks[fullBack]).toBe(halfForward);
+    expect(sanitizeManMarks({ [us.starters[12]!]: halfForward }, us.starters, them.starters)).toEqual({});
+    const shaped = applyManMarkShape(us, them, marks);
+    expect(shaped.starters.indexOf(fullBack)).toBeGreaterThanOrEqual(4);
+    expect(shaped.starters.indexOf(fullBack)).toBeLessThanOrEqual(6);
+    expect(shaped.starters.slice(1, 4)).not.toContain(fullBack);
+    const resolved = resolveMarker(10, halfForward, shaped.starters, marks);
+    expect(resolved).toEqual({ name: fullBack, assigned: true });
+    const positional = resolveMarker(12, them.starters[12]!, shaped.starters, marks);
+    expect(positional.assigned).toBe(false);
+    expect(positional.name).toBe(shaped.starters[1]);
+    const elite = markNegation({ manMarking: 18, speed: 16, acceleration: 16, strength: 17, workrate: 16, hooking: 17 }, true);
+    const ordinary = markNegation({ manMarking: 12, speed: 12, acceleration: 12, strength: 12, workrate: 12, hooking: 12 }, true);
+    const none = markNegation({ manMarking: 18, strength: 17 }, false);
+    expect(elite.extraCover).toBeGreaterThan(ordinary.extraCover);
+    expect(elite.convertCut).toBeGreaterThan(ordinary.convertCut);
+    expect(none.extraCover).toBe(0);
+  });
+
+  it("applies man-mark shape in the simulated sheet when a full-back tracks a half-forward", () => {
+    const home = defaultSheet("ballyea");
+    const away = defaultSheet("eire-og");
+    const fullBack = home.starters[2]!;
+    const halfForward = away.starters[10]!;
+    const result = simulateMatch({
+      matchId: "g1-r1-a",
+      homeId: "ballyea",
+      awayId: "eire-og",
+      homeSheet: home,
+      awaySheet: away,
+      homeTactics: { ...DEFAULT_TACTICS, manMarks: { [fullBack]: halfForward } },
+      seed: 11,
+      period: "full",
+    });
+    expect(result.homeSheet.starters.indexOf(fullBack)).toBeGreaterThanOrEqual(4);
+    expect(result.homeSheet.starters.indexOf(fullBack)).toBeLessThanOrEqual(6);
+    expect(scoreTotal(result.homeScore) + scoreTotal(result.awayScore)).toBeGreaterThan(0);
   });
 
   it("gives a pacey full forward high-quality looks, cut slightly by man marking", () => {
@@ -2381,7 +2427,7 @@ describe("save migration", () => {
       matches: [],
       inbox: [],
     });
-    expect(migrated?.version).toBe(14);
+    expect(migrated?.version).toBe(15);
     expect(migrated?.reports).toEqual({});
     expect(migrated?.tactics.mentality).toBe("attacking");
     expect(migrated?.tactics.build).toBeGreaterThan(60);
@@ -2395,6 +2441,30 @@ describe("save migration", () => {
     expect(migrated?.weekShape).toBe("challenge");
     expect(migrated?.sessionsDone).toBe(0);
     expect(migrated?.weekDeltas).toEqual({});
+  });
+
+  it("keeps named man-marks on a v15 save", () => {
+    const sheet = defaultSheet("ballyea");
+    const them = defaultSheet("eire-og");
+    const migrated = migrateSave({
+      version: 15,
+      clubId: "ballyea",
+      seed: 3,
+      tactics: {
+        mentality: "balanced",
+        build: 40,
+        puckout: 40,
+        aggression: 40,
+        pressure: 40,
+        shooting: 50,
+        shape: "traditional",
+        manMarks: { [sheet.starters[2]!]: them.starters[10]! },
+      },
+      sheet,
+      matches: [],
+      inbox: [],
+    });
+    expect(migrated?.tactics.manMarks?.[sheet.starters[2]!]).toBe(them.starters[10]);
   });
 
   it("expands an old five-man bench to the full panel", () => {
