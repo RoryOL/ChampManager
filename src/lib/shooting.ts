@@ -1,5 +1,6 @@
-import type { MatchClimate, ShotAttempt, ShotKind } from "../types";
+import type { MatchClimate, MatchPeriod, ShotAttempt, ShotKind } from "../types";
 import { clampDial } from "./attributes";
+import { periodSwitchesEnds } from "./knockout";
 import { crossWind, withWindFor } from "./weather";
 
 export const PITCH_LENGTH = 145;
@@ -152,9 +153,9 @@ export function placeShot(options: {
 export function attackingTop(
   teamId: string,
   homeId: string,
-  period: "first" | "second" | "full",
+  period: MatchPeriod,
 ): boolean {
-  const homeAttacksTop = period !== "second";
+  const homeAttacksTop = !periodSwitchesEnds(period);
   return teamId === homeId ? homeAttacksTop : !homeAttacksTop;
 }
 
@@ -166,7 +167,7 @@ export function makeShot(options: {
   kind: ShotKind;
   scored: boolean;
   distanceM: number;
-  period: "first" | "second" | "full";
+  period: MatchPeriod;
   random: () => number;
   x?: number;
 }): ShotAttempt {
@@ -194,7 +195,7 @@ export function conversionContext(
   climate: MatchClimate,
   teamId: string,
   homeId: string,
-  period: "first" | "second" | "full",
+  period: MatchPeriod,
 ): { withWind: number; crossWind: number; wet: boolean } {
   return {
     withWind: withWindFor(climate, teamId, homeId, period),

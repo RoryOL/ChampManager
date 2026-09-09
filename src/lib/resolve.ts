@@ -1,4 +1,5 @@
 import type { Championship, Match, Team, TeamRef } from "../types";
+import { decisiveResult } from "./knockout";
 import { matchPlayed, winnerOf } from "./scoring";
 import { groupIsComplete, groupStandings } from "./standings";
 
@@ -28,8 +29,8 @@ export function resolveTeamId(
 
   const source = championship.matches.find((match) => match.id === ref.matchId);
   if (!source) return null;
-  const result = winnerOf(source);
-  if (result === null || result === "draw") return null;
+  const result = decisiveResult(championship, source);
+  if (result === null) return null;
 
   const homeId = resolveTeamId(championship, source.home);
   const awayId = resolveTeamId(championship, source.away);

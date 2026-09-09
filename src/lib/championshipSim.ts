@@ -6,11 +6,11 @@
  */
 import { seedChampionship } from "../data/championship";
 import { compactName } from "./display";
-import { simulateMatch } from "./matchEngine";
+import { decisiveResult, insertReplay, replayFixture, scoresAreLevel } from "./knockout";
+import { applyKnockoutExtraTime, simulateMatch } from "./matchEngine";
 import { clubTactics, clubXvOverall, defaultSheet, ratedSquad } from "./players";
 import { resolveMatchSides } from "./resolve";
 import { nextOpenBatch } from "./schedule";
-import { scoreTotal, winnerOf } from "./scoring";
 import type { Championship, SquadBalance } from "../types";
 
 export function simulateChampionship(options: {
@@ -21,13 +21,12 @@ export function simulateChampionship(options: {
   const balance = options.balance ?? "standard";
   const ratings = { seed: options.seed, balance };
 
-  for (let guard = 0; guard < 40; guard += 1) {
+  for (let guard = 0; guard < 80; guard += 1) {
     const batch = nextOpenBatch(championship);
     if (!batch) break;
     for (const match of batch.matches) {
       const { homeId, awayId } = resolveMatchSides(championship, match);
       if (!homeId || !awayId) continue;
-      const knockout = match.stage !== "group";
       let sim = simulateMatch({
         matchId: match.id,
         homeId,
@@ -44,36 +43,24 @@ export function simulateChampionship(options: {
         period: "full",
         stage: match.stage,
       });
-      if (knockout) {
-        for (let extra = 1; extra < 8 && scoreTotal(sim.homeScore) === scoreTotal(sim.awayScore); extra += 1) {
-          sim = simulateMatch({
-            matchId: `${match.id}:et${extra}`,
-            homeId,
-            awayId,
-            homeSheet: defaultSheet(homeId, ratings),
-            awaySheet: defaultSheet(awayId, ratings),
-            homeTactics: clubTactics(homeId, balance),
-            awayTactics: clubTactics(awayId, balance),
-            homeSquad: ratedSquad(homeId, ratings),
-            awaySquad: ratedSquad(awayId, ratings),
-            seed: options.seed + extra * 997,
-            gameSeed: options.seed,
-            balance,
-            period: "full",
-            stage: match.stage,
-          });
-        }
-        if (scoreTotal(sim.homeScore) === scoreTotal(sim.awayScore)) {
-          sim = {
-            ...sim,
-            homeScore: { ...sim.homeScore, points: sim.homeScore.points + 1 },
-          };
-        }
-      }
+      sim = applyKnockoutExtraTime(sim, {
+        seed: options.seed,
+        gameSeed: options.seed,
+        balance,
+        homeSquad: ratedSquad(homeId, ratings),
+        awaySquad: ratedSquad(awayId, ratings),
+        homeName: compactName(championship.teams.find((team) => team.id === homeId)!),
+        awayName: compactName(championship.teams.find((team) => team.id === awayId)!),
+        stage: match.stage,
+      });
       const row = championship.matches.find((item) => item.id === match.id);
       if (row) {
         row.homeScore = sim.homeScore;
         row.awayScore = sim.awayScore;
+      }
+      if (match.stage !== "group" && scoresAreLevel(sim.homeScore, sim.awayScore)) {
+        const replay = replayFixture(match, homeId, awayId, championship.matches);
+        championship.matches = insertReplay(championship.matches, replay);
       }
     }
   }
@@ -81,9 +68,8 @@ export function simulateChampionship(options: {
   const final = championship.matches.find((item) => item.id === "final");
   if (!final) return { championId: null, championship };
   const sides = resolveMatchSides(championship, final);
-  const result = winnerOf(final);
-  const championId =
-    result === "home" ? sides.homeId : result === "away" ? sides.awayId : null;
+  const result = decisiveResult(championship, final);
+  const championId = result === "home" ? sides.homeId : result === "away" ? sides.awayId : null;
   return { championId, championship };
 }
 

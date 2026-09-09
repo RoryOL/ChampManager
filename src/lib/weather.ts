@@ -1,4 +1,5 @@
-import type { MatchClimate, WeatherSky } from "../types";
+import type { MatchClimate, MatchPeriod, WeatherSky } from "../types";
+import { periodSwitchesEnds } from "./knockout";
 
 function createRng(seed: number): () => number {
   let state = seed >>> 0 || 1;
@@ -43,15 +44,14 @@ export function crossWind(climate: MatchClimate): number {
   return Math.abs(Math.sin(rad)) * (climate.windStrength / 100);
 }
 
-/** Positive means this team is shooting with the wind. */
 export function withWindFor(
   climate: MatchClimate,
   teamId: string,
   homeId: string,
-  period: "first" | "second" | "full",
+  period: MatchPeriod,
 ): number {
   const along = parallelWind(climate);
-  const homeAttacksAwayEnd = period !== "second";
+  const homeAttacksAwayEnd = !periodSwitchesEnds(period);
   const isHome = teamId === homeId;
   const attackingAwayEnd = isHome ? homeAttacksAwayEnd : !homeAttacksAwayEnd;
   return attackingAwayEnd ? along : -along;

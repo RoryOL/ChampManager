@@ -64,7 +64,7 @@ export function MatchScreen({
   const [htFirst, setHtFirst] = useState<string | null>(null);
   const [htSecond, setHtSecond] = useState<string | null>(null);
   const interval = SPEEDS.find((item) => item.id === speed)?.ms ?? 1100;
-  const playing = live.phase === "first" || live.phase === "second";
+  const playing = live.phase === "first" || live.phase === "second" || live.phase === "et1" || live.phase === "et2";
 
   useEffect(() => {
     if (!playing) return;
@@ -81,7 +81,7 @@ export function MatchScreen({
   const htXv = useMemo(() => sheetPlayers(save.clubId, htSheet, save), [htSheet, save.clubId, save]);
 
   useEffect(() => {
-    if (live.phase !== "half-time") return;
+    if (live.phase !== "half-time" && live.phase !== "extra-time" && live.phase !== "extra-half") return;
     setHtSheet(closingSheetOf(live.user, save.clubId));
     setHtFirst(null);
     setHtSecond(null);
@@ -90,7 +90,7 @@ export function MatchScreen({
     home: homeId === save.clubId ? save.condition : undefined,
     away: awayId === save.clubId ? save.condition : undefined,
   });
-  const atHalfTime = live.phase === "half-time";
+  const atHalfTime = live.phase === "half-time" || live.phase === "extra-time" || live.phase === "extra-half";
   const remainingSubs = remainingMatchSubs(
     live.user.events.slice(0, live.cursor),
     save.clubId,
@@ -250,13 +250,22 @@ export function MatchScreen({
       {live.user.climate ? (
         <WeatherBanner
           climate={live.user.climate}
-          period={live.phase === "second" ? "second" : live.phase === "first" || live.phase === "half-time" ? "first" : undefined}
+          period={
+            live.phase === "second" || live.phase === "et2" || live.phase === "extra-half"
+              ? "second"
+              : live.phase === "first" ||
+                  live.phase === "half-time" ||
+                  live.phase === "et1" ||
+                  live.phase === "extra-time"
+                ? "first"
+                : undefined
+          }
         />
       ) : null}
       <p className="live-strip">
         Poss {chart.homeStats.possessions}-{chart.awayStats.possessions} · Shots {chart.homeStats.scores}/{chart.homeStats.shots}-{chart.awayStats.scores}/{chart.awayStats.shots} · Puck-outs {formatWonLost(chart.homeStats.puckoutsWon, chart.homeStats.puckoutsAttempted ?? 0)} / {formatWonLost(chart.awayStats.puckoutsWon, chart.awayStats.puckoutsAttempted ?? 0)} · Tackles {chart.homeStats.tacklesWon}-{chart.awayStats.tacklesWon}
       </p>
-      {live.phase !== "half-time" && live.phase !== "half-wait" ? (
+      {live.phase !== "half-time" && live.phase !== "half-wait" && live.phase !== "extra-time" && live.phase !== "extra-half" ? (
         <div className="speed-row pane-row">
           <button type="button" className={pane === "call" ? "is-active" : ""} onClick={() => setPane("call")}>
             Commentary
@@ -285,12 +294,22 @@ export function MatchScreen({
             <p className="tactic-copy">Keep the app open or come back after the wait window.</p>
           )}
         </div>
-      ) : live.phase === "half-time" ? (
+      ) : live.phase === "half-time" || live.phase === "extra-time" || live.phase === "extra-half" ? (
         <div className="ht-panel">
-          <h3>Half-time</h3>
+          <h3>
+            {live.phase === "extra-time"
+              ? "Extra time"
+              : live.phase === "extra-half"
+                ? "Half-time in extra time"
+                : "Half-time"}
+          </h3>
           <p className="hint">
-            Pick two names in your grid and tap Swap beside it. You have {remainingSubs} of {MATCH_SUB_LIMIT}{" "}
-            substitutions left. Shirt numbers stay from kickoff — a 16 stays 16 if he comes on.
+            {live.phase === "extra-time"
+              ? "The sides are level. Two periods of ten minutes. Pick two names in your grid and tap Swap beside it."
+              : live.phase === "extra-half"
+                ? "Change ends for the second extra period. Pick two names in your grid and tap Swap beside it."
+                : "Pick two names in your grid and tap Swap beside it. Shirt numbers stay from kickoff — a 16 stays 16 if he comes on."}{" "}
+            You have {remainingSubs} of {MATCH_SUB_LIMIT} substitutions left.
           </p>
           {statsPanel}
           <TacticControls tactics={htTactics} onChange={setHtTactics} compact xv={htXv} />
@@ -352,18 +371,26 @@ export function MatchScreen({
           <button type="button" className="btn btn--ghost" onClick={onClose}>
             Back to the week
           </button>
-        ) : live.phase === "half-time" ? (
+        ) : live.phase === "half-time" || live.phase === "extra-time" || live.phase === "extra-half" ? (
           <>
             <button type="button" className="btn" onClick={() => onContinueSecond(htTactics, htSheet)}>
-              Second half
+              {live.phase === "extra-time"
+                ? "First extra period"
+                : live.phase === "extra-half"
+                  ? "Second extra period"
+                  : "Second half"}
             </button>
             <button type="button" className="btn btn--ghost" onClick={() => onSkipRest(htTactics, htSheet)}>
-              Skip to full-time
+              {live.phase === "half-time" ? "Skip to full-time" : "Skip extra time"}
             </button>
           </>
         ) : (
           <button type="button" className="btn btn--ghost" onClick={onSkip}>
-            {live.phase === "first" ? "Skip to half-time" : "Skip to result"}
+            {live.phase === "first"
+              ? "Skip to half-time"
+              : live.phase === "et1"
+                ? "Skip extra-time half"
+                : "Skip to result"}
           </button>
         )}
       </div>

@@ -36,6 +36,8 @@ export type Group = {
   teamIds: string[];
 };
 
+export type MatchPeriod = "first" | "second" | "full" | "et1" | "et2";
+
 export type Match = {
   id: string;
   stage: MatchStage;
@@ -48,6 +50,8 @@ export type Match = {
   away: TeamRef;
   homeScore: Score | null;
   awayScore: Score | null;
+  /** Set when this fixture is a replay of a knockout that stayed level after extra time. */
+  replayOf?: string;
 };
 
 export type Player = {
@@ -441,7 +445,7 @@ export type TeamSheet = {
 };
 
 export type GameSave = {
-  version: 13;
+  version: 14;
   clubId: string;
   seed: number;
   difficulty: Difficulty;
@@ -449,6 +453,7 @@ export type GameSave = {
   tactics: Tactics;
   sheet: TeamSheet;
   matches: { id: string; homeScore: Score | null; awayScore: Score | null }[];
+  extraMatches?: Match[];
   inbox: NewsItem[];
   phase: CalendarPhase;
   preseasonWeek: number;
@@ -467,7 +472,16 @@ export type GameSave = {
   nextMatchPrep?: MatchPrep;
 };
 
-export type LivePhase = "first" | "half-time" | "half-wait" | "second" | "finished";
+export type LivePhase =
+  | "first"
+  | "half-time"
+  | "half-wait"
+  | "second"
+  | "extra-time"
+  | "et1"
+  | "extra-half"
+  | "et2"
+  | "finished";
 
 export type WaitHours = 0 | 1 | 6 | 12 | 24 | 72 | 168;
 
@@ -532,6 +546,7 @@ export type Campaign = {
   phase: "lobby" | "preseason" | "season";
   preseasonWeek: number;
   matches: { id: string; homeScore: Score | null; awayScore: Score | null }[];
+  extraMatches?: Match[];
   reports: Record<string, MatchReport>;
   clubs: Record<string, ClubRuntime>;
   week: WeekState;

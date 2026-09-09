@@ -181,7 +181,7 @@ describe("hidden player form", () => {
       matches: [],
       inbox: [],
     });
-    expect(migrated?.version).toBe(13);
+    expect(migrated?.version).toBe(14);
     const names = ratedSquad("ballyea", 3).map((player) => player.name);
     expect(names.every((name) => typeof migrated?.condition[name]?.form === "number")).toBe(true);
     const values = new Set(names.map((name) => migrated?.condition[name]?.form));

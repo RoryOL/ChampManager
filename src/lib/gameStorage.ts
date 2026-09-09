@@ -6,6 +6,7 @@ import { DEFAULT_TACTICS, defaultSheet, expandSheetToPanel } from "./players";
 import { ATTRIBUTE_KEYS, clampDial } from "./attributes";
 import { ambitionFor, migrateNewsItem } from "./news";
 import { withStartingForm } from "./form";
+import { insertReplay } from "./knockout";
 import {
   clampBoost,
   clampFatigue,
@@ -37,7 +38,7 @@ import type {
   WeekShape,
 } from "../types";
 
-export const SAVE_VERSION = 13;
+export const SAVE_VERSION = 14;
 
 const STORAGE_KEY = "champ-manager:game-v1";
 
@@ -207,6 +208,7 @@ export function migrateSave(raw: unknown): GameSave | null {
     difficulty?: unknown;
     balance?: unknown;
     nextMatchPrep?: unknown;
+    extraMatches?: unknown;
   };
   if (!parsed.clubId || !parsed.sheet || !Array.isArray(parsed.matches)) return null;
   if (
@@ -222,7 +224,8 @@ export function migrateSave(raw: unknown): GameSave | null {
     parsed.version !== 10 &&
     parsed.version !== 11 &&
     parsed.version !== 12 &&
-    parsed.version !== 13
+    parsed.version !== 13 &&
+    parsed.version !== 14
   ) {
     return null;
   }
@@ -288,6 +291,7 @@ export function migrateSave(raw: unknown): GameSave | null {
     difficulty: migrateDifficulty(parsed.difficulty),
     balance: migrateBalance(parsed.balance),
     nextMatchPrep: migrateMatchPrep(parsed.nextMatchPrep),
+    extraMatches: Array.isArray(parsed.extraMatches) ? parsed.extraMatches : [],
   };
 }
 
@@ -344,6 +348,7 @@ export function newSave(
     trainingDeltas: {},
     weekDeltas: {},
     rivals: seedRivals(clubId, seed, migrateBalance(balance)),
+    extraMatches: [],
   };
 }
 
@@ -355,19 +360,30 @@ export function championshipFromSave(save: GameSave): Championship {
     if (!saved) return match;
     return { ...match, homeScore: saved.homeScore, awayScore: saved.awayScore };
   });
+  for (const extra of save.extraMatches ?? []) {
+    if (championship.matches.some((item) => item.id === extra.id)) continue;
+    const saved = byId.get(extra.id);
+    championship.matches = insertReplay(championship.matches, {
+      ...extra,
+      homeScore: saved?.homeScore ?? extra.homeScore,
+      awayScore: saved?.awayScore ?? extra.awayScore,
+    });
+  }
   return championship;
 }
 
 export function writeScores(save: GameSave, updates: { id: string; homeScore: Score; awayScore: Score }[]): GameSave {
   const byId = new Map(updates.map((item) => [item.id, item]));
-  return {
-    ...save,
-    matches: save.matches.map((match) => {
-      const update = byId.get(match.id);
-      if (!update) return match;
-      return { ...match, homeScore: update.homeScore, awayScore: update.awayScore };
-    }),
-  };
+  const matches = save.matches.map((match) => {
+    const update = byId.get(match.id);
+    if (!update) return match;
+    return { ...match, homeScore: update.homeScore, awayScore: update.awayScore };
+  });
+  for (const update of updates) {
+    if (matches.some((item) => item.id === update.id)) continue;
+    matches.push({ id: update.id, homeScore: update.homeScore, awayScore: update.awayScore });
+  }
+  return { ...save, matches };
 }
 
 export function loadSave(): GameSave | null {

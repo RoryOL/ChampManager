@@ -2,6 +2,7 @@ import type {
   MatchClimate,
   MatchEvent,
   MatchEventKind,
+  MatchPeriod,
   MatchPrep,
   MatchStage,
   PlayerCondition,
@@ -17,18 +18,20 @@ import type {
 import { clampDial } from "./attributes";
 import { buildCoachReport, liveCoachTip } from "./coach";
 import { applyFormChance, formValue, fumbleChance } from "./form";
-import { mergeCredits, passChain, deliverTo, statsFromEvents } from "./matchStats";
+import { mergeCredits, passChain, deliverTo, statsFromEvents, combineHalves } from "./matchStats";
 import {
   closingSheetFromSlots,
   injuryText,
   MATCH_INJURY_CAP,
   MATCH_INJURY_PER_TEAM,
   rollMatchInjuries,
+  remainingInjuryBudget,
   subEventFor,
   type RolledInjury,
 } from "./injuries";
 import { clubTactics, defaultSheet, expandSheetToPanel, pickPuckoutTarget, sheetPlayers, sideProfile, sideTeamwork, aerialContestRating, type SideProfile } from "./players";
-import { MATCH_SUB_LIMIT } from "./subs";
+import { MATCH_SUB_LIMIT, remainingMatchSubs } from "./subs";
+import { knockoutNeedsExtraTime, periodClock } from "./knockout";
 import {
   attackingTop,
   conversionContext,
@@ -705,7 +708,7 @@ export function simulateMatch(options: {
   clubId?: string;
   homeName?: string;
   awayName?: string;
-  period?: "first" | "second" | "full";
+  period?: MatchPeriod;
   startHome?: Score;
   startAway?: Score;
   startMomentum?: number;
@@ -729,7 +732,10 @@ export function simulateMatch(options: {
 }): SimulatedMatch {
   const period = options.period ?? "full";
   const matchStage = options.stage ?? stageFromMatchId(options.matchId);
-  const seedKey = period === "second" ? `${options.seed}:${options.matchId}:second` : `${options.seed}:${options.matchId}`;
+  const seedKey =
+    period === "second" || period === "et1" || period === "et2"
+      ? `${options.seed}:${options.matchId}:${period}`
+      : `${options.seed}:${options.matchId}`;
   const random = createRng(seedFrom(seedKey));
   const statRng = createRng(seedFrom(`${seedKey}:stats`));
   const climate = climateOf(options.climate ?? rollClimate(options.seed, options.matchId));
@@ -816,9 +822,7 @@ export function simulateMatch(options: {
       teamId === options.homeId ? (options.homeCondition ?? {}) : (options.awayCondition ?? {}),
     );
   const formOf = (teamId: string, name: string) => formValue(conditionOf(teamId, name));
-  const periodMinutes = period === "first" ? 32 : period === "second" ? 30 : 62;
-  const startMinute = period === "second" ? 32 : 1;
-  const endMinute = period === "first" ? 31 : 62;
+  const { periodMinutes, startMinute, endMinute } = periodClock(period);
   const stints = new Map<string, number>();
   const minuteBank: StatCredit[] = [];
   const matchInjuries: RolledInjury[] = [];
@@ -2190,7 +2194,7 @@ export function simulateMatch(options: {
   };
 
   for (let minute = startMinute; minute <= endMinute; minute += 1) {
-    if (period !== "second" && minute === 31) {
+    if ((period === "first" || period === "full") && minute === 31) {
       push({
         minute,
         teamId: options.homeId,
@@ -2201,6 +2205,17 @@ export function simulateMatch(options: {
       });
       if (period === "first") break;
       continue;
+    }
+    if (period === "et1" && minute === 72) {
+      push({
+        minute,
+        teamId: options.homeId,
+        playerName: "",
+        kind: "half",
+        text: "Half-time in extra time.",
+        credits: flushMinutes(minute),
+      });
+      break;
     }
     for (const item of options.forcedRemovals ?? []) {
       if (item.minute !== minute || item.kind !== "red") continue;
@@ -2345,7 +2360,7 @@ export function simulateMatch(options: {
     }
   }
 
-  if (period !== "first") {
+  if (period === "second" || period === "full") {
     push({
       minute: 62,
       teamId: options.homeId,
@@ -2353,6 +2368,19 @@ export function simulateMatch(options: {
       kind: "full",
       text: "Full-time.",
       credits: flushMinutes(62),
+    });
+  }
+  if (period === "et2") {
+    const level = homeScore.goals * 3 + homeScore.points === awayScore.goals * 3 + awayScore.points;
+    push({
+      minute: 82,
+      teamId: options.homeId,
+      playerName: "",
+      kind: "full",
+      text: level
+        ? "Full-time after extra time. The sides cannot be separated."
+        : "Full-time after extra time.",
+      credits: flushMinutes(82),
     });
   }
 
@@ -2431,6 +2459,79 @@ export function simulateMatch(options: {
       injury: item.injury,
     })),
   };
+}
+
+export function applyKnockoutExtraTime(
+  sim: SimulatedMatch,
+  options: {
+    clubId?: string;
+    homeName?: string;
+    awayName?: string;
+    homeCondition?: Record<string, PlayerCondition>;
+    awayCondition?: Record<string, PlayerCondition>;
+    homeSquad?: RatedPlayer[];
+    awaySquad?: RatedPlayer[];
+    remainingWeeks?: number;
+    seed: number;
+    gameSeed?: number;
+    balance?: SquadBalance;
+    performanceBoost?: { clubIds: string[]; amount: number };
+    homePrep?: MatchPrep;
+    awayPrep?: MatchPrep;
+    stage?: MatchStage;
+  },
+): SimulatedMatch {
+  const stage = options.stage ?? stageFromMatchId(sim.matchId);
+  if (!knockoutNeedsExtraTime(stage, sim.homeScore, sim.awayScore)) return sim;
+  const playedEt2 = sim.events.some((event) => event.minute >= 73);
+  if (playedEt2) return sim;
+  const names = {
+    homeName: options.homeName ?? "Home",
+    awayName: options.awayName ?? "Away",
+    clubId: options.clubId,
+    condition: options.clubId === sim.homeId ? options.homeCondition : options.awayCondition,
+  };
+  const playExtra = (period: "et1" | "et2", from: SimulatedMatch) =>
+    simulateMatch({
+      matchId: sim.matchId,
+      homeId: sim.homeId,
+      awayId: sim.awayId,
+      homeSheet: from.homeClosingSheet ?? from.homeSheet,
+      awaySheet: from.awayClosingSheet ?? from.awaySheet,
+      homeTactics: from.homeTactics,
+      awayTactics: from.awayTactics,
+      homeCondition: options.homeCondition,
+      awayCondition: options.awayCondition,
+      homeSquad: options.homeSquad,
+      awaySquad: options.awaySquad,
+      remainingWeeks: options.remainingWeeks,
+      sentOff: sentOffNamesFromEvents(from.events),
+      booked: bookedNamesFromEvents(from.events),
+      clubId: options.clubId,
+      homeName: names.homeName,
+      awayName: names.awayName,
+      period,
+      startHome: from.homeScore,
+      startAway: from.awayScore,
+      startMomentum: momentumAt(from.events),
+      seed: options.seed,
+      gameSeed: options.gameSeed,
+      balance: options.balance,
+      climate: sim.climate,
+      remainingSubs: {
+        home: remainingMatchSubs(from.events, sim.homeId, from.homeSheet, from.homeClosingSheet ?? from.homeSheet),
+        away: remainingMatchSubs(from.events, sim.awayId, from.awaySheet, from.awayClosingSheet ?? from.awaySheet),
+      },
+      injuryBudget: remainingInjuryBudget(from.events, sim.homeId, sim.awayId),
+      performanceBoost: options.performanceBoost,
+      homePrep: options.homePrep,
+      awayPrep: options.awayPrep,
+      stage,
+    });
+  const et1 = sim.events.some((event) => event.minute >= 63) ? sim : combineHalves(sim, playExtra("et1", sim), names);
+  if (!knockoutNeedsExtraTime(stage, et1.homeScore, et1.awayScore)) return et1;
+  const et2 = playExtra("et2", et1);
+  return combineHalves(et1, et2, names);
 }
 
 export function scoreFromEvents(

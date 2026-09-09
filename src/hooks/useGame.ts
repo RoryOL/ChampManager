@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { seedChampionship } from "../data/championship";
 import { compactName } from "../lib/display";
-import { momentumAt, bookedNamesFromEvents, sentOffNamesFromEvents, simulateMatch, straightRedNamesFromEvents } from "../lib/matchEngine";
+import { momentumAt, bookedNamesFromEvents, sentOffNamesFromEvents, simulateMatch, straightRedNamesFromEvents, applyKnockoutExtraTime } from "../lib/matchEngine";
 import { combineHalves, reportFromSim } from "../lib/matchStats";
 import { applyMatchForm } from "../lib/form";
 import {
@@ -56,7 +56,8 @@ import {
 } from "../lib/aiManager";
 import { resolveMatchSides, teamById } from "../lib/resolve";
 import { nextBatch } from "../lib/schedule";
-import { formatScore, matchPlayed, scoreTotal, stageLabel } from "../lib/scoring";
+import { knockoutNeedsExtraTime, replayFixture, scoresAreLevel, withReplayFixture } from "../lib/knockout";
+import { formatDate, formatScore, matchPlayed, matchStageLabel, scoreTotal } from "../lib/scoring";
 import {
   applyInjury,
   injuredNamesFromEvents,
@@ -141,6 +142,32 @@ export type LiveMatch = {
   openingAwaySheet: TeamSheet;
   injuries: RolledInjury[];
 };
+
+function extraTimeOptions(
+  save: GameSave,
+  sim: SimulatedMatch,
+  championship: Championship,
+) {
+  const home = teamById(championship, sim.homeId);
+  const away = teamById(championship, sim.awayId);
+  return {
+    seed: save.seed,
+    gameSeed: save.seed,
+    balance: save.balance,
+    clubId: save.clubId,
+    homeSquad: ratedSquad(sim.homeId, save),
+    awaySquad: ratedSquad(sim.awayId, save),
+    remainingWeeks: remainingWeeks(save, championship, save.clubId),
+    homeName: home ? compactName(home) : sim.homeId,
+    awayName: away ? compactName(away) : sim.awayId,
+    performanceBoost: performanceBoostFor(save.difficulty, [save.clubId]),
+    homePrep: sim.homeId === save.clubId ? save.nextMatchPrep : save.rivals[sim.homeId]?.nextMatchPrep,
+    awayPrep: sim.awayId === save.clubId ? save.nextMatchPrep : save.rivals[sim.awayId]?.nextMatchPrep,
+    homeCondition: sim.homeId === save.clubId ? save.condition : save.rivals[sim.homeId]?.condition,
+    awayCondition: sim.awayId === save.clubId ? save.condition : save.rivals[sim.awayId]?.condition,
+    stage: championship.matches.find((item) => item.id === sim.matchId)?.stage,
+  };
+}
 
 function preparedRivals(save: GameSave, championship: Championship): GameSave["rivals"] {
   const batch = nextBatch(championship, save.clubId);
@@ -514,8 +541,12 @@ export function useGame() {
             awayPrep: awayId === save.clubId ? save.nextMatchPrep : awayClub?.nextMatchPrep,
             stage: match.stage,
           });
-          if (!isUser) return sim;
-          const decorated = decorateUserMatch(sim, save);
+          const resolved =
+            isUser && mode === "first"
+              ? sim
+              : applyKnockoutExtraTime(sim, extraTimeOptions(save, sim, championship));
+          if (!isUser) return resolved;
+          const decorated = decorateUserMatch(resolved, save);
           injuries = decorated.injuries;
           return decorated.sim;
         })
@@ -603,6 +634,11 @@ export function useGame() {
         setLive({ ...current, cursor: current.user.events.length, phase: "finished" });
         return;
       }
+      const user = applyKnockoutExtraTime(current.user, extraTimeOptions(base, current.user, championship));
+      const others = current.others.map((item) =>
+        applyKnockoutExtraTime(item, extraTimeOptions(base, item, championship)),
+      );
+      current = { ...current, user, others };
       const updates = [current.user, ...current.others].map((item) => ({
         id: item.matchId,
         homeScore: item.homeScore,
@@ -614,6 +650,12 @@ export function useGame() {
         reports[sim.matchId] = reportFromSim(sim);
       }
       next = { ...next, reports };
+      for (const sim of [current.user, ...current.others]) {
+        const row = championship.matches.find((item) => item.id === sim.matchId);
+        if (!row || !knockoutNeedsExtraTime(row.stage, sim.homeScore, sim.awayScore)) continue;
+        const replay = replayFixture(row, sim.homeId, sim.awayId, championshipFromSave(next).matches);
+        next = withReplayFixture(next, replay);
+      }
       next = {
         ...next,
         condition: applyMatchFatigue(
@@ -690,7 +732,7 @@ export function useGame() {
             sim: current.user,
             date,
             seed: base.seed,
-            stageLabel: userMatch ? stageLabel(userMatch.stage, userMatch.round) : current.label,
+            stageLabel: userMatch ? matchStageLabel(userMatch) : current.label,
           }),
         );
         if (opponent) {
@@ -719,6 +761,18 @@ export function useGame() {
             played: next.matches.filter((match) => match.homeScore && match.awayScore).length,
           });
           items.push(press);
+        }
+        const replay = championshipFromSave(next).matches.find((item) => item.replayOf === current.user.matchId);
+        if (replay && scoresAreLevel(current.user.homeScore, current.user.awayScore)) {
+          items.push(
+            newsItem({
+              kind: "match",
+              title: "Replay required",
+              body: `${home.name} and ${away.name} could not be separated after extra time. They meet again on ${formatDate(replay.date)}.`,
+              date,
+              matchId: replay.id,
+            }),
+          );
         }
       }
       for (const rolled of current.injuries) {
@@ -829,6 +883,8 @@ export function useGame() {
             balance: save.balance,
           })
         : null;
+      const extraPause = live.phase === "extra-time" || live.phase === "extra-half";
+      const period = live.phase === "extra-time" ? "et1" : live.phase === "extra-half" ? "et2" : "second";
       const second = simulateMatch({
         matchId: first.matchId,
         homeId,
@@ -847,7 +903,7 @@ export function useGame() {
         clubId: save.clubId,
         homeName: homeTeam ? compactName(homeTeam) : homeId,
         awayName: awayTeam ? compactName(awayTeam) : awayId,
-        period: "second",
+        period,
         startHome: first.homeScore,
         startAway: first.awayScore,
         startMomentum: momentumAt(first.events),
@@ -878,10 +934,12 @@ export function useGame() {
       const decorated = decorateUserMatch(second, save);
       const homeSecondSheet = homeId === save.clubId ? workingSheet : (cpuPlan?.sheet ?? defaultSheet(homeId));
       const awaySecondSheet = awayId === save.clubId ? workingSheet : (cpuPlan?.sheet ?? defaultSheet(awayId));
-      const withHtSubs = {
-        ...decorated.sim,
-        events: prependHalfTimeSubs(first, decorated.sim, { home: homeSecondSheet, away: awaySecondSheet }),
-      };
+      const withHtSubs = extraPause
+        ? decorated.sim
+        : {
+            ...decorated.sim,
+            events: prependHalfTimeSubs(first, decorated.sim, { home: homeSecondSheet, away: awaySecondSheet }),
+          };
       const combined = combineHalves(first, withHtSubs, {
         clubId: save.clubId,
         homeName: homeTeam ? compactName(homeTeam) : "Home",
@@ -889,6 +947,31 @@ export function useGame() {
         condition: save.condition,
       });
       const injuries = [...live.injuries, ...decorated.injuries];
+      const join = first.events.length;
+      if (period === "et1") {
+        if (skipPlayback || !knockoutNeedsExtraTime(live.match.stage, combined.homeScore, combined.awayScore)) {
+          const base = withSheet(withTactics(save, tactics), workingSheet);
+          finishLive(
+            { ...live, user: combined, phase: "finished", cursor: combined.events.length, injuries },
+            { sheet: workingSheet, base },
+          );
+          return;
+        }
+        setLive({ ...live, user: combined, phase: "et1", cursor: join, injuries });
+        return;
+      }
+      if (period === "et2") {
+        if (skipPlayback) {
+          const base = withSheet(withTactics(save, tactics), workingSheet);
+          finishLive(
+            { ...live, user: combined, phase: "finished", cursor: combined.events.length, injuries },
+            { sheet: workingSheet, base },
+          );
+          return;
+        }
+        setLive({ ...live, user: combined, phase: "et2", cursor: join, injuries });
+        return;
+      }
       if (skipPlayback) {
         const base = withSheet(withTactics(save, tactics), workingSheet);
         finishLive(
@@ -925,8 +1008,18 @@ export function useGame() {
       finishLive(live);
       return;
     }
+    if (live?.phase === "et1") {
+      const extraHalf =
+        live.user.events.findIndex((event) => event.kind === "half" && event.minute >= 63) + 1;
+      setLive({ ...live, cursor: Math.max(extraHalf, 1), phase: "extra-half" });
+      return;
+    }
+    if (live?.phase === "et2") {
+      finishLive(live);
+      return;
+    }
     if (live?.phase === "half-wait") return;
-    if (live?.phase === "half-time") {
+    if (live?.phase === "half-time" || live?.phase === "extra-time" || live?.phase === "extra-half") {
       skipRest(save.tactics, save.sheet);
       return;
     }
@@ -941,7 +1034,14 @@ export function useGame() {
 
   const advanceLive = useCallback(() => {
     setLive((current) => {
-      if (!current || current.phase === "finished" || current.phase === "half-time" || current.phase === "half-wait") {
+      if (
+        !current ||
+        current.phase === "finished" ||
+        current.phase === "half-time" ||
+        current.phase === "half-wait" ||
+        current.phase === "extra-time" ||
+        current.phase === "extra-half"
+      ) {
         return current;
       }
       const nextCursor = Math.min(current.cursor + 1, current.user.events.length);
@@ -949,8 +1049,17 @@ export function useGame() {
       if (current.phase === "first" && revealed?.kind === "half") {
         return { ...current, cursor: nextCursor, phase: "half-time" };
       }
+      if (current.phase === "et1" && revealed?.kind === "half" && revealed.minute >= 63) {
+        return { ...current, cursor: nextCursor, phase: "extra-half" };
+      }
       const next = { ...current, cursor: nextCursor };
       if (current.phase === "second" && nextCursor >= current.user.events.length) {
+        if (knockoutNeedsExtraTime(current.match.stage, current.user.homeScore, current.user.awayScore)) {
+          return { ...next, phase: "extra-time" };
+        }
+        queueMicrotask(() => finishLive(next));
+      }
+      if (current.phase === "et2" && nextCursor >= current.user.events.length) {
         queueMicrotask(() => finishLive(next));
       }
       return next;

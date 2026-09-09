@@ -1,5 +1,6 @@
 import type {
   MatchEvent,
+  MatchPeriod,
   PlayerCondition,
   PlayerInjury,
   RatedPlayer,
@@ -371,15 +372,17 @@ export function rollMatchInjuries(options: {
   condition: Record<string, PlayerCondition>;
   seed: number;
   matchId: string;
-  period: "first" | "second" | "full";
+  period: MatchPeriod;
   remainingWeeks: number;
   teamId: string;
   played: { name: string; minutes: number; started: boolean }[];
   maxCount?: number;
 }): RolledInjury[] {
   const random = createRng(seedFrom(`${options.seed}:${options.matchId}:${options.period}:injuries`));
-  const minMinute = options.period === "second" ? 32 : 4;
-  const maxMinute = options.period === "first" ? 30 : 60;
+  const minMinute =
+    options.period === "et2" ? 73 : options.period === "et1" ? 63 : options.period === "second" ? 32 : 4;
+  const maxMinute =
+    options.period === "et2" ? 81 : options.period === "et1" ? 71 : options.period === "first" ? 30 : 60;
   const rolled: RolledInjury[] = [];
   const candidates = options.played
     .filter((row) => row.minutes >= 8)

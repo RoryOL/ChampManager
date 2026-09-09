@@ -9,6 +9,7 @@ import type {
   HalfPlan,
   Match,
   MatchLive,
+  MatchPeriod,
   MatchPrep,
   NewsItem,
   Seat,
@@ -35,7 +36,8 @@ import {
   restAndPrepManagedClub,
   tickManagedPreseasonWeek,
 } from "../aiManager";
-import { momentumAt, bookedNamesFromEvents, sentOffNamesFromEvents, simulateMatch, straightRedNamesFromEvents } from "../matchEngine";
+import { momentumAt, bookedNamesFromEvents, sentOffNamesFromEvents, simulateMatch, straightRedNamesFromEvents, applyKnockoutExtraTime } from "../matchEngine";
+import { insertReplay, knockoutNeedsExtraTime, replayFixture } from "../knockout";
 import {
   applyInjury,
   applyMatchSuspensions,
@@ -169,6 +171,7 @@ export function createCampaign(options: {
       homeScore: match.homeScore,
       awayScore: match.awayScore,
     })),
+    extraMatches: [],
     reports: {},
     clubs: {},
     week: emptyWeek(),
@@ -295,6 +298,7 @@ export function saveFromCampaign(campaign: Campaign, clubId: string): GameSave {
     tactics: club.tactics,
     sheet: expandSheetToPanel(clubId, club.sheet, campaign.seed),
     matches: campaign.matches,
+    extraMatches: campaign.extraMatches ?? [],
     inbox: club.inbox,
     phase: campaign.phase === "season" ? "season" : "preseason",
     preseasonWeek: campaign.preseasonWeek,
@@ -892,7 +896,7 @@ function simulateSides(
   match: Match,
   homeId: string,
   awayId: string,
-  period: "first" | "second" | "full",
+  period: MatchPeriod,
   extras?: {
     homeTactics?: Tactics;
     awayTactics?: Tactics;
@@ -971,6 +975,19 @@ function finishSim(
   const match = championship.matches.find((item) => item.id === sim.matchId);
   const homeTeam = teamById(championship, sim.homeId);
   const awayTeam = teamById(championship, sim.awayId);
+  sim = applyKnockoutExtraTime(sim, {
+    seed: campaign.seed,
+    gameSeed: campaign.seed,
+    balance: campaignBalance(campaign),
+    homeSquad: ratedSquad(sim.homeId, campaign),
+    awaySquad: ratedSquad(sim.awayId, campaign),
+    homeCondition: campaign.clubs[sim.homeId]?.condition,
+    awayCondition: campaign.clubs[sim.awayId]?.condition,
+    remainingWeeks: remainingWeeks(saveFromCampaign(campaign, sim.homeId), championship, sim.homeId),
+    homeName: homeTeam ? compactName(homeTeam) : sim.homeId,
+    awayName: awayTeam ? compactName(awayTeam) : sim.awayId,
+    stage: match?.stage,
+  });
   const date = match?.date ?? "";
   const matches = writeMatch(campaign.matches, sim);
   const playedCount = matches.filter((item) => item.homeScore && item.awayScore).length;
@@ -1074,9 +1091,19 @@ function finishSim(
       items,
     );
   }
+  let extraMatches = campaign.extraMatches ?? [];
+  let nextMatches = matches;
+  if (match && knockoutNeedsExtraTime(match.stage, sim.homeScore, sim.awayScore)) {
+    const replay = replayFixture(match, sim.homeId, sim.awayId, [...championship.matches, ...extraMatches]);
+    extraMatches = insertReplay(extraMatches, replay);
+    if (!nextMatches.some((item) => item.id === replay.id)) {
+      nextMatches = [...nextMatches, { id: replay.id, homeScore: null, awayScore: null }];
+    }
+  }
   return {
     ...campaign,
-    matches,
+    matches: nextMatches,
+    extraMatches,
     reports: { ...campaign.reports, [sim.matchId]: reportFromSim(sim) },
     clubs,
   };
@@ -1130,6 +1157,19 @@ function tryCompleteLive(campaign: Campaign, matchId: string): Campaign {
     awayName: awayTeam ? compactName(awayTeam) : "Away",
     condition: campaign.clubs[homeHuman ? live.first.homeId : live.first.awayId]?.condition,
   });
+  const withEt = applyKnockoutExtraTime(combined, {
+    seed: campaign.seed,
+    gameSeed: campaign.seed,
+    balance: campaignBalance(campaign),
+    homeSquad: ratedSquad(live.first.homeId, campaign),
+    awaySquad: ratedSquad(live.first.awayId, campaign),
+    homeCondition: campaign.clubs[live.first.homeId]?.condition,
+    awayCondition: campaign.clubs[live.first.awayId]?.condition,
+    remainingWeeks: remainingWeeks(saveFromCampaign(campaign, live.first.homeId), championship, live.first.homeId),
+    homeName: homeTeam ? compactName(homeTeam) : "Home",
+    awayName: awayTeam ? compactName(awayTeam) : "Away",
+    stage: match.stage,
+  });
   const injuries = mergeInjuryMaps(live.injuries, decorated.injuries);
   const withLive: Campaign = {
     ...campaign,
@@ -1137,11 +1177,11 @@ function tryCompleteLive(campaign: Campaign, matchId: string): Campaign {
       ...campaign.week,
       lives: {
         ...campaign.week.lives,
-        [matchId]: { ...live, homeSecond: homePlan, awaySecond: awayPlan, combined, injuries },
+        [matchId]: { ...live, homeSecond: homePlan, awaySecond: awayPlan, combined: withEt, injuries },
       },
     },
   };
-  const finished = finishSim(withLive, combined, live.first, injuries);
+  const finished = finishSim(withLive, withEt, live.first, injuries);
   return bump({ ...finished, revision: campaign.revision });
 }
 

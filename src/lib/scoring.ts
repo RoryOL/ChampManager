@@ -34,6 +34,11 @@ export function formatDate(iso: string): string {
   });
 }
 
+export function matchStageLabel(match: Match): string {
+  const base = stageLabel(match.stage, match.round);
+  return match.replayOf ? `${base} replay` : base;
+}
+
 export function stageLabel(stage: Match["stage"], round?: number): string {
   switch (stage) {
     case "group":
