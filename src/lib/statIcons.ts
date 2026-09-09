@@ -41,4 +41,6 @@ export const STAT_ICON_PATH: Record<AttributeKey, string> = {
     "M4.2 18.6 16.8 4.6l2.2 1.8L6.4 20.4zm1.6-9.8h3.2v8.4H5.8zm11.2-3.2h2.8v7.2h-2.8z",
   puckoutReach:
     "M5.2 18.4 12.6 4.8l2 1.4-2.6 4.8H20l-1.6 2.4H11.6L8.4 19.6zM4.4 19.8h15.2v1.6H4.4z",
+  shotStopping:
+    "M12 3.4A8.6 8.6 0 1 0 20.6 12 8.6 8.6 0 0 0 12 3.4zm-5 7.4h10v2.4H7zm2.8 4.2h4.4v3.6h-4.4z",
 };
