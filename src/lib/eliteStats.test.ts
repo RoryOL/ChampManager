@@ -49,14 +49,13 @@ describe("elite stat badges", () => {
 });
 
 describe("player looks", () => {
-  it("uses a stylized look for covered Clare seniors and a silhouette for the rest", () => {
-    expect(lookForPlayer("Tony Kelly")).toEqual(
-      expect.objectContaining({ hair: "quiff", hairColor: "sandy" }),
-    );
-    expect(lookForPlayer("Shane O'Donnell")?.hair).toBe("shaggy");
-    expect(lookForPlayer("Peter Duggan")?.build).toBe("broad");
-    expect(lookForPlayer("Not A Real Hurler")).toBeNull();
-    expect(ratedSquad("ballyea").some((player) => lookForPlayer(player.name))).toBe(true);
-    expect(ratedSquad("ballyea").some((player) => !lookForPlayer(player.name))).toBe(true);
+  it("keeps known Clare seniors distinctive and generates everyone else", () => {
+    expect(lookForPlayer("Tony Kelly")).toEqual(expect.objectContaining({ hair: "quiff", hairColor: "sandy" }));
+    expect(lookForPlayer("Shane O'Donnell").hair).toBe("shaggy");
+    expect(lookForPlayer("Peter Duggan").build).toBe("broad");
+    expect(lookForPlayer("Not A Real Hurler")).toEqual(lookForPlayer("Not A Real Hurler"));
+    expect(lookForPlayer("Not A Real Hurler")).not.toEqual(lookForPlayer("Some Other Hurler"));
+    const looks = ratedSquad("ballyea").map((player) => JSON.stringify(lookForPlayer(player.name)));
+    expect(new Set(looks).size).toBeGreaterThan(8);
   });
 });
