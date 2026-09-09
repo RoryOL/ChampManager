@@ -53,10 +53,10 @@ export const TRAINING_TYPES: TrainingType[] = ["defensive", "attacking", "tactic
 
 export const TRAINING_TYPE_KEYS: Record<TrainingType, AttributeKey[]> = {
   defensive: ["hooking", "manMarking"],
-  attacking: ["shooting", "offTheBall"],
-  tactics: ["passing", "vision", "firstTouch"],
-  physical: ["strength", "speed", "acceleration"],
-  setpieces: ["frees", "sidelines", "puckoutReach"],
+  attacking: ["shooting", "offTheBall", "strikingDistance"],
+  tactics: ["passing", "vision", "firstTouch", "highFielding"],
+  physical: ["strength", "speed", "acceleration", "aerialReach", "stamina"],
+  setpieces: ["frees", "sidelines", "puckoutReach", "shotStopping"],
 };
 
 /** Profile stats that mixed training or teamwork can actually move. */
@@ -67,17 +67,17 @@ export const TRAINABLE_KEYS: AttributeKey[] = [
 
 export const TRAINING_TYPE_OPTIONS: { value: TrainingType; title: string; copy: string }[] = [
   { value: "defensive", title: "Defensive", copy: "Tackling / hooking and man marking." },
-  { value: "attacking", title: "Attacking", copy: "Shooting and off the ball." },
-  { value: "tactics", title: "Tactics", copy: "Passing, vision and first touch." },
-  { value: "physical", title: "Physical", copy: "Strength, speed and acceleration." },
-  { value: "setpieces", title: "Set pieces", copy: "Frees, sidelines and puck-out reach." },
+  { value: "attacking", title: "Attacking", copy: "Shooting, off the ball and striking from distance." },
+  { value: "tactics", title: "Tactics", copy: "Passing, vision, first touch and high fielding." },
+  { value: "physical", title: "Physical", copy: "Strength, speed, acceleration, aerial reach and stamina." },
+  { value: "setpieces", title: "Set pieces", copy: "Frees, sidelines, puck-out reach and shot stopping." },
 ];
 
 export const SESSION_OPTIONS: { value: WeekSession; title: string; copy: string }[] = [
   {
     value: "mixed",
     title: "Individual schedules",
-    copy: "Each player splits the week across defensive, attacking, tactics, physical and set-piece work. Mental attributes stay as they are.",
+    copy: "Each player splits the week across defensive, attacking, tactics, physical and set-piece work. Workrate, composure and ability under pressure stay as they are.",
   },
   {
     value: "challenge",
@@ -99,7 +99,7 @@ export const MATCH_PREP_OPTIONS: { value: MatchPrep; title: string; copy: string
   {
     value: "puckout",
     title: "Puckout strategy",
-    copy: "Restarts, targets and keeper reach. A slight lift on championship day.",
+    copy: "Restarts, keeper reach and shot stopping. A slight lift on championship day.",
   },
   {
     value: "shooting",
@@ -119,7 +119,7 @@ export const MATCH_PREP_OPTIONS: { value: MatchPrep; title: string; copy: string
 ];
 
 export const MATCH_PREP_KEYS: Record<MatchPrep, AttributeKey[]> = {
-  puckout: ["puckoutReach", "highFielding", "aerialReach", "passing"],
+  puckout: ["puckoutReach", "shotStopping", "highFielding", "aerialReach", "passing"],
   shooting: ["shooting", "strikingDistance", "composure", "offTheBall"],
   marking: ["manMarking", "hooking", "strength", "workrate"],
   running: ["speed", "acceleration", "firstTouch", "passing"],
@@ -189,19 +189,19 @@ export const SQUAD_TEMPLATES: { id: SquadTemplateId; title: string; copy: string
   {
     id: "tactics",
     title: "Tactics",
-    copy: "Passing, vision and first touch.",
+    copy: "Passing, vision, first touch and high fielding.",
     mix: { defensive: 10, attacking: 10, tactics: 50, physical: 20, setpieces: 10 },
   },
   {
     id: "physical",
     title: "Physical",
-    copy: "Speed, strength and acceleration.",
+    copy: "Speed, strength, aerials and stamina.",
     mix: { defensive: 10, attacking: 10, tactics: 15, physical: 55, setpieces: 10 },
   },
   {
     id: "setpieces",
     title: "Set pieces",
-    copy: "Frees, sidelines and puck-outs.",
+    copy: "Frees, sidelines, puck-outs and shot stopping.",
     mix: { defensive: 5, attacking: 10, tactics: 20, physical: 15, setpieces: 50 },
   },
 ];

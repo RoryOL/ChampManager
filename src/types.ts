@@ -147,6 +147,7 @@ export type PlayerRatings = {
   frees: number;
   sidelines: number;
   puckoutReach: number;
+  shotStopping: number;
   familiarity: PositionFamiliarity;
   overall: number;
 };

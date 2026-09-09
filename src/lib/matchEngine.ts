@@ -490,6 +490,13 @@ export function shortPuckoutTakeChance(longPuck: number, oppShape: Tactics["shap
   return Math.min(0.74, 0.12 + (1 - longPuck) * 0.28 + vsSweeper);
 }
 
+/** Keeper shot stopping drives the save; team defence only covers a little. */
+export function keeperSaveChance(shotStopping: number, defence = 12, form = 50): number {
+  const skill = 0.05 + shotStopping * 0.015;
+  const cover = Math.max(-0.04, Math.min(0.05, (defence - 12) * 0.004));
+  return applyFormChance(Math.min(0.5, Math.max(0.1, skill + cover)), form);
+}
+
 /** After a send-off, play 6-2-5. A second red leaves thirteen (6-2-4). */
 export function reshapeTo625(original: string[], out: Iterable<string>): string[] {
   const banned = new Set(out);
@@ -2001,7 +2008,18 @@ export function simulateMatch(options: {
 
     if (random() < goalChance) {
       const keeper = opp.keeper?.name ?? "the goalkeeper";
-      const saveChance = applyFormChance(0.16 + opp.defence * 0.006, opp.keeper ? formOf(defendingId, opp.keeper.name) : 50);
+      const stopping = opp.keeper
+        ? matchStat(
+            opp.keeper.ratings.shotStopping,
+            conditionOf(defendingId, opp.keeper.name),
+            "shotStopping",
+          )
+        : 12;
+      const saveChance = keeperSaveChance(
+        stopping,
+        opp.defence,
+        opp.keeper ? formOf(defendingId, opp.keeper.name) : 50,
+      );
       if (random() < saveChance) {
         push({
           minute,
