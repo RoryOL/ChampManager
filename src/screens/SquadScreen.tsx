@@ -1,5 +1,7 @@
 import type { Championship, GameSave, Match, PlayerCondition, PlayerMatchStats, RatedPlayer, Team } from "../types";
 import { ClubBadge } from "../components/ClubBadge";
+import { PlayerHeadshot } from "../components/PlayerHeadshot";
+import { StatIcon } from "../components/StatIcon";
 import { TeamFixtureList } from "../components/TeamFixtureList";
 import {
   ATTRIBUTE_GROUPS,
@@ -12,6 +14,7 @@ import {
   type AttributeKey,
 } from "../lib/attributes";
 import { compactName } from "../lib/display";
+import { eliteStatKeys } from "../lib/eliteStats";
 import { formatPair, seasonStatsFor } from "../lib/matchStats";
 import { defaultSheet, expandSheetToPanel, matchOrderIndex, matchShirtNumber, ratedSquad } from "../lib/players";
 import { FORMATION_ROWS } from "../lib/squads";
@@ -47,15 +50,18 @@ function PlayerDetail({
   condition,
   showCondition,
   season,
+  colours,
 }: {
   player: RatedPlayer;
   condition?: PlayerCondition;
   showCondition: boolean;
   season: PlayerMatchStats;
+  colours: { primary: string; secondary: string };
 }) {
   const match = showCondition && condition ? matchRatings(player, condition) : player.ratings;
   const trained = showCondition && condition ? trainedRatings(player, condition) : player.ratings;
   const overallDelta = trained.overall - player.ratings.overall;
+  const elite = eliteStatKeys(match);
   const trainingLifts =
     showCondition && condition
       ? ATTRIBUTE_KEYS.map((key) => {
@@ -66,6 +72,13 @@ function PlayerDetail({
   return (
     <section className="player-card" id="player-detail">
       <header>
+        <PlayerHeadshot
+          name={player.name}
+          age={player.age}
+          colours={colours}
+          position={player.position}
+          size={76}
+        />
         <div>
           <h3>{player.name}</h3>
           <p>
@@ -73,6 +86,13 @@ function PlayerDetail({
             {overallDelta !== 0 ? ` (${formatDelta(overallDelta)} banked from training)` : ""}
             {showCondition && condition ? ` · fitness ${fitnessOf(condition)}` : ""}
           </p>
+          {elite.length > 0 ? (
+            <span className="elite-stats elite-stats--card">
+              {elite.map((key) => (
+                <StatIcon key={key} stat={key} value={match[key]} />
+              ))}
+            </span>
+          ) : null}
         </div>
         <b className={overallDelta > 0 ? "is-up" : overallDelta < 0 ? "is-down" : ""}>{match.overall}</b>
       </header>
@@ -125,6 +145,7 @@ function PlayerDetail({
               <div key={key} className="attr-row">
                 <span>
                   {ATTRIBUTE_LABELS[key]}
+                  {elite.includes(key) ? <StatIcon stat={key} value={value} /> : null}
                   {locked ? <em className="attr-lock"> natural</em> : ""}
                 </span>
                 <div className="attr-bar">
@@ -297,6 +318,7 @@ export function SquadScreen({
               const injured = Boolean(condition && isInjured(condition));
               const suspended = Boolean(condition && isSuspended(condition));
               const tired = Boolean(condition && isOvertrained(condition));
+              const elite = eliteStatKeys(ratings);
               return (
                 <tr
                   key={player.name}
@@ -305,10 +327,28 @@ export function SquadScreen({
                 >
                   <td className="num">{number ?? "—"}</td>
                   <td className="name">
-                    <strong>{player.name}</strong>
-                    {injured && condition?.injury ? <em>Out · {injuryLine(condition.injury)}</em> : null}
-                    {suspended ? <em>Suspended · next match</em> : null}
-                    {tired ? <em>Tired</em> : null}
+                    <span className="squad-player-id">
+                      <PlayerHeadshot
+                        name={player.name}
+                        age={player.age}
+                        colours={viewed?.colours ?? { primary: "#1a3d7c", secondary: "#e8c547" }}
+                        position={player.position}
+                        size={40}
+                      />
+                      <span>
+                        <strong>{player.name}</strong>
+                        {elite.length > 0 ? (
+                          <span className="elite-stats">
+                            {elite.map((key) => (
+                              <StatIcon key={key} stat={key} value={ratings[key]} />
+                            ))}
+                          </span>
+                        ) : null}
+                        {injured && condition?.injury ? <em>Out · {injuryLine(condition.injury)}</em> : null}
+                        {suspended ? <em>Suspended · next match</em> : null}
+                        {tired ? <em>Tired</em> : null}
+                      </span>
+                    </span>
                   </td>
                   <td>{player.position}</td>
                   <td>{player.age}</td>
@@ -346,6 +386,7 @@ export function SquadScreen({
               condition={ownTeam ? conditionFor(selected.name, save.condition) : undefined}
               showCondition={ownTeam}
               season={seasonStatsFor(save.reports, viewTeamId, selected.name)}
+              colours={viewed?.colours ?? { primary: "#1a3d7c", secondary: "#e8c547" }}
             />
           </div>
         </div>
