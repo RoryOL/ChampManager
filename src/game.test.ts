@@ -64,7 +64,7 @@ import {
   shortPuckoutTakeChance,
   keeperSaveChance,
 } from "./lib/matchEngine";
-import { aerialContestRating, clubTactics, DEFAULT_TACTICS, defaultSheet, expandSheetToPanel, matchOrderIndex, matchShirtNumber, matchSlot, pickPuckoutTarget, playerAge, ratePlayer, ratedSquad, sheetPlayers, sideStrength, swapPlayersInSheet } from "./lib/players";
+import { aerialContestRating, clubTactics, DEFAULT_TACTICS, defaultSheet, expandSheetToPanel, matchOrderIndex, matchShirtNumber, matchSlot, pickPuckoutTarget, playerAge, ratePlayer, ratedSquad, sheetPlayers, sideStrength, sideTeamwork, swapPlayersInSheet } from "./lib/players";
 import { nextBatch } from "./lib/schedule";
 import { matchPlayed, scoreTotal } from "./lib/scoring";
 import { ATTRIBUTE_KEYS, MENTAL_KEYS, puckoutLabel } from "./lib/attributes";
@@ -108,6 +108,25 @@ describe("player ratings", () => {
     expect(form.ability).toBeGreaterThan(10);
     expect(form.ability).toBeLessThan(16);
     expect(form.match).toBe(form.ability);
+  });
+
+  it("reports championship XV teamwork on the 1–20 scale", () => {
+    const squad = ratedSquad("ballyea");
+    const sheet = defaultSheet("ballyea");
+    const condition = Object.fromEntries(squad.map((player) => [player.name, defaultCondition()]));
+    const teamwork = sideTeamwork("ballyea", sheet, condition, undefined, squad);
+    const expected =
+      Math.round(
+        (sheet.starters.reduce((sum, name) => {
+          const player = squad.find((item) => item.name === name);
+          return sum + (player?.ratings.teamwork ?? 0);
+        }, 0) /
+          sheet.starters.length) *
+          10,
+      ) / 10;
+    expect(teamwork).toBe(expected);
+    expect(teamwork).toBeGreaterThan(8);
+    expect(teamwork).toBeLessThanOrEqual(20);
   });
 
   it("keeps Tony Kelly at the top of the Ballyea panel", () => {

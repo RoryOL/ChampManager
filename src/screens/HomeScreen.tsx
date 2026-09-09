@@ -9,8 +9,8 @@ import { NEWS_KIND_LABEL } from "../lib/news";
 import { resolveMatchSides, teamById, teamGroup } from "../lib/resolve";
 import { formatDate, stageLabel } from "../lib/scoring";
 import { buildPreMatchBriefing } from "../lib/briefing";
-import { averageFitness, averageMatchOverall, averageSharpness, DEFAULT_WEEK_SHAPE, MATCH_PREP_OPTIONS, matchPrepTitle, MIN_MATCH_FITNESS, PRESEASON_WEEKS } from "../lib/training";
-import { ratedSquad } from "../lib/players";
+import { averageFitness, averageMatchOverall, DEFAULT_WEEK_SHAPE, MATCH_PREP_OPTIONS, matchPrepTitle, MIN_MATCH_FITNESS, PRESEASON_WEEKS } from "../lib/training";
+import { ratedSquad, sideTeamwork } from "../lib/players";
 import { rollClimate, climateSummary } from "../lib/weather";
 
 type Props = {
@@ -118,7 +118,7 @@ export function HomeScreen({
   const squad = ratedSquad(save.clubId, save);
   const names = squad.map((player) => player.name);
   const fitness = averageFitness(save.condition, names);
-  const sharpness = averageSharpness(save.condition, names);
+  const teamwork = sideTeamwork(save.clubId, save.sheet, save.condition, save, squad);
   const form = averageMatchOverall(squad, save.condition, save.sheet.starters);
   const preseason = save.phase === "preseason";
   const formDelta = Math.round((form.match - form.ability) * 10) / 10;
@@ -168,11 +168,21 @@ export function HomeScreen({
 
       <section className="card card--compact">
         <p className="kicker">{preseason ? `Preseason · week ${Math.min(save.preseasonWeek, PRESEASON_WEEKS)} of ${PRESEASON_WEEKS}` : "Condition"}</p>
-        <h3>
-          Panel fitness {fitness} · sharpness {sharpness}
-        </h3>
-        <div className="attr-bar fatigue-bar">
-          <i className={fitness <= MIN_MATCH_FITNESS ? "is-warn" : ""} style={{ width: `${fitness}%` }} />
+        <div className="condition-stats">
+          <div className="attr-row">
+            <span>Fitness</span>
+            <div className="attr-bar">
+              <i className={fitness <= MIN_MATCH_FITNESS ? "is-warn" : ""} style={{ width: `${fitness}%` }} />
+            </div>
+            <em>{fitness}</em>
+          </div>
+          <div className="attr-row">
+            <span>Teamwork</span>
+            <div className="attr-bar">
+              <i style={{ width: `${Math.min(100, (teamwork / 20) * 100)}%` }} />
+            </div>
+            <em>{teamwork}</em>
+          </div>
         </div>
         <p className="xv-form">
           Championship XV match rating {form.match}

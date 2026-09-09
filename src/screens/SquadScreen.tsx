@@ -87,14 +87,6 @@ function PlayerDetail({
             <em>{fitnessOf(condition)}</em>
             <span className="delta" />
           </div>
-          <div className="attr-row">
-            <span>Sharpness</span>
-            <div className="attr-bar">
-              <i style={{ width: `${condition.sharpness}%` }} />
-            </div>
-            <em>{condition.sharpness}</em>
-            <span className="delta" />
-          </div>
           {trainingLifts.length > 0 ? <p className="form-line">Profile stats: {trainingLifts.join(" · ")}</p> : null}
           {isOvertrained(condition) ? (
             <p className="warn">
