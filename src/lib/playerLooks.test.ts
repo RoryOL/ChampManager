@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { generatedLook, lookForPlayer } from "./playerLooks";
+import { createAvatar } from "@dicebear/core";
+import * as adventurer from "@dicebear/adventurer";
+import { generatedLook, lookForPlayer, portraitHair } from "./playerLooks";
 import { ratedSquad } from "./players";
 
 describe("generated player portraits", () => {
@@ -9,5 +11,14 @@ describe("generated player portraits", () => {
     expect(lookForPlayer("Cian Kirby")).toEqual(generatedLook("Cian Kirby"));
     const looks = ratedSquad("clooney-quin").map((player) => JSON.stringify(lookForPlayer(player.name)));
     expect(new Set(looks).size).toBeGreaterThan(10);
+  });
+
+  it("builds an svg portrait from a name", () => {
+    const svg = createAvatar(adventurer, {
+      seed: "Tony Kelly",
+      hair: portraitHair("quiff"),
+    }).toString();
+    expect(svg).toContain("<svg");
+    expect(svg.length).toBeGreaterThan(500);
   });
 });
