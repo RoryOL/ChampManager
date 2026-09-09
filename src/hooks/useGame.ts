@@ -25,6 +25,7 @@ import {
   withClubSheet,
   withClubTactics,
   withClubTraining,
+  withSeasonWrap,
 } from "../lib/multiplayer/campaign";
 import { DEFAULT_DIFFICULTY, performanceBoostFor } from "../lib/difficulty";
 import { randomId } from "../lib/multiplayer/codes";
@@ -56,6 +57,7 @@ import {
 } from "../lib/aiManager";
 import { resolveMatchSides, teamById } from "../lib/resolve";
 import { nextBatch } from "../lib/schedule";
+import { championshipWinnerId, seasonFinaleStep } from "../lib/season";
 import { knockoutNeedsExtraTime, replayFixture, scoresAreLevel, withReplayFixture } from "../lib/knockout";
 import { formatDate, formatScore, matchPlayed, matchStageLabel, scoreTotal } from "../lib/scoring";
 import {
@@ -128,6 +130,7 @@ import type {
   Difficulty,
   MatchPrep,
   SquadBalance,
+  SeasonWrap,
 } from "../types";
 
 export type LiveMatch = {
@@ -444,6 +447,27 @@ export function useGame() {
     setPicked(null);
     setViewTeamId(null);
   }, [campaign, leaveCampaign]);
+
+  const setSeasonWrap = useCallback(
+    (wrap: SeasonWrap) => {
+      if (campaign) {
+        commitCampaign(withSeasonWrap(campaign, wrap));
+        return;
+      }
+      if (!save) return;
+      commitSolo({ ...save, seasonWrap: wrap });
+    },
+    [campaign, commitCampaign, commitSolo, save],
+  );
+
+  const startNewSeason = useCallback(() => {
+    if (campaign) {
+      leaveCampaign();
+      return;
+    }
+    if (!save) return;
+    takeCharge(save.clubId, save.difficulty, save.balance);
+  }, [campaign, leaveCampaign, save, takeCharge]);
 
   const setTactics = useCallback(
     (tactics: Tactics) => {
@@ -1491,6 +1515,9 @@ export function useGame() {
     ? waitingOnSecondHalf(campaign!, liveRow.matchId)
     : [];
 
+  const championId = championshipWinnerId(championship);
+  const finaleStep = seasonFinaleStep(championId, campaign?.seasonWrap ?? save?.seasonWrap);
+
   return {
     save,
     campaign,
@@ -1507,6 +1534,8 @@ export function useGame() {
     playedCount,
     waitingHalf,
     roomStatus,
+    championId,
+    finaleStep,
     takeCharge,
     hostCampaign,
     joinCampaign,
@@ -1515,6 +1544,8 @@ export function useGame() {
     startLobby,
     leaveCampaign,
     resign,
+    setSeasonWrap,
+    startNewSeason,
     setTactics,
     setSheet,
     setPlans,

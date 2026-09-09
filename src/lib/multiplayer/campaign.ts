@@ -21,6 +21,7 @@ import type {
   WeekSession,
   WeekShape,
   WeekState,
+  SeasonWrap,
 } from "../../types";
 import { compactName } from "../display";
 import { briefingNews } from "../briefing";
@@ -107,6 +108,10 @@ function emptyWeek(): WeekState {
 
 function bump(campaign: Campaign): Campaign {
   return { ...campaign, revision: campaign.revision + 1 };
+}
+
+export function withSeasonWrap(campaign: Campaign, seasonWrap: SeasonWrap): Campaign {
+  return bump({ ...campaign, seasonWrap });
 }
 
 function openDeadline(waitHours: WaitHours, now: number): number | null {
@@ -315,6 +320,7 @@ export function saveFromCampaign(campaign: Campaign, clubId: string): GameSave {
     weekDeltas: club.weekDeltas ?? {},
     rivals: Object.fromEntries(Object.entries(campaign.clubs).filter(([id]) => id !== clubId)),
     nextMatchPrep: club.nextMatchPrep,
+    seasonWrap: campaign.seasonWrap,
   };
 }
 

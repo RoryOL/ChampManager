@@ -224,6 +224,9 @@ export type TrainingFocus = WeekSession | "fitness" | "skills" | "setpieces";
 
 export type CalendarPhase = "preseason" | "season";
 
+/** After the Canon is won: ceremony, then a new-season offer, then browsing. */
+export type SeasonWrap = "offer" | "done";
+
 export type Difficulty = "junior" | "intermediate" | "senior" | "intercounty";
 
 /** How panels are generated when a season starts. */
@@ -471,6 +474,7 @@ export type GameSave = {
   weekDeltas: Record<string, AttributeBoosts>;
   rivals: Record<string, ClubRuntime>;
   nextMatchPrep?: MatchPrep;
+  seasonWrap?: SeasonWrap;
 };
 
 export type LivePhase =
@@ -551,4 +555,5 @@ export type Campaign = {
   reports: Record<string, MatchReport>;
   clubs: Record<string, ClubRuntime>;
   week: WeekState;
+  seasonWrap?: SeasonWrap;
 };

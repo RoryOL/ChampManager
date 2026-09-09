@@ -2212,4 +2212,186 @@ html.native-app .device {
   opacity: 0.55;
 }
 
+.season-end {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.season-end--ceremony {
+  background:
+    radial-gradient(120% 80% at 50% 0%, color-mix(in srgb, var(--club-primary) 55%, transparent), transparent 62%),
+    radial-gradient(90% 60% at 50% 100%, color-mix(in srgb, var(--club-secondary) 28%, transparent), transparent 70%),
+    linear-gradient(180deg, #0a1018 0%, #101b2c 55%, #0c121c 100%);
+}
+
+.season-end--offer {
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  background: radial-gradient(80% 50% at 50% 0%, rgba(227, 176, 31, 0.16), transparent 70%), var(--bg);
+}
+
+.season-end__glow {
+  position: absolute;
+  inset: 12% 18% auto;
+  height: 180px;
+  background: radial-gradient(circle, rgba(227, 176, 31, 0.28), transparent 70%);
+  pointer-events: none;
+}
+
+.season-end__stage {
+  position: relative;
+  z-index: 2;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 20px 18px calc(24px + var(--safe-b));
+  gap: 8px;
+}
+
+.season-end__stage h1 {
+  font-size: 40px;
+  line-height: 1.05;
+  max-width: 16ch;
+}
+
+.season-end__irish {
+  margin: 0;
+  color: var(--muted);
+  font-style: italic;
+}
+
+.season-end__cup {
+  color: var(--saffron);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 13px;
+  margin-top: 4px;
+}
+
+.season-end__score {
+  margin: 4px 0 0;
+  color: var(--ink);
+  font-size: 14px;
+  max-width: 28ch;
+}
+
+.season-end__continue {
+  margin-top: 16px;
+  min-width: 180px;
+  justify-content: center;
+}
+
+.season-end__card {
+  width: 100%;
+  max-width: 360px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 22px 18px 16px;
+  display: grid;
+  gap: 10px;
+}
+
+.season-end__card h2 {
+  font-size: 28px;
+}
+
+.season-end__card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.canon-trophy {
+  width: 132px;
+  height: 140px;
+  filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.45));
+  animation: trophy-float 3.6s ease-in-out infinite;
+}
+
+.canon-trophy__shine {
+  animation: trophy-gleam 2.8s ease-in-out infinite;
+}
+
+.streamers {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.streamer {
+  position: absolute;
+  top: -18%;
+  height: 22%;
+  border-radius: 2px;
+  opacity: 0.9;
+  animation-name: streamer-fall;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  transform: rotate(18deg);
+}
+
+.streamer--curl {
+  border-radius: 999px;
+  height: 10%;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.08) inset;
+}
+
+@keyframes streamer-fall {
+  0% {
+    transform: translate3d(0, -10%, 0) rotate(12deg);
+    opacity: 0;
+  }
+  8% {
+    opacity: 0.95;
+  }
+  100% {
+    transform: translate3d(var(--sway, 16px), 130vh, 0) rotate(210deg);
+    opacity: 0.15;
+  }
+}
+
+@keyframes trophy-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-7px);
+  }
+}
+
+@keyframes trophy-gleam {
+  0%,
+  100% {
+    opacity: 0.15;
+    transform: translateX(0);
+  }
+  50% {
+    opacity: 0.85;
+    transform: translateX(28px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .streamer,
+  .canon-trophy,
+  .canon-trophy__shine {
+    animation: none;
+  }
+
+  .streamer {
+    top: 8%;
+    opacity: 0.55;
+  }
+}
+
 
