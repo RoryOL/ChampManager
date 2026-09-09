@@ -17,6 +17,8 @@
   "dependencies": {
     "@capacitor/android": "^7.4.4",
     "@capacitor/core": "^7.4.4",
+    "@dicebear/adventurer": "^9.4.2",
+    "@dicebear/core": "^9.4.2",
     "mqtt": "^5.15.2",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"
