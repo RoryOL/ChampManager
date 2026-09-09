@@ -341,7 +341,7 @@ export function SquadScreen({
                         age={player.age}
                         colours={viewed?.colours ?? { primary: "#1a3d7c", secondary: "#e8c547" }}
                         position={player.position}
-                        size={32}
+                        size={40}
                       />
                       <span>
                         <strong>{player.name}</strong>
