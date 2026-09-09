@@ -1,5 +1,5 @@
 import type { PlayerCondition, PlayerMatchStats, RatedPlayer, TeamSheet } from "../types";
-import { createRng, seedFrom } from "./rng";
+import { createRng, pickOne, seedFrom } from "./rng";
 
 export const DEFAULT_FORM = 52;
 export const HIGH_FORM = 72;
@@ -105,6 +105,7 @@ function joinNames(names: string[]): string {
 export function formCoachNotes(
   condition: Record<string, PlayerCondition> | undefined,
   names?: string[],
+  seed = 1,
 ): string[] {
   if (!condition) return [];
   const pool = names && names.length > 0 ? names : Object.keys(condition);
@@ -115,17 +116,30 @@ export function formCoachNotes(
     if (value >= HIGH_FORM) hot.push(name);
     else if (value <= LOW_FORM) cold.push(name);
   }
+  const random = createRng(seedFrom(`form-notes:${seed}:${hot.join(",")}:${cold.join(",")}`));
   const notes: string[] = [];
   if (hot.length > 0) {
     const who = joinNames(hot.slice(0, 3));
+    const looks = hot.length === 1 ? "looks" : "look";
     notes.push(
-      `${who} ${hot.length === 1 ? "looks" : "look"} in a vein of form. The striking and first touch are there.`,
+      pickOne(random, [
+        `${who} ${looks} in a vein of form. The striking and first touch are there.`,
+        `${who} ${looks} flying. Keep feeding ${hot.length === 1 ? "him" : "them"} while the eye is in.`,
+        `${who} ${hot.length === 1 ? "has" : "have"} the hurling in the legs — first touch, striking, the lot.`,
+        `${who} ${looks} like ${hot.length === 1 ? "a man" : "men"} you build the next attack around. Ride the vein of form.`,
+      ]),
     );
   }
   if (cold.length > 0) {
     const who = joinNames(cold.slice(0, 3));
+    const looks = cold.length === 1 ? "looks" : "look";
     notes.push(
-      `${who} ${cold.length === 1 ? "looks" : "look"} out of sorts — the touch is off and scores that should drop are drifting.`,
+      pickOne(random, [
+        `${who} ${looks} out of sorts — the touch is off and scores that should drop are drifting.`,
+        `${who} ${looks} off colour. The first touch is heavy and the pocket is a yard away.`,
+        `${who} ${looks} a yard off it. Sit ${cold.length === 1 ? "him" : "them"} if the marker is winning, or simplify the role.`,
+        `${who} ${looks} out of sorts. Do not ask him to take the hard strike until the touch comes back.`,
+      ]),
     );
   }
   return notes;

@@ -34,7 +34,7 @@ type Props = {
   onContinueSecond: (tactics: Tactics, sheet: TeamSheet) => void;
   onSkipRest: (tactics: Tactics, sheet: TeamSheet) => void;
   onSetTactics?: (tactics: Tactics) => void;
-  onStartKickoff?: () => void;
+  onStartThrowIn?: () => void;
   waitingOn?: { name: string; clubId: string }[];
   onPassDevice?: (playerId: string) => void;
   passSeats?: { playerId: string; name: string }[];
@@ -50,7 +50,7 @@ export function MatchScreen({
   onContinueSecond,
   onSkipRest,
   onSetTactics,
-  onStartKickoff,
+  onStartThrowIn,
   waitingOn = [],
   onPassDevice,
   passSeats = [],
@@ -70,7 +70,7 @@ export function MatchScreen({
   const [htSecond, setHtSecond] = useState<string | null>(null);
   const interval = SPEEDS.find((item) => item.id === speed)?.ms ?? 1100;
   const playing = live.phase === "first" || live.phase === "second" || live.phase === "et1" || live.phase === "et2";
-  const atKickoff = live.phase === "kickoff";
+  const atThrowIn = live.phase === "throw-in";
 
   useEffect(() => {
     if (!playing) return;
@@ -97,10 +97,10 @@ export function MatchScreen({
     away: awayId === save.clubId ? save.condition : undefined,
   });
   const atHalfTime = live.phase === "half-time" || live.phase === "extra-time" || live.phase === "extra-half";
-  const ourKickoffSheet = save.clubId === homeId ? live.user.homeSheet : live.user.awaySheet;
-  const theirKickoffSheet = save.clubId === homeId ? live.user.awaySheet : live.user.homeSheet;
-  const ourKickoffXv = save.clubId === homeId ? homeSquad : awaySquad;
-  const theirKickoffXv = save.clubId === homeId ? awaySquad : homeSquad;
+  const ourThrowInSheet = save.clubId === homeId ? live.user.homeSheet : live.user.awaySheet;
+  const theirThrowInSheet = save.clubId === homeId ? live.user.awaySheet : live.user.homeSheet;
+  const ourThrowInXv = save.clubId === homeId ? homeSquad : awaySquad;
+  const theirThrowInXv = save.clubId === homeId ? awaySquad : homeSquad;
   const theirHtSheet =
     save.clubId === homeId
       ? (live.user.awayClosingSheet ?? live.user.awaySheet)
@@ -248,7 +248,7 @@ export function MatchScreen({
           <b>{formatScore(score.away)}</b>
         </div>
       </section>
-      {!atKickoff ? (
+      {!atThrowIn ? (
         <>
           <div className="momentum" aria-label="Momentum">
             <span>{home ? compactName(home) : "Home"}</span>
@@ -281,7 +281,7 @@ export function MatchScreen({
           }
         />
       ) : null}
-      {!atKickoff ? (
+      {!atThrowIn ? (
         <p className="live-strip">
           Poss {chart.homeStats.possessions}-{chart.awayStats.possessions} · Shots {chart.homeStats.scores}/{chart.homeStats.shots}-{chart.awayStats.scores}/{chart.awayStats.shots} · Puck-outs {formatWonLost(chart.homeStats.puckoutsWon, chart.homeStats.puckoutsAttempted ?? 0)} / {formatWonLost(chart.awayStats.puckoutsWon, chart.awayStats.puckoutsAttempted ?? 0)} · Tackles {chart.homeStats.tacklesWon}-{chart.awayStats.tacklesWon}
         </p>
@@ -290,7 +290,7 @@ export function MatchScreen({
       live.phase !== "half-wait" &&
       live.phase !== "extra-time" &&
       live.phase !== "extra-half" &&
-      !atKickoff ? (
+      !atThrowIn ? (
         <div className="speed-row pane-row">
           <button type="button" className={pane === "call" ? "is-active" : ""} onClick={() => setPane("call")}>
             Commentary
@@ -300,7 +300,7 @@ export function MatchScreen({
           </button>
         </div>
       ) : null}
-      {atKickoff ? (
+      {atThrowIn ? (
         <div className="ht-panel">
           <h3>Before throw-in</h3>
           <p className="hint">
@@ -309,14 +309,14 @@ export function MatchScreen({
           </p>
           {onSetTactics ? (
             <>
-              <TacticControls tactics={save.tactics} onChange={onSetTactics} compact xv={ourKickoffXv} />
+              <TacticControls tactics={save.tactics} onChange={onSetTactics} compact xv={ourThrowInXv} />
               <ManMarkPicker
                 tactics={save.tactics}
                 onChange={onSetTactics}
-                ourSheet={ourKickoffSheet}
-                theirSheet={theirKickoffSheet}
-                ourXv={ourKickoffXv}
-                theirXv={theirKickoffXv}
+                ourSheet={ourThrowInSheet}
+                theirSheet={theirThrowInSheet}
+                ourXv={ourThrowInXv}
+                theirXv={theirThrowInXv}
                 ourName={save.clubId === homeId ? (home ? compactName(home) : "Home") : away ? compactName(away) : "Away"}
                 theirName={save.clubId === homeId ? (away ? compactName(away) : "Away") : home ? compactName(home) : "Home"}
                 compact
@@ -357,7 +357,7 @@ export function MatchScreen({
               ? "The sides are level. Two periods of ten minutes. Pick two names in your grid and tap Swap beside it."
               : live.phase === "extra-half"
                 ? "Change ends for the second extra period. Pick two names in your grid and tap Swap beside it."
-                : "Pick two names in your grid and tap Swap beside it. Shirt numbers stay from kickoff — a 16 stays 16 if he comes on."}{" "}
+                : "Pick two names in your grid and tap Swap beside it. Shirt numbers stay from the throw-in — a 16 stays 16 if he comes on."}{" "}
             You have {remainingSubs} of {MATCH_SUB_LIMIT} substitutions left.
           </p>
           {statsPanel}
@@ -425,9 +425,9 @@ export function MatchScreen({
           <button type="button" className="btn" onClick={onClose}>
             Continue
           </button>
-        ) : atKickoff ? (
+        ) : atThrowIn ? (
           <>
-            <button type="button" className="btn" onClick={() => onStartKickoff?.()}>
+            <button type="button" className="btn" onClick={() => onStartThrowIn?.()}>
               Throw in
             </button>
             <button type="button" className="btn btn--ghost" onClick={onSkip}>

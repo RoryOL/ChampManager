@@ -1665,17 +1665,17 @@ export function simulateMatch(options: {
       );
       lastPasser = moved.passer;
     } else if (random() < longBallDeliveryChance(direct)) {
-      const kickerPool = indicesWhere(names, (index) => index >= 6 && index <= 11);
-      const kickerPick = pickIndexed(names, kickerPool.length > 0 ? kickerPool : names.map((_, i) => i), random, (index) => {
+      const strikerPool = indicesWhere(names, (index) => index >= 6 && index <= 11);
+      const strikerPick = pickIndexed(names, strikerPool.length > 0 ? strikerPool : names.map((_, i) => i), random, (index) => {
         const player = playerOf(teamId, names[index] ?? "");
         return (player?.ratings.passing ?? 11) * 0.5 + (player?.ratings.vision ?? 11) * 0.5;
       });
-      const kicker = playerOf(teamId, kickerPick.name);
-      lastPasser = kickerPick.name;
+      const striker = playerOf(teamId, strikerPick.name);
+      lastPasser = strikerPick.name;
       const found = random() <
         applyFormChance(
-          longBallFindChance(kicker?.ratings.passing ?? 11, kicker?.ratings.vision ?? 11),
-          formOf(teamId, kickerPick.name),
+          longBallFindChance(striker?.ratings.passing ?? 11, striker?.ratings.vision ?? 11),
+          formOf(teamId, strikerPick.name),
         );
       const lowBall = random() < 0.32;
       const targetPick = pickIndexed(names, forwardIndices(names), random, (index) => {
@@ -1714,7 +1714,7 @@ export function simulateMatch(options: {
             found,
           );
       pendingCredits.push({
-        name: kickerPick.name,
+        name: strikerPick.name,
         teamId,
         passesAttempted: 1,
         passesCompleted: found || collected ? 1 : 0,
@@ -1755,7 +1755,7 @@ export function simulateMatch(options: {
                   ? `${fielderPick.name} gathers the long ball in the square.`
                   : `Breaking ball in the square — ${fielderPick.name} gathers.`
                 : found
-                  ? `${kickerPick.name} finds ${fielderPick.name} with the long ball.`
+                  ? `${strikerPick.name} finds ${fielderPick.name} with the long ball.`
                   : `Breaking ball — ${fielderPick.name} gathers the long delivery.`,
             credits: mergeCredits([...pendingCredits.splice(0, pendingCredits.length), ...moved.credits]),
           });
@@ -2085,7 +2085,9 @@ export function simulateMatch(options: {
         kind: "wide",
         text:
           distanceM >= 55
-            ? `Wide from distance — ${playerName} pulls the trigger from ${Math.round(distanceM)} metres.`
+            ? random() < 0.5
+              ? `Wide from distance — ${playerName} lets fly from ${Math.round(distanceM)} metres.`
+              : `Wide — ${playerName} strikes from ${Math.round(distanceM)} metres and it tails away.`
             : `Wide from ${playerName}.`,
         credits: flush([{ name: playerName, teamId, shots: 1 }]),
       });

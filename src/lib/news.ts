@@ -128,6 +128,8 @@ export function chairmanWelcome(options: {
     `The chairman sat you down in the clubhouse before a ball was pucked.`,
     `First job as ${compactName(options.club)} manager is a handshake from the chairman — and a warning.`,
     `Welcome to ${options.club.name}. The chairman did not waste the first meeting on small talk.`,
+    `The committee room still smelled of last winter. The chairman got to the point before the tea arrived.`,
+    `You had barely hung the coat when the chairman laid out the year — no speeches, no tour of the pitch.`,
   ]);
   return {
     ambition: ambition.target,
@@ -167,10 +169,17 @@ export function matchReportItem(options: {
   seed: number;
   stageLabel: string;
 }): NewsItem {
+  const random = createRng(seedFrom(`${options.seed}:match:${options.sim.matchId}`));
   const ourScore = options.sim.homeId === options.clubId ? options.homeScore : options.awayScore;
   const theirScore = options.sim.homeId === options.clubId ? options.awayScore : options.homeScore;
   const margin = scoreTotal(ourScore) - scoreTotal(theirScore);
   const resultWord = margin > 0 ? "won" : margin < 0 ? "went down" : "drew";
+  const colour = pickOne(random, [
+    "The throw-in was only the start of it; the breaking ball told the rest.",
+    "It was a championship hour of puck-outs, dirty ball and scores from play.",
+    "Whoever won the first hook generally won the next score.",
+    "The sliotar spent a long time in the air, and the team that fielded it looked the part.",
+  ]);
   const coach = options.sim.coachReport[0] ? ` ${options.sim.coachReport[0]}` : "";
   return newsItem({
     id: makeNewsId(options.seed, `match:${options.sim.matchId}`),
@@ -179,7 +188,7 @@ export function matchReportItem(options: {
     matchId: options.sim.matchId,
     tone: margin > 0 ? "positive" : margin < 0 ? "negative" : "neutral",
     title: `${options.homeName} ${formatScore(options.homeScore)} ${options.awayName} ${formatScore(options.awayScore)}`,
-    body: `${options.clubName} ${resultWord} in ${options.stageLabel.toLowerCase()}, ${formatScoreWithTotal(options.homeScore)} to ${formatScoreWithTotal(options.awayScore)}. ${starsBlurb(options.sim.players, options.clubId)}${coach}`,
+    body: `${options.clubName} ${resultWord} in ${options.stageLabel.toLowerCase()}, ${formatScoreWithTotal(options.homeScore)} to ${formatScoreWithTotal(options.awayScore)}. ${colour} ${starsBlurb(options.sim.players, options.clubId)}${coach}`,
   });
 }
 
@@ -234,6 +243,7 @@ export function chairmanAfterMatch(options: {
   if (band === "ordinary") return null;
   const random = createRng(seedFrom(`${options.seed}:chairman:${options.matchId}`));
   const target = AMBITION_LABEL[options.ambition];
+  const them = compactName(options.opponent);
   if (band === "very-good") {
     return newsItem({
       id: makeNewsId(options.seed, `chairman:${options.matchId}`),
@@ -241,11 +251,25 @@ export function chairmanAfterMatch(options: {
       date: options.date,
       matchId: options.matchId,
       tone: "positive",
-      title: pickOne(random, ["Chairman delighted", "A word from the chairman", "Chairman: that's more like it"]),
+      title: pickOne(random, [
+        "Chairman in raptures",
+        "Champagne in the committee room",
+        "Chairman: we've arrived",
+        "A toast from the chairman",
+        "Chairman on cloud nine",
+        "He nearly kissed the Canon",
+        "Chairman: that was poetry",
+        "Chairman cannot contain himself",
+      ]),
       body: pickOne(random, [
-        `The chairman rang after the ${compactName(options.opponent)} match. That is the standard if we are serious about ${target}. Keep it going.`,
-        `Message from the chairman: that showing against ${compactName(options.opponent)} is why he appointed you. Do not let the parish get drunk on it — ${target} is still the job.`,
-        `The chairman was smiling in the stand. "That is championship hurling. Now do it in August."`,
+        `The chairman was hugging selectors in the stand. He called it the finest hour this club has seen in a generation and said the Canon is "coming home if we hurl like that." Do not tell him it is only July.`,
+        `Message from the chairman, all caps: that showing against ${them} was "championship hurling from the gods." He has already asked the treasurer about a bus for September. ${target.charAt(0).toUpperCase()}${target.slice(1)} is, in his head, a formality.`,
+        `He rang twice. First to say you are a genius. Second to say the parish will never forget it. "That is why I hired you. Pour something. Then do it again."`,
+        `The chairman was in tears in the clubhouse. He called the fifteen "immortals" and told a journalist we are the team to beat in Clare. Ambition was ${target}. After that display, he is talking about monuments.`,
+        `He stood on a chair. "I have waited years for a night like this." He wants the open-top booked and the Canon polished. Against ${them}, he said, we looked like a county side in club jerseys.`,
+        `Text at full-time: "I could kiss every one of them." Then a voicemail about banners, a function, and how ${target} is "the least of it now." He has lost the run of himself — keep him off the radio.`,
+        `The chairman called it the best hurling he has seen in a Clare club championship. He named no player because "the whole fifteen were poetry." He expects ${target} as a starting point, not a dream.`,
+        `He was still in the dressing room at eleven, buying drink, telling anyone who would listen that ${them} "were taught a lesson" and that you have "transformed this place overnight."`,
       ]),
     });
   }
@@ -255,13 +279,42 @@ export function chairmanAfterMatch(options: {
     date: options.date,
     matchId: options.matchId,
     tone: "negative",
-    title: pickOne(random, ["Chairman unimpressed", "A word from the chairman", "Chairman: not good enough"]),
+    title: pickOne(random, [
+      "Chairman seething",
+      "Chairman: a disgrace",
+      "He wants answers",
+      "Chairman tears strips",
+      "Chairman: I hired the wrong man",
+      "Soft as the parish said",
+      "Chairman left early",
+      "An embarrassment, says the chairman",
+    ]),
     body: pickOne(random, [
-      `The chairman wants a meeting. A showing like that against ${compactName(options.opponent)} is not how you chase ${target}. He expects a response.`,
-      `Text from the chairman after full-time: "I did not hire you for that." ${target.charAt(0).toUpperCase()}${target.slice(1)} will not arrive by accident.`,
-      `The chairman left before the speeches. He told a selector the fifteen were "soft" and that you would be hearing from him.`,
+      `The chairman wants you in the committee room. He called the showing against ${them} "an embarrassment to the jersey" and said ${target} talk is "a joke until you can win dirty ball." He expects a response, not a speech.`,
+      `Text from the chairman after full-time: "I did not hire you for that." He told a selector the fifteen were "soft as butter" and that the parish is already laughing. ${target.charAt(0).toUpperCase()}${target.slice(1)} will not arrive by accident.`,
+      `He left before the speeches. In the car park he said he could have picked a better fifteen from the stand. "Do not waste my winter. Fix it or I will."`,
+      `A voicemail, clipped: "That was a disgrace. ${them} wanted it more, hooked more, and looked like they had a manager." He has asked for a meeting. Bring answers, not excuses.`,
+      `The chairman did not congratulate anyone. He called the display "schoolboy stuff" and said if this is the plan, ${target} is "delusional." He expects the next session to hurt.`,
+      `He told the secretary you would be hearing from him. "I did not put my name to a project so we could be humiliated by ${them}." The parish hall will be full of that line by morning.`,
+      `Message: "Soft. Lost. And you stood there." He wants to know why the middle third was a walk-through and why anyone still mentions ${target} with a straight face.`,
+      `The chairman sat with his coat on for the last ten minutes. He called it "the worst hour in years" and said the clubhouse bar was quieter than a funeral. He expects you to look the dressing room in the eye.`,
     ]),
   });
+}
+
+function pressStandouts(
+  players: PlayerMatchStats[] | undefined,
+  clubId: string,
+): { star?: PlayerMatchStats; second?: PlayerMatchStats } {
+  const ours = (players ?? [])
+    .filter((row) => row.teamId === clubId && row.minutes > 0)
+    .sort((a, b) => b.rating - a.rating || b.scores - a.scores);
+  return { star: ours[0], second: ours[1] };
+}
+
+function postedScore(player: PlayerMatchStats): string {
+  if (player.scores <= 0) return "";
+  return ` He chipped in ${player.scores} scores.`;
 }
 
 export function localPressItem(options: {
@@ -275,6 +328,7 @@ export function localPressItem(options: {
   matchId: string;
   ambition: AmbitionTarget;
   played: number;
+  players?: PlayerMatchStats[];
 }): NewsItem {
   const random = createRng(seedFrom(`${options.seed}:press:${options.matchId}`));
   const outlet = pickOne(random, [
@@ -285,53 +339,101 @@ export function localPressItem(options: {
   ]);
   const paper = outlet.mention;
   const target = AMBITION_LABEL[options.ambition];
+  const us = compactName(options.club);
+  const them = compactName(options.opponent);
+  const scoreline = `${formatScoreWithTotal(options.ourScore)} to ${formatScoreWithTotal(options.theirScore)}`;
   const margin = scoreTotal(options.ourScore) - scoreTotal(options.theirScore);
   const gap = clubRank(options.opponent.id) - clubRank(options.club.id);
   const underwhelmingWin = options.result === "win" && (margin < 5 || gap < -2);
   const spicyLoss = options.result === "loss";
   const tone = spicyLoss || underwhelmingWin ? "negative" : options.result === "win" ? "positive" : "neutral";
+  const { star, second } = pressStandouts(options.players, options.club.id);
+
   let title: string;
-  let body: string;
+  let lede: string;
   if (spicyLoss) {
     title = pickOne(random, [
-      `${compactName(options.club)} looking lost`,
-      `Questions for the ${compactName(options.club)} manager`,
+      `${us} looking lost`,
+      `Questions for the ${us} manager`,
       `Is the dressing room buying it?`,
+      `${us} second to every ball`,
+      `A long night for ${us}`,
     ]);
-    body = pickOne(random, [
-      `${paper} does not hold back. After ${compactName(options.opponent)} put them away, one columnist wrote that talk of ${target} is "delusional" until the fifteen can win dirty ball. A caller asked if the manager is already out of his depth.`,
-      `In ${paper}: "${compactName(options.club)} were second to every break. If the chairman wanted ${target}, he may want to look at the sideline first." The piece names no player, but the dressing room will know.`,
-      `${paper} ran an opinion piece claiming the manager has the panel "confused" and that ${compactName(options.opponent)} "wanted it more." It will not go down well with the lads.`,
+    lede = pickOne(random, [
+      `${paper} does not hold back after ${them} put ${us} away, ${scoreline}. The piece says the throw-in barely mattered: ${them} won the dirty ball, the puck-outs, and the hour. Talk of ${target} is called "delusional" until the fifteen can win a break. A caller asked if the manager is already out of his depth.`,
+      `In ${paper}: "${us} were second to every break. If the chairman wanted ${target}, he may want to look at the sideline first." The match report walks through a limp middle third and a scoring zone that never heated up. It will not go down well in the dressing room.`,
+      `${paper} ran a long opinion claiming the manager has the panel "confused" and that ${them} "wanted it more from the first puck." The scoreboard, ${scoreline}, is treated as evidence, not a bad day. The parish will be quoting it all week.`,
     ]);
   } else if (underwhelmingWin) {
     title = pickOne(random, [
       `Win, but no one is fooled`,
-      `${compactName(options.club)} still searching`,
+      `${us} still searching`,
       `That will not win a championship`,
+      `Four points and a warning`,
     ]);
-    body = pickOne(random, [
-      `${paper} was unimpressed even in victory. "Beating ${compactName(options.opponent)} like that is not ${target} form," the column ran. "If this is the plan, Clare will not be talking about them in September."`,
-      `${paper} called it a "soft four points" and asked whether the manager is overthinking it. The dressing room hates that kind of coverage.`,
-      `${paper} went after the display, not the result. "They won. They were still poor. Ambition is cheap."`,
+    lede = pickOne(random, [
+      `${paper} was unimpressed even in victory. ${us} beat ${them} ${scoreline}, but the column ran that "this is not ${target} form." The throw-in was messy, the shooting wasteful, and the second half a grind. "If this is the plan, Clare will not be talking about them in September."`,
+      `${paper} called it a "soft four points" after ${us} scraped past ${them}, ${scoreline}. The writer asked whether the manager is overthinking the shape while basic hurling — first hook, first puck-out — stays sloppy. The dressing room hates that kind of coverage.`,
+      `${paper} went after the display, not the result. ${us} won, ${scoreline}, and were still described as poor. "Ambition is cheap. Championship hurling is winning dirty ball for sixty minutes, not surviving a night you should have owned."`,
     ]);
   } else if (options.result === "win") {
     title = pickOne(random, [
-      `${compactName(options.club)} turning heads`,
+      `${us} turning heads`,
       `Suddenly they look like a team`,
       `Don't get carried away — yet`,
+      `${us} hurl with a bit of spite`,
     ]);
-    body = pickOne(random, [
-      `${paper} admits ${compactName(options.club)} looked the part against ${compactName(options.opponent)}. Then the sting: "One swallow. The Canon is not won in July."`,
-      `Local coverage was warmer, but ${paper} still warned the parish not to book the open-top bus. ${target.charAt(0).toUpperCase()}${target.slice(1)} remains a long road.`,
-      `${paper} praised the fifteen, then asked if they can do it when the weather turns and the frees dry up.`,
+    lede = pickOne(random, [
+      `${paper} admits ${us} looked the part against ${them}, ${scoreline}. The report dwells on the throw-in, the first puck-out won, and a fifteen that hooked with a bit of spite. Then the sting: "One swallow. The Canon is not won in July."`,
+      `Local coverage was warmer after ${us} saw off ${them} ${scoreline}. ${paper} still warned the parish not to book the open-top bus. ${target.charAt(0).toUpperCase()}${target.slice(1)} remains a long road, but the piece concedes they are harder to play against than a month ago.`,
+      `${paper} praised a proper championship win, ${scoreline} over ${them}, then asked if they can do it when the weather turns and the frees dry up. The hurling, for one evening, looked like a side that belongs in August.`,
     ]);
   } else {
-    title = pickOne(random, [`Points dropped, tongues wagging`, `A draw that satisfies nobody`]);
-    body = pickOne(random, [
-      `${paper} called the ${compactName(options.opponent)} draw "two points and a headache." For a club chasing ${target}, it reads like a lost opportunity.`,
-      `The local take: ${compactName(options.club)} were lucky not to lose, and lucky will not deliver ${target}.`,
+    title = pickOne(random, [
+      `Points dropped, tongues wagging`,
+      `A draw that satisfies nobody`,
+      `${us} leave it behind them`,
+    ]);
+    lede = pickOne(random, [
+      `${paper} called the ${them} draw "two points and a headache," ${scoreline}. For a club chasing ${target}, it reads like a lost opportunity: puck-outs shared, wides stacked, and a throw-in that never quite became a statement.`,
+      `The local take: ${us} were lucky not to lose to ${them}, ${scoreline}, and lucky will not deliver ${target}. The report spends more ink on missed pockets than on the point on the board.`,
     ]);
   }
+
+  let playerBit: string;
+  if (star) {
+    const extra = second && second.rating >= 7 ? ` ${second.name} was not far off it.` : "";
+    playerBit = pickOne(random, [
+      `${star.name} was the one man the parish will remember (${star.rating.toFixed(1)}).${postedScore(star)}${extra} The rest of the fifteen will know they were measured against that hour.`,
+      `The match report lingers on ${star.name}, who hurled like the game belonged to him (${star.rating.toFixed(1)}).${postedScore(star)}${extra} It is the sort of club showing that travels beyond the parish.`,
+      `${star.name} caught the eye from the throw-in (${star.rating.toFixed(1)}).${postedScore(star)}${extra} ${paper} names him as the difference between a championship hour and a forgettable one.`,
+    ]);
+  } else {
+    playerBit = pickOne(random, [
+      `No individual is named as a saviour. The piece treats it as a fifteen's night, for better or worse.`,
+      `The writer stays off naming a hero and instead asks whether the dressing room is pulling in the one direction.`,
+    ]);
+  }
+
+  const clareBit = star
+    ? pickOne(random, [
+        `The column's closer is pointed: ${star.name} should be brought into the Clare team. Club championships keep throwing up county hurlers, and the Banner panel cannot keep pretending otherwise.`,
+        `${paper} argues the Clare senior panel should have ${star.name} in from the cold. "Bring club men into the county set-up while they are flying," one line ran, "not after another winter of the same names."`,
+        `There is a county call-up pitch in the last paragraph. If Clare are serious about September, a club showing like ${star.name}'s cannot be ignored — the Banner have been slow to trust men who do it every weekend in the club.`,
+        `A selector is quoted off the record: club players of ${star.name}'s stamp belong in the Clare conversation now. The parish has heard that before; the paper says it is time the county acted on it.`,
+      ])
+    : pickOne(random, [
+        `${paper} still found room to argue that Clare should be mining clubs like ${us} for the senior panel, not waiting on the same county names every spring.`,
+        `The closer asks why the Banner set-up still looks past club championships when nights like this keep producing men who should be brought into the Clare team.`,
+      ]);
+
+  const sting = pickOne(random, [
+    `Ambition around ${target} will follow them to the next throw-in, whether they like the coverage or not.`,
+    `The dressing room can ignore the byline. They will not ignore how it reads in the clubhouse.`,
+    `By Monday the parish will have picked a favourite sentence and worn it out.`,
+  ]);
+
+  let body = `${lede} ${playerBit} ${clareBit} ${sting}`;
   if (options.played >= 2 && options.ambition === "canon" && options.result !== "win") {
     body += " The Canon talk is already following them around.";
   }

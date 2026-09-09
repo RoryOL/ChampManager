@@ -484,7 +484,7 @@ export function useGame() {
 
   const swapPlayers = useCallback(
     (first: string, second: string) => {
-      if (!save || live?.phase === "kickoff") return;
+      if (!save || live?.phase === "throw-in") return;
       const sheet = swapPlayersInSheet(expandSheetToPanel(save.clubId, save.sheet, save.seed), first, second);
       if (campaign && activeSeat) {
         commitCampaign(withClubSheet(campaign, activeSeat.clubId, sheet));
@@ -498,7 +498,7 @@ export function useGame() {
 
   const setSheet = useCallback(
     (sheet: TeamSheet) => {
-      if (!save || live?.phase === "kickoff") return;
+      if (!save || live?.phase === "throw-in") return;
       const next = expandSheetToPanel(save.clubId, sheet, save.seed);
       if (campaign && activeSeat) {
         commitCampaign(withClubSheet(campaign, activeSeat.clubId, next));
@@ -688,7 +688,7 @@ export function useGame() {
       label: batch.label,
       match,
       cursor: 0,
-      phase: "kickoff",
+      phase: "throw-in",
       openingSheet: userSheet,
       openingHomeSheet: homeSheet,
       openingAwaySheet: awaySheet,
@@ -696,7 +696,7 @@ export function useGame() {
     });
   }, [activeSeat, beginBatch, campaign, championship, commitSolo, save]);
 
-  const startKickoff = useCallback(() => {
+  const startThrowIn = useCallback(() => {
     const next = beginBatch("first");
     if (next) setLive({ ...next, phase: "first", cursor: 0 });
   }, [beginBatch]);
@@ -841,6 +841,7 @@ export function useGame() {
             matchId: current.user.matchId,
             ambition: next.ambition,
             played: next.matches.filter((match) => match.homeScore && match.awayScore).length,
+            players: current.user.players,
           });
           items.push(press);
         }
@@ -1118,7 +1119,7 @@ export function useGame() {
     setLive((current) => {
       if (
         !current ||
-        current.phase === "kickoff" ||
+        current.phase === "throw-in" ||
         current.phase === "finished" ||
         current.phase === "half-time" ||
         current.phase === "half-wait" ||
@@ -1615,7 +1616,7 @@ export function useGame() {
     swapPlayers,
     setPicked,
     goToMatch,
-    startKickoff,
+    startThrowIn,
     skipMatch,
     advanceLive,
     closeLive,

@@ -489,7 +489,7 @@ export type LivePhase =
   | "extra-half"
   | "et2"
   | "finished"
-  | "kickoff";
+  | "throw-in";
 
 export type WaitHours = 0 | 1 | 6 | 12 | 24 | 72 | 168;
 
