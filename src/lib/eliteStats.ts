@@ -1,8 +1,8 @@
 import type { PlayerRatings } from "../types";
 import { ATTRIBUTE_KEYS, ATTRIBUTE_LABELS, type AttributeKey } from "./attributes";
 
-/** Show a badge when a displayed rating is strictly above 17. */
-export const ELITE_STAT_MIN = 18;
+/** Show a badge when a displayed rating is 15 or more. */
+export const ELITE_STAT_MIN = 15;
 export const ELITE_STAT_LIMIT = 3;
 
 export function eliteStatKeys(ratings: Pick<PlayerRatings, AttributeKey>): AttributeKey[] {

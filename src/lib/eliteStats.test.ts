@@ -14,16 +14,16 @@ function stubRatings(values: Partial<Record<(typeof ATTRIBUTE_KEYS)[number], num
 }
 
 describe("elite stat badges", () => {
-  it("only lists attributes above 17, capped at three highest", () => {
-    expect(ELITE_STAT_MIN).toBe(18);
-    expect(eliteStatKeys(stubRatings({ highFielding: 17, shooting: 16 }))).toEqual([]);
-    expect(eliteStatKeys(stubRatings({ highFielding: 18 }))).toEqual(["highFielding"]);
+  it("only lists attributes of 15 or more, capped at three highest", () => {
+    expect(ELITE_STAT_MIN).toBe(15);
+    expect(eliteStatKeys(stubRatings({ highFielding: 14, shooting: 13 }))).toEqual([]);
+    expect(eliteStatKeys(stubRatings({ highFielding: 15 }))).toEqual(["highFielding"]);
     expect(
       eliteStatKeys(
         stubRatings({
           highFielding: 19,
           shooting: 18,
-          speed: 17,
+          speed: 14,
           frees: 20,
           composure: 18,
         }),
