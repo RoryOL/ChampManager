@@ -517,6 +517,7 @@ function cloneCondition(current: PlayerCondition): PlayerCondition {
     mood: current.mood,
     boosts: current.boosts ? { ...current.boosts } : undefined,
     injury: current.injury ? { ...current.injury } : undefined,
+    suspension: current.suspension ? { ...current.suspension } : undefined,
   };
 }
 
@@ -910,12 +911,10 @@ export function applyTraining(
       overtrained.push(player.name);
     }
     next[player.name] = {
+      ...current,
       fatigue,
       sharpness,
-      form: current.form,
-      mood: current.mood,
       boosts,
-      injury: current.injury,
     };
     const playerDelta = boostDeltas(before, boosts);
     if (Object.keys(playerDelta).length > 0) deltas[player.name] = playerDelta;
@@ -1153,12 +1152,9 @@ export function applyMatchFatigue(
     const add = matchFatigueDelta(62, tactics, position, started, age, shortForwards, chaseEffort);
     const recover = 4 * ageResponse(age).recover;
     next[name] = {
+      ...current,
       fatigue: clampFatigue(current.fatigue + add - recover),
       sharpness: clampCondition(current.sharpness + (started ? 3 : 1)),
-      form: current.form,
-      mood: current.mood,
-      boosts: current.boosts,
-      injury: current.injury,
     };
   };
   for (const name of starters) bump(name, true);

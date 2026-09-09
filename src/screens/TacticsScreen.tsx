@@ -6,7 +6,7 @@ import { TacticControls } from "../components/TacticControls";
 import { TacticsColumnPicker } from "../components/TacticsColumnPicker";
 import { ATTRIBUTE_LABELS, ATTRIBUTE_SHORT, type AttributeKey } from "../lib/attributes";
 import { compactName } from "../lib/display";
-import { isInjured } from "../lib/injuries";
+import { isInjured, isSuspended, isUnavailable } from "../lib/injuries";
 import { formatMatchRating, lastMatchRating, seasonStatsFor } from "../lib/matchStats";
 import { coachPickSheet, expandSheetToPanel, matchShirtNumber, matchSlot, ratedSquad, sheetPlayers } from "../lib/players";
 import { resolveMatchSides, teamById } from "../lib/resolve";
@@ -126,7 +126,7 @@ export function TacticsScreen({ save, championship, nextMatch, onChange, onSwap,
   const confirmSwap = () => {
     if (!first || !second) return;
     const inSheet = (player: string) => sheet.starters.includes(player) || sheet.subs.includes(player);
-    if ((isInjured(save.condition[first]) && !inSheet(first)) || (isInjured(save.condition[second]) && !inSheet(second))) {
+    if ((isUnavailable(save.condition[first]) && !inSheet(first)) || (isUnavailable(save.condition[second]) && !inSheet(second))) {
       return;
     }
     onSwap(first, second);
@@ -212,7 +212,7 @@ export function TacticsScreen({ save, championship, nextMatch, onChange, onSwap,
                     <td className="num">{number}</td>
                     <td className="name">
                       <strong>{player.name}</strong>
-                      {isInjured(condition) ? <em>Out</em> : null}
+                      {isInjured(condition) ? <em>Out</em> : isSuspended(condition) ? <em>Suspended</em> : null}
                     </td>
                     <td>{onField ? slot : "Bench"}</td>
                     <td>{player.position}</td>
