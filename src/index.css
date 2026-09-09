@@ -1521,7 +1521,65 @@ html.native-app .device {
   left: 0;
   z-index: 2;
   background: var(--surface);
-  min-width: 132px;
+  min-width: 188px;
+}
+
+.squad-player-id {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.squad-player-id > span {
+  min-width: 0;
+}
+
+.player-headshot {
+  display: block;
+  flex-shrink: 0;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #0b1220;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.elite-stats {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  margin-top: 3px;
+}
+
+.elite-stats--card {
+  margin-top: 8px;
+  gap: 6px;
+}
+
+.stat-icon {
+  display: inline-flex;
+  color: #e8c547;
+}
+
+.stat-icon svg {
+  display: block;
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+}
+
+.elite-stats--card .stat-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.attr-row .stat-icon {
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.attr-row .stat-icon svg {
+  width: 13px;
+  height: 13px;
 }
 
 .squad-table thead th.name {
@@ -1638,9 +1696,14 @@ html.native-app .device {
 .player-card header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   gap: 12px;
   margin-bottom: 8px;
+}
+
+.player-card header > div {
+  flex: 1;
+  min-width: 0;
 }
 
 .player-card header p {
