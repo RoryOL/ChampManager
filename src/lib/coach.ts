@@ -170,7 +170,7 @@ export function buildCoachReport(input: CoachInput): string[] {
         `${we} took the day ${ourLine} to ${theirLine}. Keep the same shape unless the next opponent plays a sweeper.`,
         `${we} had the better of it, ${ourLine} to ${theirLine}. The scoreboard is right — do not tinker with a fifteen that won dirty ball.`,
         `A proper championship win, ${ourLine} to ${theirLine}. The next day will ask a different question, but the work-rate can travel.`,
-        `${we} put ${they.toLowerCase()} away ${ourLine} to ${theirLine}. Hunt the same breaking ball next day; the extras will come if the first hook is on.`,
+        `${we} put ${focused ? "them" : they} away ${ourLine} to ${theirLine}. Hunt the same breaking ball next day; the extras will come if the first hook is on.`,
         `The result is the one we wanted (${ourLine} to ${theirLine}). Look at who went missing before you change the shape.`,
       ]),
     );
@@ -375,7 +375,7 @@ export function buildCoachReport(input: CoachInput): string[] {
         pickOne(random, [
           `Teamwork is showing (${mark}). The same lads in the same positions are finding each other — keep the spine together.`,
           `That is a knitted fifteen (${mark} teamwork). Completions stayed ahead because they know the next man's run.`,
-          `The understanding is there (${mark}). Do not break the spine for the sake of a new shape.`,
+          `The teamwork is there (${mark}). Do not break the spine for the sake of a new shape.`,
         ]),
       );
     } else if (ourTeamwork <= 11 && us.passesCompleted + 4 < them.passesCompleted) {

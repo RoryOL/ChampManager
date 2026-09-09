@@ -262,7 +262,9 @@ describe("match and press news", () => {
     const top = [...ours].sort((a, b) => b.rating - a.rating)[0];
     expect(press.body.length).toBeGreaterThan(280);
     expect(press.body).toMatch(/throw-in|puck-out|sliotar|hurling/i);
-    expect(press.body).toMatch(/brought into the Clare|Clare senior panel|county call-up|Banner panel|Banner set-up/i);
+    expect(press.body).toMatch(
+      /brought into the Clare|Clare senior panel|Clare conversation|county call-up|Banner panel|Banner set-up/i,
+    );
     expect(top).toBeTruthy();
     expect(press.body).toContain(top!.name);
   });
