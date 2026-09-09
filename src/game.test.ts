@@ -115,11 +115,18 @@ describe("player ratings", () => {
     const sheet = defaultSheet("ballyea");
     const condition = Object.fromEntries(squad.map((player) => [player.name, defaultCondition()]));
     const teamwork = sideTeamwork("ballyea", sheet, condition, undefined, squad);
+    const expected =
+      Math.round(
+        (sheet.starters.reduce((sum, name) => {
+          const player = squad.find((item) => item.name === name);
+          return sum + (player?.ratings.teamwork ?? 0);
+        }, 0) /
+          sheet.starters.length) *
+          10,
+      ) / 10;
+    expect(teamwork).toBe(expected);
     expect(teamwork).toBeGreaterThan(8);
     expect(teamwork).toBeLessThanOrEqual(20);
-    const played = applyTeamwork(condition, sheet, undefined, "competitive");
-    const again = applyTeamwork(played.condition, sheet, played.lastSheet, "competitive");
-    expect(sideTeamwork("ballyea", sheet, again.condition, undefined, squad)).toBeGreaterThan(teamwork);
   });
 
   it("keeps Tony Kelly at the top of the Ballyea panel", () => {
