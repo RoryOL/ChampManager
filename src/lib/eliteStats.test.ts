@@ -43,6 +43,8 @@ describe("elite stat badges", () => {
   });
 
   it("has a distinct icon for every attribute", () => {
+    const missing = ATTRIBUTE_KEYS.filter((key) => !STAT_ICON_PATH[key]);
+    expect(missing).toEqual([]);
     expect(ATTRIBUTE_KEYS.every((key) => STAT_ICON_PATH[key].length > 8)).toBe(true);
     expect(new Set(ATTRIBUTE_KEYS.map((key) => STAT_ICON_PATH[key])).size).toBe(ATTRIBUTE_KEYS.length);
   });
