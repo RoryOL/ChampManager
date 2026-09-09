@@ -3,12 +3,13 @@ import type { Championship, GameSave, Match, RatedPlayer, Tactics, TeamSheet } f
 import { PlayerCompare } from "../components/PlayerCompare";
 import { SwapConfirmBar, nextSwapPick } from "../components/SwapConfirmBar";
 import { TacticControls } from "../components/TacticControls";
+import { ManMarkPicker } from "../components/ManMarkPicker";
 import { TacticsColumnPicker } from "../components/TacticsColumnPicker";
 import { ATTRIBUTE_LABELS, ATTRIBUTE_SHORT, type AttributeKey } from "../lib/attributes";
 import { compactName } from "../lib/display";
 import { isInjured, isSuspended, isUnavailable } from "../lib/injuries";
 import { formatMatchRating, lastMatchRating, seasonStatsFor } from "../lib/matchStats";
-import { coachPickSheet, expandSheetToPanel, matchShirtNumber, matchSlot, ratedSquad, sheetPlayers } from "../lib/players";
+import { coachPickSheet, defaultSheet, expandSheetToPanel, matchShirtNumber, matchSlot, ratedSquad, sheetPlayers } from "../lib/players";
 import { resolveMatchSides, teamById } from "../lib/resolve";
 import {
   compareStatLine,
@@ -105,6 +106,11 @@ export function TacticsScreen({ save, championship, nextMatch, onChange, onSwap,
   const opponentId =
     sides && (sides.homeId === save.clubId ? sides.awayId : sides.awayId === save.clubId ? sides.homeId : null);
   const opponent = championship && opponentId ? teamById(championship, opponentId) : undefined;
+  const us = championship ? teamById(championship, save.clubId) : undefined;
+  const opponentSheet = opponentId
+    ? expandSheetToPanel(opponentId, save.rivals[opponentId]?.sheet ?? defaultSheet(opponentId, save), save)
+    : null;
+  const opponentXv = opponentId && opponentSheet ? sheetPlayers(opponentId, opponentSheet, save) : [];
 
   useEffect(() => {
     const full = expandSheetToPanel(save.clubId, save.sheet, save);
@@ -232,6 +238,18 @@ export function TacticsScreen({ save, championship, nextMatch, onChange, onSwap,
         </div>
       </div>
       <TacticControls tactics={save.tactics} onChange={onChange} xv={xv} />
+      {opponent && opponentSheet ? (
+        <ManMarkPicker
+          tactics={save.tactics}
+          onChange={onChange}
+          ourSheet={sheet}
+          theirSheet={opponentSheet}
+          ourXv={xv}
+          theirXv={opponentXv}
+          ourName={us ? compactName(us) : "Us"}
+          theirName={compactName(opponent)}
+        />
+      ) : null}
     </div>
   );
 }

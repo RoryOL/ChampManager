@@ -4,6 +4,7 @@ import type { LiveMatch } from "../hooks/useGame";
 import { ClubBadge } from "../components/ClubBadge";
 import { MatchStatsPanel } from "../components/MatchStatsPanel";
 import { TacticControls } from "../components/TacticControls";
+import { ManMarkPicker } from "../components/ManMarkPicker";
 import { compactName, sideLabel, teamAccent } from "../lib/display";
 import { commentaryFeed, isScoreKind, momentumAt, scoreFromEvents } from "../lib/matchEngine";
 import { KeyEventsBar } from "../components/KeyEventsBar";
@@ -32,6 +33,8 @@ type Props = {
   onClose: () => void;
   onContinueSecond: (tactics: Tactics, sheet: TeamSheet) => void;
   onSkipRest: (tactics: Tactics, sheet: TeamSheet) => void;
+  onSetTactics?: (tactics: Tactics) => void;
+  onStartKickoff?: () => void;
   waitingOn?: { name: string; clubId: string }[];
   onPassDevice?: (playerId: string) => void;
   passSeats?: { playerId: string; name: string }[];
@@ -46,6 +49,8 @@ export function MatchScreen({
   onClose,
   onContinueSecond,
   onSkipRest,
+  onSetTactics,
+  onStartKickoff,
   waitingOn = [],
   onPassDevice,
   passSeats = [],
@@ -65,6 +70,7 @@ export function MatchScreen({
   const [htSecond, setHtSecond] = useState<string | null>(null);
   const interval = SPEEDS.find((item) => item.id === speed)?.ms ?? 1100;
   const playing = live.phase === "first" || live.phase === "second" || live.phase === "et1" || live.phase === "et2";
+  const atKickoff = live.phase === "kickoff";
 
   useEffect(() => {
     if (!playing) return;
@@ -91,6 +97,15 @@ export function MatchScreen({
     away: awayId === save.clubId ? save.condition : undefined,
   });
   const atHalfTime = live.phase === "half-time" || live.phase === "extra-time" || live.phase === "extra-half";
+  const ourKickoffSheet = save.clubId === homeId ? live.user.homeSheet : live.user.awaySheet;
+  const theirKickoffSheet = save.clubId === homeId ? live.user.awaySheet : live.user.homeSheet;
+  const ourKickoffXv = save.clubId === homeId ? homeSquad : awaySquad;
+  const theirKickoffXv = save.clubId === homeId ? awaySquad : homeSquad;
+  const theirHtSheet =
+    save.clubId === homeId
+      ? (live.user.awayClosingSheet ?? live.user.awaySheet)
+      : (live.user.homeClosingSheet ?? live.user.homeSheet);
+  const theirHtXv = save.clubId === homeId ? awaySquad : homeSquad;
   const remainingSubs = remainingMatchSubs(
     live.user.events.slice(0, live.cursor),
     save.clubId,
@@ -233,20 +248,24 @@ export function MatchScreen({
           <b>{formatScore(score.away)}</b>
         </div>
       </section>
-      <div className="momentum" aria-label="Momentum">
-        <span>{home ? compactName(home) : "Home"}</span>
-        <div className="momentum-track">
-          <i style={{ width: `${momentum}%` }} />
-        </div>
-        <span>{away ? compactName(away) : "Away"}</span>
-      </div>
-      <KeyEventsBar
-        events={visible}
-        homeId={homeId}
-        awayId={awayId}
-        home={home}
-        away={away}
-      />
+      {!atKickoff ? (
+        <>
+          <div className="momentum" aria-label="Momentum">
+            <span>{home ? compactName(home) : "Home"}</span>
+            <div className="momentum-track">
+              <i style={{ width: `${momentum}%` }} />
+            </div>
+            <span>{away ? compactName(away) : "Away"}</span>
+          </div>
+          <KeyEventsBar
+            events={visible}
+            homeId={homeId}
+            awayId={awayId}
+            home={home}
+            away={away}
+          />
+        </>
+      ) : null}
       {live.user.climate ? (
         <WeatherBanner
           climate={live.user.climate}
@@ -262,10 +281,16 @@ export function MatchScreen({
           }
         />
       ) : null}
-      <p className="live-strip">
-        Poss {chart.homeStats.possessions}-{chart.awayStats.possessions} · Shots {chart.homeStats.scores}/{chart.homeStats.shots}-{chart.awayStats.scores}/{chart.awayStats.shots} · Puck-outs {formatWonLost(chart.homeStats.puckoutsWon, chart.homeStats.puckoutsAttempted ?? 0)} / {formatWonLost(chart.awayStats.puckoutsWon, chart.awayStats.puckoutsAttempted ?? 0)} · Tackles {chart.homeStats.tacklesWon}-{chart.awayStats.tacklesWon}
-      </p>
-      {live.phase !== "half-time" && live.phase !== "half-wait" && live.phase !== "extra-time" && live.phase !== "extra-half" ? (
+      {!atKickoff ? (
+        <p className="live-strip">
+          Poss {chart.homeStats.possessions}-{chart.awayStats.possessions} · Shots {chart.homeStats.scores}/{chart.homeStats.shots}-{chart.awayStats.scores}/{chart.awayStats.shots} · Puck-outs {formatWonLost(chart.homeStats.puckoutsWon, chart.homeStats.puckoutsAttempted ?? 0)} / {formatWonLost(chart.awayStats.puckoutsWon, chart.awayStats.puckoutsAttempted ?? 0)} · Tackles {chart.homeStats.tacklesWon}-{chart.awayStats.tacklesWon}
+        </p>
+      ) : null}
+      {live.phase !== "half-time" &&
+      live.phase !== "half-wait" &&
+      live.phase !== "extra-time" &&
+      live.phase !== "extra-half" &&
+      !atKickoff ? (
         <div className="speed-row pane-row">
           <button type="button" className={pane === "call" ? "is-active" : ""} onClick={() => setPane("call")}>
             Commentary
@@ -275,7 +300,31 @@ export function MatchScreen({
           </button>
         </div>
       ) : null}
-      {live.phase === "half-wait" ? (
+      {atKickoff ? (
+        <div className="ht-panel">
+          <h3>Before throw-in</h3>
+          <p className="hint">
+            The fifteen is locked. You can still change tactics and man marking, then throw in. Shirt numbers stay as
+            selected.
+          </p>
+          {onSetTactics ? (
+            <>
+              <TacticControls tactics={save.tactics} onChange={onSetTactics} compact xv={ourKickoffXv} />
+              <ManMarkPicker
+                tactics={save.tactics}
+                onChange={onSetTactics}
+                ourSheet={ourKickoffSheet}
+                theirSheet={theirKickoffSheet}
+                ourXv={ourKickoffXv}
+                theirXv={theirKickoffXv}
+                ourName={save.clubId === homeId ? (home ? compactName(home) : "Home") : away ? compactName(away) : "Away"}
+                theirName={save.clubId === homeId ? (away ? compactName(away) : "Away") : home ? compactName(home) : "Home"}
+                compact
+              />
+            </>
+          ) : null}
+        </div>
+      ) : live.phase === "half-wait" ? (
         <div className="ht-panel">
           <h3>Waiting on second-half tactics</h3>
           <p className="hint">
@@ -313,6 +362,15 @@ export function MatchScreen({
           </p>
           {statsPanel}
           <TacticControls tactics={htTactics} onChange={setHtTactics} compact xv={htXv} />
+          <ManMarkPicker
+            tactics={htTactics}
+            onChange={setHtTactics}
+            ourSheet={htSheet}
+            theirSheet={theirHtSheet}
+            ourXv={htXv}
+            theirXv={theirHtXv}
+            compact
+          />
         </div>
       ) : pane === "stats" ? (
         <div className="ht-panel">
@@ -367,6 +425,18 @@ export function MatchScreen({
           <button type="button" className="btn" onClick={onClose}>
             Continue
           </button>
+        ) : atKickoff ? (
+          <>
+            <button type="button" className="btn" onClick={() => onStartKickoff?.()}>
+              Throw in
+            </button>
+            <button type="button" className="btn btn--ghost" onClick={onSkip}>
+              Instant result
+            </button>
+            <button type="button" className="btn btn--ghost" onClick={onClose}>
+              Back
+            </button>
+          </>
         ) : live.phase === "half-wait" ? (
           <button type="button" className="btn btn--ghost" onClick={onClose}>
             Back to the week

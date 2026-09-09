@@ -127,6 +127,8 @@ export type Tactics = {
   sidelineTaker?: string;
   /** Named midfielder or half-forward to hit on attacking puck-outs. */
   puckoutTarget?: string;
+  /** Our defender/midfielder name → opposition attacker name. */
+  manMarks?: Record<string, string>;
 };
 
 export type PlayerRatings = {
@@ -449,7 +451,7 @@ export type TeamSheet = {
 };
 
 export type GameSave = {
-  version: 14;
+  version: 15;
   clubId: string;
   seed: number;
   difficulty: Difficulty;
@@ -486,7 +488,8 @@ export type LivePhase =
   | "et1"
   | "extra-half"
   | "et2"
-  | "finished";
+  | "finished"
+  | "kickoff";
 
 export type WaitHours = 0 | 1 | 6 | 12 | 24 | 72 | 168;
 

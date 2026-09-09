@@ -1958,6 +1958,22 @@ html.native-app .device {
   font: inherit;
 }
 
+.man-mark-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.man-mark-note {
+  display: block;
+  margin: -4px 0 8px;
+  font-size: 12px;
+  font-style: italic;
+  color: var(--saffron);
+}
+
 .chart-scroll {
   overflow: auto;
   max-height: min(62vh, 580px);
