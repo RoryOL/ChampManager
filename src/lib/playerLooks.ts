@@ -2,7 +2,6 @@
  * Named Clare seniors keep a few known traits. Everyone else gets a stable
  * generated look from their name, so the panel is full of different faces.
  */
-import type { Options } from "@dicebear/adventurer";
 export type HairStyle = "short" | "quiff" | "shaggy" | "receding" | "crop" | "fringe" | "wavy" | "buzz";
 export type HairColor = "sandy" | "fair" | "dark" | "black" | "auburn";
 export type BeardStyle = "none" | "stubble" | "beard";
@@ -73,27 +72,6 @@ export function generatedLook(name: string): PlayerLook {
 
 export function lookForPlayer(name: string): PlayerLook {
   return { ...generatedLook(name), ...LOOKS[name] };
-}
-
-/** DiceBear Adventurer hair keys that fit a GAA panel. */
-export function portraitHair(style: HairStyle): NonNullable<Options["hair"]> {
-  switch (style) {
-    case "quiff":
-      return ["short15", "short16", "short19"];
-    case "shaggy":
-      return ["short17", "short18", "long05"];
-    case "receding":
-      return ["short01", "short02"];
-    case "crop":
-    case "buzz":
-      return ["short01", "short03", "short04"];
-    case "fringe":
-      return ["short11", "short12"];
-    case "wavy":
-      return ["short13", "short14", "long10"];
-    default:
-      return ["short07", "short08", "short09", "short10"];
-  }
 }
 
 export function skinFill(tone: SkinTone): { base: string; shade: string; light: string } {
