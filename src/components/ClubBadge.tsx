@@ -3,12 +3,12 @@ import { ClubCrest } from "./ClubCrest";
 
 type Props = {
   team?: Team;
-  size?: "sm" | "md" | "lg";
+  size?: "sm" | "md" | "lg" | "xl";
   /** Crests on team overview; colour splits during matches and compact lists. */
   variant?: "colours" | "crest";
 };
 
-const DIM = { sm: 18, md: 28, lg: 44 };
+const DIM = { sm: 18, md: 28, lg: 44, xl: 72 };
 
 export function ClubBadge({ team, size = "sm", variant = "colours" }: Props) {
   if (variant === "crest") {

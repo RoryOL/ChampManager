@@ -17,12 +17,20 @@ import { FixturesScreen } from "./screens/FixturesScreen";
 import { MatchDetailScreen } from "./screens/MatchDetailScreen";
 import { TableScreen } from "./screens/TableScreen";
 import { MatchScreen } from "./screens/MatchScreen";
+import { SeasonEndScreen } from "./screens/SeasonEndScreen";
 
 export default function App() {
   const game = useGame();
   const [page, setPage] = useState<PageId>("home");
   const [fixtureId, setFixtureId] = useState<string | null>(null);
   const club = game.save ? teamById(game.championship, game.save.clubId) : undefined;
+  const winner = game.championId ? teamById(game.championship, game.championId) : undefined;
+  const wrapping = Boolean(game.save && !game.live && game.finaleStep && game.finaleStep !== "done" && winner);
+  const beginNewSeason = () => {
+    setPage("home");
+    setFixtureId(null);
+    game.startNewSeason();
+  };
   const openTeam = (teamId: string) => {
     game.setViewTeamId(teamId);
     game.setPicked(null);
@@ -87,7 +95,21 @@ export default function App() {
         />
       )}
 
-      {game.save && !game.live && (
+      {game.save && !game.live && game.finaleStep && game.finaleStep !== "done" && winner ? (
+        <SeasonEndScreen
+          championship={game.championship}
+          winner={winner}
+          clubWon={game.save.clubId === winner.id}
+          together={Boolean(game.campaign)}
+          step={game.finaleStep}
+          clubName={club ? compactName(club) : "your club"}
+          onContinue={() => game.setSeasonWrap("offer")}
+          onStartNewSeason={beginNewSeason}
+          onStay={() => game.setSeasonWrap("done")}
+        />
+      ) : null}
+
+      {game.save && !game.live && !wrapping && (
         <>
           <header className="app-bar">
             <ClubBadge team={club} size="sm" variant="crest" />
@@ -133,6 +155,9 @@ export default function App() {
               onSetWeekShape={game.setWeekShape}
               onRunWeek={game.trainFullWeek}
               onMatchPrep={game.runMatchPrep}
+              finaleStep={game.finaleStep}
+              championId={game.championId}
+              onStartNewSeason={beginNewSeason}
             />
           )}
           {page === "squad" && (

@@ -37,6 +37,9 @@ type Props = {
   onSetWeekShape?: (shape: WeekShape) => void;
   onRunWeek?: (shape: WeekShape) => void;
   onMatchPrep?: (prep: MatchPrep) => void;
+  finaleStep?: "ceremony" | "offer" | "done" | null;
+  championId?: string | null;
+  onStartNewSeason?: () => void;
 };
 
 function preview(body: string): string {
@@ -107,8 +110,12 @@ export function HomeScreen({
   onSetWeekShape,
   onRunWeek,
   onMatchPrep,
+  finaleStep,
+  championId,
+  onStartNewSeason,
 }: Props) {
   const club = teamById(championship, save.clubId);
+  const champion = championId ? teamById(championship, championId) : undefined;
   const group = teamGroup(championship, save.clubId);
   const sides = nextMatch ? resolveMatchSides(championship, nextMatch) : null;
   const opponentId =
@@ -165,6 +172,25 @@ export function HomeScreen({
           {campaign ? "Leave" : "Resign"}
         </button>
       </section>
+
+      {finaleStep === "done" && champion && onStartNewSeason ? (
+        <section className="card card--compact">
+          <p className="kicker">End of season</p>
+          <h3>
+            {compactName(champion)} have the {championship.trophy}
+          </h3>
+          <p className="hint hint--tight">
+            {champion.id === save.clubId
+              ? "The Canon is in the cabinet. Start a new Clare SHC when you are ready."
+              : "The championship is over. Start a new season, or stay and read the news."}
+          </p>
+          <div className="row-actions">
+            <button type="button" className="btn" onClick={onStartNewSeason}>
+              {campaign ? "Leave championship" : "Start a new season"}
+            </button>
+          </div>
+        </section>
+      ) : null}
 
       <section className="card card--compact">
         <p className="kicker">{preseason ? `Preseason · week ${Math.min(save.preseasonWeek, PRESEASON_WEEKS)} of ${PRESEASON_WEEKS}` : "Condition"}</p>

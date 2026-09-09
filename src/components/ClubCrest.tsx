@@ -1,13 +1,13 @@
 import type { Team } from "../types";
 
-type Size = "sm" | "md" | "lg";
+type Size = "sm" | "md" | "lg" | "xl";
 
 type Props = {
   team?: Team;
   size?: Size;
 };
 
-const DIM: Record<Size, number> = { sm: 22, md: 36, lg: 56 };
+const DIM: Record<Size, number> = { sm: 22, md: 36, lg: 56, xl: 96 };
 
 const SHIELD =
   "M32 3.2 L57.5 13.2 V33.2 C57.5 47.2 45.8 56.6 32 61.4 C18.2 56.6 6.5 47.2 6.5 33.2 V13.2 Z";

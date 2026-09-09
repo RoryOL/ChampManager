@@ -6,7 +6,8 @@
  */
 import { seedChampionship } from "../data/championship";
 import { compactName } from "./display";
-import { decisiveResult, insertReplay, replayFixture, scoresAreLevel } from "./knockout";
+import { insertReplay, replayFixture, scoresAreLevel } from "./knockout";
+import { championshipWinnerId } from "./season";
 import { applyKnockoutExtraTime, simulateMatch } from "./matchEngine";
 import { clubTactics, clubXvOverall, defaultSheet, ratedSquad } from "./players";
 import { resolveMatchSides } from "./resolve";
@@ -65,12 +66,7 @@ export function simulateChampionship(options: {
     }
   }
 
-  const final = championship.matches.find((item) => item.id === "final");
-  if (!final) return { championId: null, championship };
-  const sides = resolveMatchSides(championship, final);
-  const result = decisiveResult(championship, final);
-  const championId = result === "home" ? sides.homeId : result === "away" ? sides.awayId : null;
-  return { championId, championship };
+  return { championId: championshipWinnerId(championship), championship };
 }
 
 export function tallyChampions(

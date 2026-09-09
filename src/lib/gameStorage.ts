@@ -30,6 +30,7 @@ import type {
   NewsItem,
   PlayerCondition,
   Score,
+  SeasonWrap,
   SquadBalance,
   Tactics,
   TeamSheet,
@@ -209,6 +210,7 @@ export function migrateSave(raw: unknown): GameSave | null {
     balance?: unknown;
     nextMatchPrep?: unknown;
     extraMatches?: unknown;
+    seasonWrap?: unknown;
   };
   if (!parsed.clubId || !parsed.sheet || !Array.isArray(parsed.matches)) return null;
   if (
@@ -292,7 +294,12 @@ export function migrateSave(raw: unknown): GameSave | null {
     balance: migrateBalance(parsed.balance),
     nextMatchPrep: migrateMatchPrep(parsed.nextMatchPrep),
     extraMatches: Array.isArray(parsed.extraMatches) ? parsed.extraMatches : [],
+    seasonWrap: migrateSeasonWrap(parsed.seasonWrap),
   };
+}
+
+function migrateSeasonWrap(raw: unknown): SeasonWrap | undefined {
+  return raw === "offer" || raw === "done" ? raw : undefined;
 }
 
 function clampConditionBoosts(condition: Record<string, PlayerCondition>): Record<string, PlayerCondition> {
