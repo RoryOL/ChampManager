@@ -1172,12 +1172,6 @@ export function averageFitness(condition: Record<string, PlayerCondition>, names
   return clampCondition(100 - averageFatigue(condition, names));
 }
 
-export function averageSharpness(condition: Record<string, PlayerCondition>, names: string[]): number {
-  if (names.length === 0) return 0;
-  const total = names.reduce((sum, name) => sum + (condition[name]?.sharpness ?? 0), 0);
-  return Math.round(total / names.length);
-}
-
 export function averageMatchOverall(
   squad: RatedPlayer[],
   condition: Record<string, PlayerCondition>,

@@ -814,6 +814,23 @@ html.native-app .device {
   height: 8px;
 }
 
+.condition-stats {
+  margin: 2px 0 10px;
+}
+
+.condition-stats .attr-row {
+  grid-template-columns: 78px minmax(64px, 1fr) 40px;
+}
+
+.condition-stats .attr-bar {
+  height: 8px;
+}
+
+.condition-stats .attr-row em {
+  font-weight: 700;
+  font-size: 13px;
+}
+
 .scoreboard {
   justify-content: space-between;
   margin: 8px 0;
