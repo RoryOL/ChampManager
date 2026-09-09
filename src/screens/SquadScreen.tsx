@@ -16,7 +16,7 @@ import { formatPair, seasonStatsFor } from "../lib/matchStats";
 import { defaultSheet, expandSheetToPanel, matchOrderIndex, matchShirtNumber, ratedSquad } from "../lib/players";
 import { FORMATION_ROWS } from "../lib/squads";
 import { conditionFor, fitnessOf, isOvertrained, matchRatings, toneClass, trainedRatings, trainingDelta } from "../lib/training";
-import { injuryLine, isInjured } from "../lib/injuries";
+import { injuryLine, isInjured, isSuspended } from "../lib/injuries";
 
 type Props = {
   save: GameSave;
@@ -105,6 +105,11 @@ function PlayerDetail({
             <p className="warn">
               Injured — {condition.injury ? injuryLine(condition.injury) : "sidelined"}. He is out of the fifteen until
               he comes back.
+            </p>
+          ) : isSuspended(condition) ? (
+            <p className="warn">
+              Suspended — straight red. He misses the next match, then he's available again. Two yellows in the one
+              game do not carry a ban.
             </p>
           ) : (
             <p className="hint hint--tight">
@@ -298,6 +303,7 @@ export function SquadScreen({
               const number = matchShirtNumber(sheet, player.name);
               const condition = ownTeam ? conditionFor(player.name, save.condition) : undefined;
               const injured = Boolean(condition && isInjured(condition));
+              const suspended = Boolean(condition && isSuspended(condition));
               const tired = Boolean(condition && isOvertrained(condition));
               return (
                 <tr
@@ -309,6 +315,7 @@ export function SquadScreen({
                   <td className="name">
                     <strong>{player.name}</strong>
                     {injured && condition?.injury ? <em>Out · {injuryLine(condition.injury)}</em> : null}
+                    {suspended ? <em>Suspended · next match</em> : null}
                     {tired ? <em>Tired</em> : null}
                   </td>
                   <td>{player.position}</td>

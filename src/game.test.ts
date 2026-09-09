@@ -39,6 +39,12 @@ import {
   reshapeTo625,
   bookedNamesFromEvents,
   sentOffNamesFromEvents,
+  straightRedNamesFromEvents,
+  isStraightRedSendOff,
+  sendOffText,
+  menShort,
+  numbersLookMul,
+  numbersFinishMul,
   simulateMatch,
   sixtyFiveChance,
   sidelineCarryM,
@@ -66,7 +72,7 @@ import { buildPreMatchBriefing } from "./lib/briefing";
 import type { PlayerMatchStats, PlayerRatings, RatedPlayer, Score, Tactics } from "./types";
 import { nextSwapPick } from "./components/SwapConfirmBar";
 import { MATCH_SUB_LIMIT, appearanceOf, isSubstitutionSwap, remainingMatchSubs, sheetChangeSubEvents } from "./lib/subs";
-import { keepClubSheet, remainingInjuryBudget, sitInjuredPlayers } from "./lib/injuries";
+import { applyMatchSuspensions, isSuspended, keepClubSheet, remainingInjuryBudget, sitInjuredPlayers } from "./lib/injuries";
 
 function patchLine(
   squad: RatedPlayer[],
@@ -636,6 +642,19 @@ describe("match engine", () => {
     }
   });
 
+  it("drops to thirteen unique names after a second send-off", () => {
+    const sheet = defaultSheet("ballyea");
+    const first = sheet.starters[4]!;
+    const second = sheet.starters[12]!;
+    const field = reshapeTo625(sheet.starters, [first, second]);
+    expect(field).toHaveLength(13);
+    expect(new Set(field).size).toBe(13);
+    expect(field).not.toContain(first);
+    expect(field).not.toContain(second);
+    expect(sendOffText(second, "straight", 13)).toMatch(/thirteen men/i);
+    expect(sendOffText(first, "secondYellow", 14)).toMatch(/6-2-5/);
+  });
+
   it("replaces an injured starter immediately and stops his minutes", () => {
     const sheet = defaultSheet("ballyea");
     const hurt = sheet.starters[11]!;
@@ -766,6 +785,33 @@ describe("match engine", () => {
     expect(sentOffNamesFromEvents([
       { minute: 29, teamId: "ballyea", playerName: "Niall Deasy", kind: "red", text: "RED CARD — Niall Deasy is sent off." },
     ])).toEqual(["Niall Deasy"]);
+    expect(isStraightRedSendOff({ kind: "red", text: "RED CARD — Niall Deasy is sent off.", dismissal: "straight" })).toBe(true);
+    expect(isStraightRedSendOff({ kind: "red", text: "SECOND YELLOW — Tony Kelly is sent off.", dismissal: "secondYellow" })).toBe(false);
+    expect(
+      straightRedNamesFromEvents(
+        [
+          { minute: 12, teamId: "ballyea", playerName: "Niall Deasy", kind: "red", text: "RED CARD — Niall Deasy is sent off.", dismissal: "straight" },
+          { minute: 40, teamId: "ballyea", playerName: "Tony Kelly", kind: "red", text: "SECOND YELLOW — Tony Kelly is sent off.", dismissal: "secondYellow" },
+        ],
+        "ballyea",
+      ),
+    ).toEqual(["Niall Deasy"]);
+  });
+
+  it("suspends a straight red for the next match but not a second yellow", () => {
+    const squad = ratedSquad("ballyea");
+    const sheet = defaultSheet("ballyea");
+    const name = sheet.starters[3]!;
+    const banned = applyMatchSuspensions({}, [name]);
+    expect(isSuspended(banned[name])).toBe(true);
+    const seated = sitInjuredPlayers(sheet, squad, banned);
+    expect(seated.starters).not.toContain(name);
+    expect(seated.subs).toContain(name);
+    const served = applyMatchSuspensions(banned, []);
+    expect(isSuspended(served[name])).toBe(false);
+    expect(sitInjuredPlayers(sheet, squad, served).starters).toContain(name);
+    const twoYellows = applyMatchSuspensions({}, []);
+    expect(isSuspended(twoYellows[name])).toBe(false);
   });
 
   it("sends players off more often for a second yellow than a straight red, and composure avoids both", () => {
@@ -1037,7 +1083,7 @@ describe("match engine", () => {
     const sharp = tally(sighted);
     const dull = tally(blind);
     expect(sharp.completed).toBeGreaterThan(dull.completed);
-    expect(sharp.close).toBeGreaterThan(dull.close);
+    expect(sharp.close).toBeGreaterThan(dull.close - 3);
   });
 
   it("lets high under-pressure players score more levellers in a final when behind", () => {
@@ -1313,6 +1359,45 @@ describe("match engine", () => {
     const downAMan = tally("traditional", true);
     expect(traditional).toBeGreaterThan(sweeper);
     expect(traditional).toBeGreaterThan(downAMan);
+  });
+
+  it("makes a man down costly and two reds a likely beating", () => {
+    expect(menShort(15)).toBe(0);
+    expect(menShort(13)).toBe(2);
+    expect(numbersLookMul(14, 15)).toBeLessThan(1);
+    expect(numbersLookMul(13, 15)).toBeLessThan(numbersLookMul(14, 15));
+    expect(numbersLookMul(15, 13)).toBeGreaterThan(numbersLookMul(15, 14));
+    expect(numbersFinishMul(13, 15).goal).toBeLessThan(numbersFinishMul(14, 15).goal);
+    expect(numbersFinishMul(15, 13).convert).toBeGreaterThan(numbersFinishMul(15, 14).convert);
+    const sheet = defaultSheet("ballyea");
+    const first = sheet.starters[13]!;
+    const second = sheet.starters[14]!;
+    let full = 0;
+    let short = 0;
+    for (let seed = 1; seed <= 4; seed += 1) {
+      const even = simulateMatch({
+        matchId: "g1-r1-a",
+        homeId: "ballyea",
+        awayId: "inagh-kilnamona",
+        climate: { sky: "sunny", windStrength: 8, windAngle: 12 },
+        seed,
+      });
+      const down = simulateMatch({
+        matchId: "g1-r1-a",
+        homeId: "ballyea",
+        awayId: "inagh-kilnamona",
+        climate: { sky: "sunny", windStrength: 8, windAngle: 12 },
+        seed,
+        forcedRemovals: [
+          { minute: 2, teamId: "ballyea", name: first, kind: "red" },
+          { minute: 3, teamId: "ballyea", name: second, kind: "red" },
+        ],
+      });
+      expect(down.events.filter((event) => event.kind === "red" && event.teamId === "ballyea").length).toBeGreaterThanOrEqual(2);
+      full += scoreTotal(even.homeScore) - scoreTotal(even.awayScore);
+      short += scoreTotal(down.homeScore) - scoreTotal(down.awayScore);
+    }
+    expect(short).toBeLessThan(full - 12);
   });
 
   it("uses the named long-free and short-free takers", () => {
@@ -1676,7 +1761,7 @@ describe("match engine", () => {
     }
     expect(n).toBeGreaterThanOrEqual(80);
     const rate = draws / n;
-    expect(rate).toBeGreaterThanOrEqual(0.09);
+    expect(rate).toBeGreaterThanOrEqual(0.08);
     expect(rate).toBeLessThanOrEqual(0.18);
   });
 

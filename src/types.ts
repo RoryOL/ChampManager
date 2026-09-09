@@ -169,6 +169,11 @@ export type PlayerInjury = {
   source: "match" | "training";
 };
 
+export type PlayerSuspension = {
+  matchesLeft: number;
+  reason: "straight-red";
+};
+
 export type PlayerCondition = {
   fatigue: number;
   sharpness: number;
@@ -180,6 +185,8 @@ export type PlayerCondition = {
   /** Small training lifts on 1–20 profile stats. Natural ability is the unboosted baseline. */
   boosts?: AttributeBoosts;
   injury?: PlayerInjury;
+  /** Straight red: miss the next match. Two yellows do not set this. */
+  suspension?: PlayerSuspension;
 };
 
 export type TrainingType = "defensive" | "attacking" | "tactics" | "physical" | "setpieces";
@@ -318,6 +325,8 @@ export type MatchEvent = {
   credits?: StatCredit[];
   /** Player who came off when kind is "sub". */
   replacedName?: string;
+  /** Straight red vs two yellows. Omitted on older events; infer from text. */
+  dismissal?: "straight" | "secondYellow";
 };
 
 export type PlayerMatchStats = {

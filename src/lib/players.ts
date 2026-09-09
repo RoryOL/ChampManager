@@ -27,7 +27,7 @@ import {
   type AttributeKey,
 } from "./attributes";
 import { latestLineup, squadFor } from "./squads";
-import { isInjured, slotFit } from "./injuries";
+import { isUnavailable, slotFit } from "./injuries";
 import { conditionFor, fitnessOf, matchStat } from "./training";
 
 /**
@@ -528,12 +528,12 @@ export function defaultSheet(teamId: string, ctx?: number | RatingsContext): Tea
 }
 
 function coachSlotScore(player: RatedPlayer, slotIndex: number, condition: Record<string, PlayerCondition>): number {
-  const healthy = isInjured(condition[player.name]) ? 0 : 800;
+  const healthy = isUnavailable(condition[player.name]) ? 0 : 800;
   const fit = fitnessOf(conditionFor(player.name, condition));
   return healthy + slotFit(player, slotIndex) + fit * 0.08;
 }
 
-/** Best available fifteen by slot, then the rest of the panel on the bench. Injured lads sit if the panel allows. */
+/** Best available fifteen by slot, then the rest of the panel on the bench. Injured and suspended lads sit if the panel allows. */
 export function coachPickSheet(
   squad: RatedPlayer[],
   condition: Record<string, PlayerCondition> = {},
@@ -558,8 +558,8 @@ export function coachPickSheet(
   const subs = [...squad]
     .filter((player) => !taken.has(player.name))
     .sort((a, b) => {
-      const ah = isInjured(condition[a.name]) ? 0 : 1;
-      const bh = isInjured(condition[b.name]) ? 0 : 1;
+      const ah = isUnavailable(condition[a.name]) ? 0 : 1;
+      const bh = isUnavailable(condition[b.name]) ? 0 : 1;
       if (bh !== ah) return bh - ah;
       const overall = b.ratings.overall - a.ratings.overall;
       return overall !== 0 ? overall : a.name.localeCompare(b.name);
@@ -759,7 +759,7 @@ export function sideProfile(
     return mean * usedInSlot(player, index);
   };
 
-  const forwards = xv.length < 15 ? [9, 10, 11, 12, 13] : [9, 10, 11, 12, 13, 14];
+  const forwards = Array.from({ length: Math.max(0, xv.length - 9) }, (_, i) => 9 + i);
   const backs = [0, 1, 2, 3, 4, 5, 6];
   const mids = [7, 8];
   const halfBacks = [4, 5, 6];
@@ -831,9 +831,13 @@ export function sideProfile(
     defence += 1.6;
     attack -= 0.7;
   }
-  if (xv.length < 15) {
-    attack -= 0.85;
-    defence -= 0.35;
+  if (xv.length <= 14) {
+    attack -= 2.1;
+    defence -= 1.5;
+  }
+  if (xv.length <= 13) {
+    attack -= 3.2;
+    defence -= 2.8;
   }
   const physical = clampDial(tactics.aggression ?? 46) / 100;
   const press = clampDial(tactics.pressure ?? 48) / 100;

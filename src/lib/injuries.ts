@@ -35,6 +35,14 @@ export function isInjured(condition?: PlayerCondition): boolean {
   return Boolean(condition?.injury && condition.injury.weeksLeft > 0);
 }
 
+export function isSuspended(condition?: PlayerCondition): boolean {
+  return Boolean(condition?.suspension && condition.suspension.matchesLeft > 0);
+}
+
+export function isUnavailable(condition?: PlayerCondition): boolean {
+  return isInjured(condition) || isSuspended(condition);
+}
+
 export function injuryLine(injury: PlayerInjury): string {
   const weeks = injury.weeksLeft;
   const span =
@@ -266,7 +274,7 @@ export function sitInjuredPlayers(
   const cleaned = keepClubSheet(sheet, squad);
   const out = new Set([
     ...extraNames.filter((name) => squad.some((player) => player.name === name)),
-    ...squad.filter((player) => isInjured(condition[player.name])).map((player) => player.name),
+    ...squad.filter((player) => isUnavailable(condition[player.name])).map((player) => player.name),
   ]);
   if (out.size === 0) return cleaned;
   const healthy = squad.filter((player) => !out.has(player.name));
@@ -288,6 +296,44 @@ export function sitInjuredPlayers(
     else subs.push(name);
   }
   return keepClubSheet({ starters, subs }, squad);
+}
+
+export function applyStraightRedSuspensions(
+  condition: Record<string, PlayerCondition>,
+  names: string[],
+): Record<string, PlayerCondition> {
+  if (names.length === 0) return condition;
+  const next = { ...condition };
+  for (const name of names) {
+    const current = next[name] ?? { fatigue: 0, sharpness: 38 };
+    next[name] = {
+      ...current,
+      suspension: { matchesLeft: 1, reason: "straight-red" },
+    };
+  }
+  return next;
+}
+
+/** After a match, bans that were already being served tick down. */
+export function serveSuspensions(
+  condition: Record<string, PlayerCondition>,
+): Record<string, PlayerCondition> {
+  const next = { ...condition };
+  for (const [name, current] of Object.entries(next)) {
+    const suspension = current.suspension;
+    if (!suspension || suspension.matchesLeft <= 0) continue;
+    const matchesLeft = suspension.matchesLeft - 1;
+    next[name] =
+      matchesLeft <= 0 ? { ...current, suspension: undefined } : { ...current, suspension: { ...suspension, matchesLeft } };
+  }
+  return next;
+}
+
+export function applyMatchSuspensions(
+  condition: Record<string, PlayerCondition>,
+  straightRedNames: string[],
+): Record<string, PlayerCondition> {
+  return applyStraightRedSuspensions(serveSuspensions(condition), straightRedNames);
 }
 
 export function subEventFor(injury: RolledInjury, incoming: string): MatchEvent {

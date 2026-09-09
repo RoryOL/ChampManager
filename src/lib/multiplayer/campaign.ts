@@ -35,9 +35,10 @@ import {
   restAndPrepManagedClub,
   tickManagedPreseasonWeek,
 } from "../aiManager";
-import { momentumAt, bookedNamesFromEvents, sentOffNamesFromEvents, simulateMatch } from "../matchEngine";
+import { momentumAt, bookedNamesFromEvents, sentOffNamesFromEvents, simulateMatch, straightRedNamesFromEvents } from "../matchEngine";
 import {
   applyInjury,
+  applyMatchSuspensions,
   closingSheetOf,
   injuredNamesFromEvents,
   keepClubSheet,
@@ -1006,7 +1007,7 @@ function finishSim(
       condition = applyInjury(condition, item.name, item.injury);
     }
     const rested = recoverAfterMatch(condition, squad);
-    condition = rested.condition;
+    condition = applyMatchSuspensions(rested.condition, straightRedNamesFromEvents(sim.events, clubId));
     const sheet = sitInjuredPlayers(closing, squad, condition);
     const clubTeam = teamById(championship, clubId);
     const opponent = ours ? awayTeam : homeTeam;

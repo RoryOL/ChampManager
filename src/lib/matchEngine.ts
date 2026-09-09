@@ -145,6 +145,75 @@ export function luckyLookChance(chaos: number): number {
   return 0.08 + chaos * 0.09;
 }
 
+export function menShort(onField: number): number {
+  return Math.max(0, 15 - onField);
+}
+
+/** Extra / fewer scoring looks when a side is a man or two down. Applied after the 0.58 floor. */
+export function numbersLookMul(attackingOnField: number, defendingOnField: number): number {
+  const down = menShort(attackingOnField);
+  const oppDown = menShort(defendingOnField);
+  let mul = 1;
+  if (down === 1) mul *= 0.68;
+  else if (down >= 2) mul *= 0.4;
+  if (oppDown === 1) mul *= 1.26;
+  else if (oppDown >= 2) mul *= 1.72;
+  return mul;
+}
+
+export function numbersFinishMul(
+  attackingOnField: number,
+  defendingOnField: number,
+): { convert: number; goal: number } {
+  const down = menShort(attackingOnField);
+  const oppDown = menShort(defendingOnField);
+  const attConvert = down === 0 ? 1 : down === 1 ? 0.9 : 0.7;
+  const defConvert = oppDown === 0 ? 1 : oppDown === 1 ? 1.12 : 1.34;
+  const attGoal = down === 0 ? 1 : down === 1 ? 0.84 : 0.58;
+  const defGoal = oppDown === 0 ? 1 : oppDown === 1 ? 1.24 : 1.72;
+  return { convert: attConvert * defConvert, goal: attGoal * defGoal };
+}
+
+export function rollLookCount(chance: number, random: () => number): number {
+  const value = Math.max(0, chance);
+  let n = 0;
+  if (random() < Math.min(1, value)) n += 1;
+  if (value > 1 && random() < Math.min(1, value - 1)) n += 1;
+  return n;
+}
+
+export function sendOffText(
+  name: string,
+  dismissal: "straight" | "secondYellow",
+  onFieldAfter: number,
+): string {
+  const aftermath = onFieldAfter <= 13 ? "They're down to thirteen men." : "They'll play the rest 6-2-5.";
+  const lead =
+    dismissal === "secondYellow"
+      ? `SECOND YELLOW — ${name} is sent off.`
+      : `RED CARD — ${name} is sent off.`;
+  return `${lead} ${aftermath}`;
+}
+
+export function isStraightRedSendOff(
+  event: Pick<MatchEvent, "kind" | "text" | "dismissal">,
+): boolean {
+  if (event.kind !== "red") return false;
+  if (event.dismissal === "secondYellow") return false;
+  if (event.dismissal === "straight") return true;
+  return !/second yellow/i.test(event.text);
+}
+
+export function straightRedNamesFromEvents(events: MatchEvent[], teamId?: string): string[] {
+  return [
+    ...new Set(
+      events
+        .filter((event) => isStraightRedSendOff(event) && event.playerName && (!teamId || event.teamId === teamId))
+        .map((event) => event.playerName),
+    ),
+  ];
+}
+
 export function chaoticConvert(convert: number, chaos: number, random: () => number): number {
   const mixed = convert * (1 - chaos * 0.32) + 0.5 * chaos * 0.32;
   const jitter = (random() - 0.5) * 2 * chaos * 0.16;
@@ -421,7 +490,7 @@ export function shortPuckoutTakeChance(longPuck: number, oppShape: Tactics["shap
   return Math.min(0.74, 0.12 + (1 - longPuck) * 0.28 + vsSweeper);
 }
 
-/** After a send-off, play 6-2-5 regardless of who went: six backs, two midfielders, five forwards. */
+/** After a send-off, play 6-2-5. A second red leaves thirteen (6-2-4). */
 export function reshapeTo625(original: string[], out: Iterable<string>): string[] {
   const banned = new Set(out);
   const remaining = original.filter((name) => !banned.has(name));
@@ -1490,7 +1559,8 @@ export function simulateMatch(options: {
             teamId: defendingId,
             playerName: defender,
             kind: "red",
-            text: `SECOND YELLOW — ${defender} is sent off. They'll play the rest 6-2-5.`,
+            dismissal: "secondYellow",
+            text: sendOffText(defender, "secondYellow", fieldNames(defendingId).length - 1),
             credits: [{ name: defender, teamId: defendingId, tacklesAttempted: 1, freesConceded: 1 }],
           });
           yellows.delete(defender);
@@ -1501,7 +1571,8 @@ export function simulateMatch(options: {
             teamId: defendingId,
             playerName: defender,
             kind: "red",
-            text: `RED CARD — ${defender} is sent off. They'll play the rest 6-2-5.`,
+            dismissal: "straight",
+            text: sendOffText(defender, "straight", fieldNames(defendingId).length - 1),
             credits: [{ name: defender, teamId: defendingId, tacklesAttempted: 1, freesConceded: 1 }],
           });
           dismiss(defendingId, defender, minute);
@@ -1867,7 +1938,8 @@ export function simulateMatch(options: {
         : gatheredLong && gatheredFullForward
           ? 0.78
           : 0.32;
-    const fiveForwardCut = names.length < 15 || tactics.shape === "sweeper" ? 0.82 : 1;
+    const fiveForwardCut = tactics.shape === "sweeper" && names.length >= 15 ? 0.82 : 1;
+    const numbers = numbersFinishMul(names.length, oppNames.length);
     const wind = conversionContext(climate, teamId, options.homeId, period);
     const occ = occasionPressure(minute, matchStage);
     const levelling = chase.deficit >= 1 && chase.deficit <= 3;
@@ -1893,10 +1965,12 @@ export function simulateMatch(options: {
         (chase.huntGoals ? 0.36 : chase.chasing ? 1.1 : 1) +
         paceBoost.convert * runShare +
         visionLook * 0.06) *
-      pressureMul;
+      pressureMul *
+      numbers.convert;
     const goalChance =
       (goalChanceFromDistance(distanceM, sweeperCut) *
         fiveForwardCut *
+        numbers.goal *
         (gatheredLong && gatheredFullForward ? 1.45 : direct > 0.6 ? 1.2 : 1) *
         (origin === "press" ? 1.65 : 1) *
         (chase.huntGoals ? 2.15 : chase.chasing ? 1.12 : 1) +
@@ -2005,7 +2079,7 @@ export function simulateMatch(options: {
   };
 
   const playGroundContest = (minute: number) => {
-    const homeOnBall = random() < 0.5 + (momentum - 50) / 220;
+    const homeOnBall = random() < 0.5 + (momentum - 50) / 220 + (homeNames.length - awayNames.length) * 0.09;
     const defendingId = homeOnBall ? options.awayId : options.homeId;
     const attackingId = homeOnBall ? options.homeId : options.awayId;
     const defTactics = homeOnBall ? awayEffTactics : homeEffTactics;
@@ -2136,7 +2210,8 @@ export function simulateMatch(options: {
         teamId: item.teamId,
         playerName: item.name,
         kind: "red",
-        text: `RED CARD — ${item.name} is sent off. They'll play the rest 6-2-5.`,
+        dismissal: "straight",
+        text: sendOffText(item.name, "straight", fieldNames(item.teamId).length - 1),
         credits: [{ name: item.name, teamId: item.teamId, tacklesAttempted: 1, freesConceded: 1 }],
       });
       dismiss(item.teamId, item.name, minute);
@@ -2157,16 +2232,16 @@ export function simulateMatch(options: {
     const tilt = (momentum - 50) / 50;
     const chaos = matchChaos(homeEffTactics, awayEffTactics);
     const homeLooks =
-      (random() <
+      rollLookCount(
         attackLookChance(
           home.attack + homeChase.energy * (homeChase.huntGoals ? 0.85 : 1.05),
           away.defence - awayChase.energy * (awayChase.huntGoals ? 1.15 : 0.38),
           tilt,
           chaos,
           defensiveSit(homeEffTactics),
-        )
-        ? 1
-        : 0) +
+        ) * numbersLookMul(homeNames.length, awayNames.length),
+        random,
+      ) +
       (random() < luckyLookChance(chaos) ? 1 : 0) +
       (homeChase.chasing && random() < 0.07 + homeChase.energy * (homeChase.huntGoals ? 0.12 : 0.16) ? 1 : 0) +
       (awayChase.chasing && random() < (awayChase.huntGoals ? 0.12 : 0.025) * awayChase.energy ? 1 : 0);
@@ -2184,16 +2259,16 @@ export function simulateMatch(options: {
       );
     }
     const awayLooks =
-      (random() <
+      rollLookCount(
         attackLookChance(
           away.attack + awayChase.energy * (awayChase.huntGoals ? 0.85 : 1.05),
           home.defence - homeChase.energy * (homeChase.huntGoals ? 1.15 : 0.38),
           -tilt,
           chaos,
           defensiveSit(awayEffTactics),
-        )
-        ? 1
-        : 0) +
+        ) * numbersLookMul(awayNames.length, homeNames.length),
+        random,
+      ) +
       (random() < luckyLookChance(chaos) ? 1 : 0) +
       (awayChase.chasing && random() < 0.07 + awayChase.energy * (awayChase.huntGoals ? 0.12 : 0.16) ? 1 : 0) +
       (homeChase.chasing && random() < (homeChase.huntGoals ? 0.12 : 0.025) * homeChase.energy ? 1 : 0);
