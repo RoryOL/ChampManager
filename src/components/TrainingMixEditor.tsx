@@ -59,8 +59,8 @@ export function TrainingMixEditor({ plan, squadIntensity = "balanced", disabled,
         </label>
       ))}
       <p className="hint hint--tight">
-        Work splits to {mixTotal(plan.mix)}%. Workrate and composure cannot be trained. Light intensity is the rest
-        week: legs come back and attributes only tick a little.
+        Work splits to {mixTotal(plan.mix)}%. Workrate, composure and ability under pressure cannot be trained. Light
+        intensity is the rest week: legs come back and attributes only tick a little.
       </p>
     </div>
   );

@@ -561,6 +561,7 @@ export const CHART_RATING_KEYS: AttributeKey[] = [
   "frees",
   "sidelines",
   "puckoutReach",
+  "shotStopping",
 ];
 
 export const CHART_RATING_SHORT: Record<AttributeKey, string> = {
@@ -585,4 +586,5 @@ export const CHART_RATING_SHORT: Record<AttributeKey, string> = {
   frees: "Fr",
   sidelines: "SL",
   puckoutReach: "PO",
+  shotStopping: "Sav",
 };

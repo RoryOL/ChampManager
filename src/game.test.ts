@@ -62,6 +62,7 @@ import {
   secondYellowOnFoulChance,
   pickShortPuckoutReceiver,
   shortPuckoutTakeChance,
+  keeperSaveChance,
 } from "./lib/matchEngine";
 import { aerialContestRating, clubTactics, DEFAULT_TACTICS, defaultSheet, expandSheetToPanel, matchOrderIndex, matchShirtNumber, matchSlot, pickPuckoutTarget, playerAge, ratePlayer, ratedSquad, sheetPlayers, sideStrength, swapPlayersInSheet } from "./lib/players";
 import { nextBatch } from "./lib/schedule";
@@ -127,6 +128,7 @@ describe("player ratings", () => {
     const quilligan = ratedSquad("feakle").find((player) => player.name === "Eibhear Quilligan");
     const duggan = ratedSquad("clooney-quin").find((player) => player.name === "Peter Duggan");
     expect(quilligan?.ratings.puckoutReach).toBeGreaterThanOrEqual(15);
+    expect(quilligan?.ratings.shotStopping).toBeGreaterThanOrEqual(15);
     expect(duggan?.ratings.frees).toBeGreaterThanOrEqual(16);
     expect(quilligan?.ratings.familiarity.GK).toBeGreaterThan(quilligan?.ratings.familiarity.FF ?? 0);
   });
@@ -1981,15 +1983,20 @@ describe("training", () => {
       "manMarking",
       "shooting",
       "offTheBall",
+      "strikingDistance",
       "passing",
       "vision",
       "firstTouch",
+      "highFielding",
       "strength",
       "speed",
       "acceleration",
+      "aerialReach",
+      "stamina",
       "frees",
       "sidelines",
       "puckoutReach",
+      "shotStopping",
       "teamwork",
     ]);
     expect(TRAINABLE_KEYS.some((key) => MENTAL_KEYS.includes(key))).toBe(false);
@@ -2019,6 +2026,35 @@ describe("training", () => {
     expect(form.boosts?.workrate ?? 0).toBe(0);
     expect(form.boosts?.composure ?? 0).toBe(0);
     expect(form.boosts?.underPressure ?? 0).toBe(0);
+  });
+
+  it("lets the right mix lift aerials, stamina, high fielding, striking distance and shot stopping", () => {
+    const squad = ratedSquad("ballyea").slice(0, 4);
+    const player = squad[0]!;
+    const start = Object.fromEntries(squad.map((item) => [item.name, defaultCondition()]));
+    const afterPhysical = applyTraining(squad, start, "mixed", { [player.name]: physicalPlan });
+    const physical = afterPhysical.condition[player.name] ?? defaultCondition();
+    expect(physical.boosts?.aerialReach ?? 0).toBeGreaterThan(0);
+    expect(physical.boosts?.stamina ?? 0).toBeGreaterThan(0);
+    const afterAttack = applyTraining(squad, start, "mixed", {
+      [player.name]: { mix: { defensive: 0, attacking: 100, tactics: 0, physical: 0, setpieces: 0 }, recovery: false },
+    });
+    expect((afterAttack.condition[player.name]?.boosts?.strikingDistance ?? 0)).toBeGreaterThan(0);
+    const afterTactics = applyTraining(squad, start, "mixed", { [player.name]: tacticsPlan });
+    expect((afterTactics.condition[player.name]?.boosts?.highFielding ?? 0)).toBeGreaterThan(0);
+    const afterSet = applyTraining(squad, start, "mixed", {
+      [player.name]: { mix: { defensive: 0, attacking: 0, tactics: 0, physical: 0, setpieces: 100 }, recovery: false },
+    });
+    expect((afterSet.condition[player.name]?.boosts?.shotStopping ?? 0)).toBeGreaterThan(0);
+    expect((afterSet.condition[player.name]?.boosts?.puckoutReach ?? 0)).toBeGreaterThan(0);
+  });
+
+  it("lets a keeper's shot stopping drive saves more than team defence", () => {
+    expect(keeperSaveChance(18, 12)).toBeGreaterThan(keeperSaveChance(8, 12) + 0.1);
+    expect(keeperSaveChance(12, 16)).toBeGreaterThan(keeperSaveChance(12, 8));
+    expect(keeperSaveChance(16, 12) - keeperSaveChance(10, 12)).toBeGreaterThan(
+      keeperSaveChance(12, 16) - keeperSaveChance(12, 8),
+    );
   });
 
   it("caps match-form boosts at +2 and lets fatigue hide them until recovery", () => {
@@ -2062,7 +2098,8 @@ describe("training", () => {
     expect(form.boosts?.speed ?? 0).toBeLessThanOrEqual(2);
     expect(form.boosts?.passing ?? 0).toBeLessThan(0);
     expect(boostTotal(form)).toBeGreaterThan(0);
-    expect(boostTotal(form)).toBeLessThan(4);
+    expect(boostTotal(form)).toBeLessThan(8);
+    expect(trainedOverallLift(player, form.boosts)).toBeLessThan(2);
   });
 
   it("lets a young player shake off a session faster than a veteran", () => {

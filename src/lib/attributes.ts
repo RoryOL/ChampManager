@@ -80,7 +80,7 @@ export const ATTRIBUTE_GROUPS: AttributeGroup[] = [
   {
     id: "setPieces",
     label: "Set pieces",
-    keys: ["frees", "sidelines", "puckoutReach"],
+    keys: ["frees", "sidelines", "puckoutReach", "shotStopping"],
   },
 ];
 
@@ -99,7 +99,8 @@ export const ATTACKING_KEYS: AttributeKey[] = ["shooting", "firstTouch", "striki
  */
 export const POSITION_ATTRIBUTE_WEIGHTS: Record<PositionLine, Partial<Record<AttributeKey, number>>> = {
   GK: {
-    puckoutReach: 1,
+    shotStopping: 1,
+    puckoutReach: 0.98,
     highFielding: 0.95,
     aerialReach: 0.9,
     composure: 0.92,
@@ -143,6 +144,7 @@ export const POSITION_ATTRIBUTE_WEIGHTS: Record<PositionLine, Partial<Record<Att
     frees: 0.28,
     sidelines: 0.28,
     puckoutReach: 0.18,
+    shotStopping: 0.16,
   },
   HB: {
     stamina: 0.95,
@@ -166,6 +168,7 @@ export const POSITION_ATTRIBUTE_WEIGHTS: Record<PositionLine, Partial<Record<Att
     offTheBall: 0.4,
     frees: 0.38,
     puckoutReach: 0.2,
+    shotStopping: 0.16,
   },
   MF: {
     stamina: 1,
@@ -189,6 +192,7 @@ export const POSITION_ATTRIBUTE_WEIGHTS: Record<PositionLine, Partial<Record<Att
     frees: 0.4,
     sidelines: 0.45,
     puckoutReach: 0.18,
+    shotStopping: 0.14,
   },
   HF: {
     firstTouch: 0.95,
@@ -212,6 +216,7 @@ export const POSITION_ATTRIBUTE_WEIGHTS: Record<PositionLine, Partial<Record<Att
     hooking: 0.36,
     manMarking: 0.3,
     puckoutReach: 0.18,
+    shotStopping: 0.14,
   },
   FF: {
     shooting: 1,
@@ -235,6 +240,7 @@ export const POSITION_ATTRIBUTE_WEIGHTS: Record<PositionLine, Partial<Record<Att
     hooking: 0.32,
     manMarking: 0.28,
     puckoutReach: 0.16,
+    shotStopping: 0.14,
   },
 };
 
@@ -283,6 +289,7 @@ export const ATTRIBUTE_SHORT: Record<AttributeKey, string> = {
   frees: "Fr",
   sidelines: "Sid",
   puckoutReach: "Pk",
+  shotStopping: "Sav",
 };
 
 export const ATTRIBUTE_LABELS: Record<AttributeKey, string> = {
@@ -307,6 +314,7 @@ export const ATTRIBUTE_LABELS: Record<AttributeKey, string> = {
   frees: "Frees",
   sidelines: "Sidelines",
   puckoutReach: "Puck-out reach",
+  shotStopping: "Shot stopping",
 };
 
 export const MENTALITY_OPTIONS: { value: Tactics["mentality"]; title: string; copy: string }[] = [
