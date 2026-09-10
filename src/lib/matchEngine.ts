@@ -2439,8 +2439,8 @@ export function simulateMatch(options: {
     clubId: options.clubId,
     homeId: options.homeId,
     awayId: options.awayId,
-    homeName: options.homeName ?? "Home",
-    awayName: options.awayName ?? "Away",
+    homeName: options.homeName ?? "one side",
+    awayName: options.awayName ?? "the other side",
     homeTactics,
     awayTactics,
     homeStats: tallied.homeStats,
@@ -2521,8 +2521,8 @@ export function applyKnockoutExtraTime(
   const playedEt2 = sim.events.some((event) => event.minute >= 73);
   if (playedEt2) return sim;
   const names = {
-    homeName: options.homeName ?? "Home",
-    awayName: options.awayName ?? "Away",
+    homeName: options.homeName ?? "one side",
+    awayName: options.awayName ?? "the other side",
     clubId: options.clubId,
     condition: options.clubId === sim.homeId ? options.homeCondition : options.awayCondition,
   };

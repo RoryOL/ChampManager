@@ -35,6 +35,7 @@ export function TeamFixtureList({ championship, teamId, reports = {}, onOpenMatc
                 <button type="button" onClick={() => onOpenMatch(match)}>
                   <p>
                     {stageLabel(match.stage, match.round)} · {formatDate(match.date)}
+                    {match.venue ? ` · ${match.venue}` : ""}
                   </p>
                   <strong className="fixture-sides">
                     <span>

@@ -74,3 +74,10 @@ export function sideLabel(championship: Championship, ref: TeamRef): string {
 export function matchTitle(championship: Championship, match: Match): string {
   return `${sideLabel(championship, match.home)} v ${sideLabel(championship, match.away)}`;
 }
+
+export function windSidesFor(home?: Team, away?: Team): { first: string; second: string } {
+  return {
+    first: home ? compactName(home) : "one side",
+    second: away ? compactName(away) : "the other side",
+  };
+}

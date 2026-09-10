@@ -285,9 +285,9 @@ export function buildCoachReport(input: CoachInput): string[] {
   if (input.climate) {
     notes.push(
       pickOne(random, [
-        `Conditions: ${climateSummary(input.climate)}.`,
-        `The weather was a factor — ${climateSummary(input.climate)}. Plan the puck-out around it next day.`,
-        `Take the climate as read: ${climateSummary(input.climate)}. It asked a question of first touch more than of tactics.`,
+        `Conditions: ${climateSummary(input.climate, { first: input.homeName, second: input.awayName })}.`,
+        `The weather was a factor — ${climateSummary(input.climate, { first: input.homeName, second: input.awayName })}. Plan the puck-out around it next day.`,
+        `Take the climate as read: ${climateSummary(input.climate, { first: input.homeName, second: input.awayName })}. It asked a question of first touch more than of tactics.`,
       ]),
     );
   }

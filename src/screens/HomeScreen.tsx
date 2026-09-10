@@ -4,7 +4,7 @@ import { CampaignWeekCard } from "../components/CampaignWeekCard";
 import { ClubBadge } from "../components/ClubBadge";
 import { NewsKindIcon } from "../components/NewsKindIcon";
 import { WeekShapePicker } from "../components/WeekShapePicker";
-import { compactName, sideLabel } from "../lib/display";
+import { compactName, sideLabel, windSidesFor } from "../lib/display";
 import { NEWS_KIND_LABEL } from "../lib/news";
 import { resolveMatchSides, teamById, teamGroup } from "../lib/resolve";
 import { formatDate, stageLabel } from "../lib/scoring";
@@ -258,7 +258,14 @@ export function HomeScreen({
         {!preseason && nextMatch ? (
           <p className="hint hint--tight">
             {stageLabel(nextMatch.stage, nextMatch.round)} · {formatDate(nextMatch.date)}
-            {nextMatch.venue ? ` · ${nextMatch.venue}` : ""} · {climateSummary(rollClimate(save.seed, nextMatch.id))}
+            {nextMatch.venue ? ` · ${nextMatch.venue}` : ""} ·{" "}
+            {climateSummary(
+              rollClimate(save.seed, nextMatch.id),
+              windSidesFor(
+                sides?.homeId ? teamById(championship, sides.homeId) : undefined,
+                sides?.awayId ? teamById(championship, sides.awayId) : undefined,
+              ),
+            )}
           </p>
         ) : null}
         {!preseason && nextMatch ? (

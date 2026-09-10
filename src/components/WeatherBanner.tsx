@@ -1,16 +1,20 @@
 import type { MatchClimate } from "../types";
-import { climateSummary, halfWindBlurb } from "../lib/weather";
+import { climateSummary, halfWindBlurb, skyLabel, windStrengthLabel, type WindSides } from "../lib/weather";
 
 type Props = {
   climate: MatchClimate;
   period?: "first" | "second";
+  firstName: string;
+  secondName: string;
 };
 
-export function WeatherBanner({ climate, period }: Props) {
+export function WeatherBanner({ climate, period, firstName, secondName }: Props) {
+  const sides: WindSides = { first: firstName, second: secondName };
   return (
     <p className="weather-banner">
-      {climateSummary(climate)}
-      {period ? ` · ${halfWindBlurb(climate, period)}` : ""}
+      {period
+        ? `${skyLabel(climate.sky)} · ${windStrengthLabel(climate.windStrength)}. ${halfWindBlurb(climate, period, sides)}`
+        : climateSummary(climate, sides)}
     </p>
   );
 }

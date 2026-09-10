@@ -5,7 +5,7 @@ import { ClubBadge } from "../components/ClubBadge";
 import { MatchStatsPanel } from "../components/MatchStatsPanel";
 import { TacticControls } from "../components/TacticControls";
 import { ManMarkPicker } from "../components/ManMarkPicker";
-import { compactName, sideLabel, teamAccent } from "../lib/display";
+import { compactName, sideLabel, teamAccent, windSidesFor } from "../lib/display";
 import { commentaryFeed, isScoreKind, momentumAt, scoreFromEvents } from "../lib/matchEngine";
 import { KeyEventsBar } from "../components/KeyEventsBar";
 import { ShotMap } from "../components/ShotMap";
@@ -142,8 +142,8 @@ export function MatchScreen({
 
   const statsPanel = homeId && awayId ? (
     <MatchStatsPanel
-      homeName={home ? compactName(home) : "Home"}
-      awayName={away ? compactName(away) : "Away"}
+      homeName={home ? compactName(home) : sideLabel(championship, live.match.home)}
+      awayName={away ? compactName(away) : sideLabel(championship, live.match.away)}
       homeId={homeId}
       awayId={awayId}
       homeStats={chart.homeStats}
@@ -251,11 +251,11 @@ export function MatchScreen({
       {!atThrowIn ? (
         <>
           <div className="momentum" aria-label="Momentum">
-            <span>{home ? compactName(home) : "Home"}</span>
+            <span>{home ? compactName(home) : sideLabel(championship, live.match.home)}</span>
             <div className="momentum-track">
               <i style={{ width: `${momentum}%` }} />
             </div>
-            <span>{away ? compactName(away) : "Away"}</span>
+            <span>{away ? compactName(away) : sideLabel(championship, live.match.away)}</span>
           </div>
           <KeyEventsBar
             events={visible}
@@ -269,6 +269,8 @@ export function MatchScreen({
       {live.user.climate ? (
         <WeatherBanner
           climate={live.user.climate}
+          firstName={windSidesFor(home, away).first}
+          secondName={windSidesFor(home, away).second}
           period={
             live.phase === "second" || live.phase === "et2" || live.phase === "extra-half"
               ? "second"
@@ -317,8 +319,24 @@ export function MatchScreen({
                 theirSheet={theirThrowInSheet}
                 ourXv={ourThrowInXv}
                 theirXv={theirThrowInXv}
-                ourName={save.clubId === homeId ? (home ? compactName(home) : "Home") : away ? compactName(away) : "Away"}
-                theirName={save.clubId === homeId ? (away ? compactName(away) : "Away") : home ? compactName(home) : "Home"}
+                ourName={
+                  save.clubId === homeId
+                    ? home
+                      ? compactName(home)
+                      : sideLabel(championship, live.match.home)
+                    : away
+                      ? compactName(away)
+                      : sideLabel(championship, live.match.away)
+                }
+                theirName={
+                  save.clubId === homeId
+                    ? away
+                      ? compactName(away)
+                      : sideLabel(championship, live.match.away)
+                    : home
+                      ? compactName(home)
+                      : sideLabel(championship, live.match.home)
+                }
                 compact
               />
             </>

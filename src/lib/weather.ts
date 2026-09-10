@@ -1,6 +1,11 @@
 import type { MatchClimate, MatchPeriod, WeatherSky } from "../types";
 import { periodSwitchesEnds } from "./knockout";
 
+export type WindSides = {
+  first: string;
+  second: string;
+};
+
 function createRng(seed: number): () => number {
   let state = seed >>> 0 || 1;
   return () => {
@@ -33,7 +38,7 @@ export function climateOf(climate?: MatchClimate): MatchClimate {
   return climate ?? { sky: "sunny", windStrength: 12, windAngle: 18 };
 }
 
-/** +1 = blowing toward the away end. */
+/** +1 = blowing toward the end the first-named side attacks in the opening half. */
 export function parallelWind(climate: MatchClimate): number {
   const rad = (climate.windAngle * Math.PI) / 180;
   return Math.cos(rad) * (climate.windStrength / 100);
@@ -72,33 +77,61 @@ export function windStrengthLabel(strength: number): string {
   return "Gale";
 }
 
-export function windDirectionLabel(climate: MatchClimate): string {
-  const along = parallelWind(climate);
-  const across = crossWind(climate);
-  const strength = climate.windStrength;
-  if (strength < 18) return "little movement in the flags";
-  if (across >= Math.abs(along) + 0.12) {
-    return across > 0.55 ? "a full crossfield wind" : "a partial crossfield breeze";
-  }
-  if (along > 0.12) return "down the pitch toward the far end";
-  if (along < -0.12) return "down the pitch toward the near end";
-  return "swirling across the square";
-}
+type WindHold = "first" | "second" | "cross" | "calm";
 
-export function climateSummary(climate: MatchClimate): string {
-  return `${skyLabel(climate.sky)} · ${windStrengthLabel(climate.windStrength)}, ${windDirectionLabel(climate)}`;
-}
-
-export function halfWindBlurb(climate: MatchClimate, period: "first" | "second"): string {
+function windHold(climate: MatchClimate, period: "first" | "second"): WindHold {
   const along = parallelWind(climate) * (period === "second" ? -1 : 1);
   const across = crossWind(climate);
-  if (climate.windStrength < 20) return "The flags are barely moving.";
-  if (across >= Math.abs(along) + 0.1) {
+  if (climate.windStrength < 20) return "calm";
+  if (across >= Math.abs(along) + 0.1) return "cross";
+  if (along > 0.15) return "first";
+  if (along < -0.15) return "second";
+  return "cross";
+}
+
+function nameOf(hold: "first" | "second", sides: WindSides): string {
+  return hold === "first" ? sides.first : sides.second;
+}
+
+export function matchWindBlurb(climate: MatchClimate, sides: WindSides): string {
+  const hold = windHold(climate, "first");
+  if (hold === "calm") return "The flags are barely moving.";
+  if (hold === "cross") {
     return "Crossfield wind — neither side has it at their backs, and distance shooting will wander.";
   }
-  if (along > 0.15) return "Home have the wind in this half.";
-  if (along < -0.15) return "Away have the wind in this half.";
-  return "A mixed breeze, more across than down the pitch.";
+  const firstHalf = nameOf(hold, sides);
+  const secondHalf = nameOf(hold === "first" ? "second" : "first", sides);
+  return `${firstHalf} have the wind in the first half; ${secondHalf} have it in the second.`;
+}
+
+export function halfWindBlurb(
+  climate: MatchClimate,
+  period: "first" | "second",
+  sides: WindSides,
+): string {
+  const hold = windHold(climate, period);
+  if (hold === "calm") return "The flags are barely moving.";
+  if (hold === "cross") {
+    return "Crossfield wind — neither side has it at their backs, and distance shooting will wander.";
+  }
+  const thisName = nameOf(hold, sides);
+  const otherName = nameOf(hold === "first" ? "second" : "first", sides);
+  if (period === "first") {
+    return `${thisName} have the wind in this half; ${otherName} will have it after they switch ends.`;
+  }
+  return `${thisName} have the wind in this half; ${otherName} had it before they switched ends.`;
+}
+
+export function climateSummary(climate: MatchClimate, sides?: WindSides): string {
+  const sky = `${skyLabel(climate.sky)} · ${windStrengthLabel(climate.windStrength)}`;
+  if (sides) return `${sky}. ${matchWindBlurb(climate, sides)}`;
+  const along = parallelWind(climate);
+  const across = crossWind(climate);
+  if (climate.windStrength < 18) return `${sky}, little movement in the flags`;
+  if (across >= Math.abs(along) + 0.12) {
+    return `${sky}, ${across > 0.55 ? "a full crossfield wind" : "a partial crossfield breeze"}`;
+  }
+  return `${sky}. One side have the wind in the first half, the other after they switch ends.`;
 }
 
 export function passCompleteChance(climate: MatchClimate, direct: number, teamwork = 12): number {
