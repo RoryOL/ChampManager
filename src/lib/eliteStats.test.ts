@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ATTRIBUTE_KEYS } from "./attributes";
+import { ATTRIBUTE_KEYS, attributeGroupId } from "./attributes";
 import { ELITE_STAT_LIMIT, ELITE_STAT_MIN, eliteStatKeys } from "./eliteStats";
 import { lookForPlayer } from "./playerLooks";
 import { STAT_ICON_PATH } from "./statIcons";
@@ -45,6 +45,15 @@ describe("elite stat badges", () => {
   it("has a distinct icon for every attribute", () => {
     expect(ATTRIBUTE_KEYS.every((key) => STAT_ICON_PATH[key].length > 8)).toBe(true);
     expect(new Set(ATTRIBUTE_KEYS.map((key) => STAT_ICON_PATH[key])).size).toBe(ATTRIBUTE_KEYS.length);
+  });
+
+  it("tints every attribute by its group", () => {
+    expect(attributeGroupId("speed")).toBe("physical");
+    expect(attributeGroupId("shooting")).toBe("iq");
+    expect(attributeGroupId("composure")).toBe("mentality");
+    expect(attributeGroupId("frees")).toBe("setPieces");
+    expect(attributeGroupId("teamwork")).toBe("team");
+    expect(ATTRIBUTE_KEYS.every((key) => Boolean(attributeGroupId(key)))).toBe(true);
   });
 });
 

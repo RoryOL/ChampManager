@@ -1570,7 +1570,7 @@ html.native-app .device {
 .elite-stats {
   display: flex;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
   margin-top: 3px;
 }
 
@@ -1580,30 +1580,72 @@ html.native-app .device {
 }
 
 .stat-icon {
-  display: inline-flex;
-  color: #e8c547;
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
 }
 
 .stat-icon svg {
   display: block;
-  width: 14px;
-  height: 14px;
+  width: 10px;
+  height: 10px;
   fill: currentColor;
 }
 
+.stat-icon--physical {
+  color: #e8c547;
+  border: 1.25px solid #e3b01f;
+  background: rgba(227, 176, 31, 0.14);
+}
+
+.stat-icon--iq {
+  color: #9ec4e8;
+  border: 1.25px solid #6ea0d0;
+  background: rgba(110, 160, 208, 0.16);
+}
+
+.stat-icon--mentality {
+  color: #8ed49a;
+  border: 1.25px solid #5bb56a;
+  background: rgba(91, 181, 106, 0.14);
+}
+
+.stat-icon--setPieces {
+  color: #e0b48a;
+  border: 1.25px solid #c48a52;
+  background: rgba(196, 138, 82, 0.16);
+}
+
+.stat-icon--team {
+  color: #e8d48a;
+  border: 1.25px solid #c9b07a;
+  background: rgba(201, 176, 122, 0.16);
+}
+
+.elite-stats--card .stat-icon {
+  width: 22px;
+  height: 22px;
+}
+
 .elite-stats--card .stat-icon svg {
-  width: 18px;
-  height: 18px;
+  width: 12px;
+  height: 12px;
 }
 
 .attr-row .stat-icon {
+  width: 16px;
+  height: 16px;
   margin-left: 6px;
   vertical-align: middle;
 }
 
 .attr-row .stat-icon svg {
-  width: 13px;
-  height: 13px;
+  width: 9px;
+  height: 9px;
 }
 
 .squad-table thead th.name {

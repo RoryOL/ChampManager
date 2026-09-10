@@ -46,6 +46,8 @@ export type AttributeGroup = {
   keys: AttributeKey[];
 };
 
+export type AttributeGroupId = AttributeGroup["id"];
+
 export const ATTRIBUTE_GROUPS: AttributeGroup[] = [
   {
     id: "physical",
@@ -266,6 +268,14 @@ export function compressHighEnd(value: number): number {
 }
 
 export const ATTRIBUTE_KEYS: AttributeKey[] = ATTRIBUTE_GROUPS.flatMap((group) => group.keys);
+
+const ATTRIBUTE_GROUP_BY_KEY = Object.fromEntries(
+  ATTRIBUTE_GROUPS.flatMap((group) => group.keys.map((key) => [key, group.id])),
+) as Record<AttributeKey, AttributeGroupId>;
+
+export function attributeGroupId(key: AttributeKey): AttributeGroupId {
+  return ATTRIBUTE_GROUP_BY_KEY[key];
+}
 
 export const ATTRIBUTE_SHORT: Record<AttributeKey, string> = {
   speed: "Spd",
