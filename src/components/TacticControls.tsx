@@ -21,11 +21,13 @@ function TakerSelect({
   value,
   players,
   onChange,
+  numbered = true,
 }: {
   label: string;
   value: string | undefined;
   players: RatedPlayer[];
   onChange: (name: string) => void;
+  numbered?: boolean;
 }) {
   const selected = value && players.some((player) => player.name === value) ? value : "";
   return (
@@ -35,7 +37,7 @@ function TakerSelect({
         <option value="">Best available</option>
         {players.map((player, index) => (
           <option key={player.name} value={player.name}>
-            {index + 1}. {player.name}
+            {numbered ? `${index + 1}. ${player.name}` : player.name}
           </option>
         ))}
       </select>
@@ -106,6 +108,7 @@ export function TacticControls({ tactics, onChange, compact = false, xv = [] }: 
             label="Puck-out target"
             value={tactics.puckoutTarget}
             players={xv.slice(7, 12)}
+            numbered={false}
             onChange={(name) => onChange({ ...tactics, puckoutTarget: name || undefined })}
           />
         ) : null}

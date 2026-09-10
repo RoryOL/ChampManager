@@ -1,5 +1,8 @@
-import type { Tactics, TeamSheet } from "../types";
-import { XV_SLOTS } from "./attributes";
+import type { PositionLine, RatedPlayer, Tactics, TeamSheet } from "../types";
+import { LINE_LABELS, XV_SLOTS } from "./attributes";
+
+export type MarkRole = "defender" | "midfielder";
+export type ManMarkPool = "panel" | "team";
 
 /** Full-back 1–3 mark full-forwards 12–14; half-backs 4–6 mark half-forwards 9–11. */
 export function markerSlot(forwardIndex: number): number {
@@ -14,13 +17,93 @@ export function isMarkerSlot(index: number): boolean {
   return index >= 1 && index <= 8;
 }
 
-/** Opposition half-forwards and full-forwards can be picked up. */
+export function isDefenderSlot(index: number): boolean {
+  return index >= 1 && index <= 6;
+}
+
+export function isMidfielderSlot(index: number): boolean {
+  return index >= 7 && index <= 8;
+}
+
+/** Opposition half-forwards and full-forwards — the line defenders can pick up. */
 export function isAttackerSlot(index: number): boolean {
   return index >= 9 && index <= 14;
 }
 
+export function isForwardSlot(index: number): boolean {
+  return isAttackerSlot(index);
+}
+
+export function markerRoleFromSlot(index: number): MarkRole | undefined {
+  if (isDefenderSlot(index)) return "defender";
+  if (isMidfielderSlot(index)) return "midfielder";
+  return undefined;
+}
+
+export function markerRoleFromPosition(position: PositionLine): MarkRole | undefined {
+  if (position === "FB" || position === "HB") return "defender";
+  if (position === "MF") return "midfielder";
+  return undefined;
+}
+
+export function isTargetSlotForRole(role: MarkRole, index: number): boolean {
+  return role === "defender" ? isForwardSlot(index) : isMidfielderSlot(index);
+}
+
+export function isTargetPositionForRole(role: MarkRole, position: PositionLine): boolean {
+  if (role === "defender") return position === "HF" || position === "FF";
+  return position === "MF";
+}
+
+/** Defenders mark forwards; midfielders mark midfielders. */
+export function canMarkSlots(markerIndex: number, targetIndex: number): boolean {
+  const role = markerRoleFromSlot(markerIndex);
+  return role ? isTargetSlotForRole(role, targetIndex) : false;
+}
+
 export function slotLineLabel(index: number): string {
-  return XV_SLOTS[index] ?? "Bench";
+  const slot = XV_SLOTS[index];
+  return slot ? LINE_LABELS[slot] : "Bench";
+}
+
+export function positionLineLabel(position: PositionLine): string {
+  return LINE_LABELS[position];
+}
+
+export function poolNames(sheet: TeamSheet, pool: ManMarkPool): string[] {
+  return pool === "panel" ? [...sheet.starters, ...sheet.subs] : [...sheet.starters];
+}
+
+export function markerRoleFor(
+  name: string,
+  sheet: TeamSheet,
+  player: RatedPlayer | undefined,
+  pool: ManMarkPool,
+): MarkRole | undefined {
+  const index = sheet.starters.indexOf(name);
+  if (index >= 0) return markerRoleFromSlot(index);
+  if (pool === "panel") return player ? markerRoleFromPosition(player.position) : undefined;
+  return undefined;
+}
+
+export function isMarkTargetFor(
+  role: MarkRole,
+  name: string,
+  sheet: TeamSheet,
+  player: RatedPlayer | undefined,
+  pool: ManMarkPool,
+): boolean {
+  const index = sheet.starters.indexOf(name);
+  if (index >= 0) return isTargetSlotForRole(role, index);
+  if (pool === "panel") return player ? isTargetPositionForRole(role, player.position) : false;
+  return false;
+}
+
+export function lineLabelFor(name: string, sheet: TeamSheet, player: RatedPlayer | undefined): string {
+  const index = sheet.starters.indexOf(name);
+  if (index >= 0) return slotLineLabel(index);
+  if (player) return positionLineLabel(player.position);
+  return "Bench";
 }
 
 export function migrateManMarks(raw: unknown): Record<string, string> | undefined {
@@ -42,7 +125,7 @@ export function sanitizeManMarks(
   for (const [marker, target] of Object.entries(marks ?? {})) {
     const markerIndex = ourStarters.indexOf(marker);
     const targetIndex = theirStarters.indexOf(target);
-    if (!isMarkerSlot(markerIndex) || !isAttackerSlot(targetIndex) || used.has(target)) continue;
+    if (!canMarkSlots(markerIndex, targetIndex) || used.has(target)) continue;
     next[marker] = target;
     used.add(target);
   }

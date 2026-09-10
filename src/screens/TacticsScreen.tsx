@@ -110,7 +110,10 @@ export function TacticsScreen({ save, championship, nextMatch, onChange, onSwap,
   const opponentSheet = opponentId
     ? expandSheetToPanel(opponentId, save.rivals[opponentId]?.sheet ?? defaultSheet(opponentId, save), save)
     : null;
-  const opponentXv = opponentId && opponentSheet ? sheetPlayers(opponentId, opponentSheet, save) : [];
+  const opponentSquad = useMemo(
+    () => (opponentId ? ratedSquad(opponentId, save) : []),
+    [opponentId, save],
+  );
 
   useEffect(() => {
     const full = expandSheetToPanel(save.clubId, save.sheet, save);
@@ -244,10 +247,11 @@ export function TacticsScreen({ save, championship, nextMatch, onChange, onSwap,
           onChange={onChange}
           ourSheet={sheet}
           theirSheet={opponentSheet}
-          ourXv={xv}
-          theirXv={opponentXv}
+          ourXv={squad}
+          theirXv={opponentSquad}
           ourName={us ? compactName(us) : "Us"}
           theirName={compactName(opponent)}
+          pool="panel"
         />
       ) : null}
     </div>

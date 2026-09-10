@@ -64,7 +64,7 @@ import {
   shortPuckoutTakeChance,
   keeperSaveChance,
 } from "./lib/matchEngine";
-import { applyManMarkShape, markNegation, resolveMarker, sanitizeManMarks } from "./lib/manMarking";
+import { applyManMarkShape, isMarkTargetFor, markNegation, markerRoleFor, poolNames, resolveMarker, sanitizeManMarks } from "./lib/manMarking";
 import { aerialContestRating, clubTactics, DEFAULT_TACTICS, defaultSheet, expandSheetToPanel, matchOrderIndex, matchShirtNumber, matchSlot, pickPuckoutTarget, playerAge, ratePlayer, ratedSquad, sheetPlayers, sideStrength, sideTeamwork, swapPlayersInSheet } from "./lib/players";
 import { nextBatch } from "./lib/schedule";
 import { matchPlayed, scoreTotal } from "./lib/scoring";
@@ -483,6 +483,11 @@ describe("match engine", () => {
     const marks = sanitizeManMarks({ [fullBack]: halfForward }, us.starters, them.starters);
     expect(marks[fullBack]).toBe(halfForward);
     expect(sanitizeManMarks({ [us.starters[12]!]: halfForward }, us.starters, them.starters)).toEqual({});
+    const midfielder = us.starters[7]!;
+    const theirMid = them.starters[7]!;
+    expect(sanitizeManMarks({ [midfielder]: theirMid }, us.starters, them.starters)[midfielder]).toBe(theirMid);
+    expect(sanitizeManMarks({ [midfielder]: halfForward }, us.starters, them.starters)).toEqual({});
+    expect(sanitizeManMarks({ [fullBack]: theirMid }, us.starters, them.starters)).toEqual({});
     const shaped = applyManMarkShape(us, them, marks);
     expect(shaped.starters.indexOf(fullBack)).toBeGreaterThanOrEqual(4);
     expect(shaped.starters.indexOf(fullBack)).toBeLessThanOrEqual(6);
@@ -498,6 +503,38 @@ describe("match engine", () => {
     expect(elite.extraCover).toBeGreaterThan(ordinary.extraCover);
     expect(elite.convertCut).toBeGreaterThan(ordinary.convertCut);
     expect(none.extraCover).toBe(0);
+  });
+
+  it("offers the whole panel as markers in tactics and only the fifteen in a match", () => {
+    const us = defaultSheet("ballyea");
+    const them = defaultSheet("eire-og");
+    const ourSquad = ratedSquad("ballyea");
+    const theirSquad = ratedSquad("eire-og");
+    const byName = (squad: typeof ourSquad, name: string) => squad.find((player) => player.name === name);
+    const panel = poolNames(us, "panel");
+    const team = poolNames(us, "team");
+    expect(panel.length).toBeGreaterThan(team.length);
+    expect(team).toEqual(us.starters);
+    expect(panel).toEqual([...us.starters, ...us.subs]);
+
+    const benchDefender = us.subs.find((name) => markerRoleFor(name, us, byName(ourSquad, name), "panel") === "defender");
+    expect(benchDefender).toBeTruthy();
+    if (!benchDefender) return;
+    expect(markerRoleFor(benchDefender, us, byName(ourSquad, benchDefender), "team")).toBeUndefined();
+    expect(markerRoleFor(us.starters[2]!, us, byName(ourSquad, us.starters[2]!), "team")).toBe("defender");
+    expect(markerRoleFor(us.starters[7]!, us, byName(ourSquad, us.starters[7]!), "team")).toBe("midfielder");
+    expect(markerRoleFor(us.starters[12]!, us, byName(ourSquad, us.starters[12]!), "panel")).toBeUndefined();
+
+    expect(isMarkTargetFor("defender", them.starters[12]!, them, byName(theirSquad, them.starters[12]!), "team")).toBe(true);
+    expect(isMarkTargetFor("defender", them.starters[7]!, them, byName(theirSquad, them.starters[7]!), "team")).toBe(false);
+    expect(isMarkTargetFor("midfielder", them.starters[7]!, them, byName(theirSquad, them.starters[7]!), "team")).toBe(true);
+    expect(isMarkTargetFor("midfielder", them.starters[12]!, them, byName(theirSquad, them.starters[12]!), "team")).toBe(false);
+    const benchForward = them.subs.find((name) =>
+      isMarkTargetFor("defender", name, them, byName(theirSquad, name), "panel"),
+    );
+    expect(benchForward).toBeTruthy();
+    if (!benchForward) return;
+    expect(isMarkTargetFor("defender", benchForward, them, byName(theirSquad, benchForward), "team")).toBe(false);
   });
 
   it("applies man-mark shape in the simulated sheet when a full-back tracks a half-forward", () => {

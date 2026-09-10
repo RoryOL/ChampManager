@@ -320,6 +320,7 @@ export function MatchScreen({
                 ourName={save.clubId === homeId ? (home ? compactName(home) : "Home") : away ? compactName(away) : "Away"}
                 theirName={save.clubId === homeId ? (away ? compactName(away) : "Away") : home ? compactName(home) : "Home"}
                 compact
+                pool="team"
               />
             </>
           ) : null}
@@ -370,6 +371,7 @@ export function MatchScreen({
             ourXv={htXv}
             theirXv={theirHtXv}
             compact
+            pool="team"
           />
         </div>
       ) : pane === "stats" ? (
