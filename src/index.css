@@ -41,11 +41,15 @@ h3 {
   font-family: "Roboto Condensed", Roboto, sans-serif;
 }
 
-button {
-  font: inherit;
+fieldset.tactic-controls {
   border: 0;
-  background: none;
-  color: inherit;
+  margin: 0;
+  padding: 0;
+  min-inline-size: 0;
+}
+
+fieldset.tactic-controls:disabled {
+  opacity: 0.65;
 }
 
 .device {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { PRESEASON_WEEKS } from "../training";
-import { addSeat, createCampaign, readyClub, startCampaign, trainClub } from "./campaign";
+import { addSeat, clubPreseasonWeek, createCampaign, readyClub, startCampaign, trainClub } from "./campaign";
 import { mergeCampaigns } from "./merge";
 
 const NOW = 1_700_000_000_000;
@@ -57,8 +57,8 @@ describe("campaign merge", () => {
     const hostCopy = trainFullWeek(base, "ballyea", "skills", NOW + 10);
     const guestCopy = trainFullWeek(base, "inagh-kilnamona", "fitness", NOW + 11);
     const merged = mergeCampaigns(hostCopy, guestCopy);
-    expect(merged.clubs.ballyea.trainingDue).toBe(false);
-    expect(merged.clubs["inagh-kilnamona"].trainingDue).toBe(false);
+    expect(clubPreseasonWeek(merged, "ballyea")).toBe(2);
+    expect(clubPreseasonWeek(merged, "inagh-kilnamona")).toBe(2);
     expect(merged.clubs.ballyea.inbox.some((item) => item.kind === "training")).toBe(true);
     expect(merged.clubs["inagh-kilnamona"].inbox.some((item) => item.kind === "training")).toBe(true);
   });
@@ -86,8 +86,8 @@ describe("campaign merge", () => {
     const guestCopy = trainFullWeek(base, "inagh-kilnamona", "fitness", NOW + 11);
     const once = mergeCampaigns(hostCopy, guestCopy);
     const twice = mergeCampaigns(once, guestCopy);
-    expect(twice.clubs.ballyea.trainingDue).toBe(false);
-    expect(twice.clubs["inagh-kilnamona"].trainingDue).toBe(false);
+    expect(clubPreseasonWeek(twice, "ballyea")).toBe(2);
+    expect(clubPreseasonWeek(twice, "inagh-kilnamona")).toBe(2);
     expect(mergeCampaigns(once, once)).toBe(once);
   });
 });

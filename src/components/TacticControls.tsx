@@ -14,6 +14,7 @@ type Props = {
   onChange: (tactics: Tactics) => void;
   compact?: boolean;
   xv?: RatedPlayer[];
+  disabled?: boolean;
 };
 
 function TakerSelect({
@@ -43,9 +44,9 @@ function TakerSelect({
   );
 }
 
-export function TacticControls({ tactics, onChange, compact = false, xv = [] }: Props) {
+export function TacticControls({ tactics, onChange, compact = false, xv = [], disabled = false }: Props) {
   return (
-    <div className={compact ? "tactic-controls tactic-controls--compact" : "tactic-controls"}>
+    <fieldset disabled={disabled} className={compact ? "tactic-controls tactic-controls--compact" : "tactic-controls"}>
       <section className="card">
         <h3>Mentality</h3>
         <div className="choice-row">
@@ -225,6 +226,6 @@ export function TacticControls({ tactics, onChange, compact = false, xv = [] }: 
           />
         </section>
       ) : null}
-    </div>
+    </fieldset>
   );
 }

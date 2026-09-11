@@ -513,6 +513,8 @@ export type ClubRuntime = {
   trainingDeltas: Record<string, AttributeBoosts>;
   weekDeltas: Record<string, AttributeBoosts>;
   nextMatchPrep?: MatchPrep;
+  /** 1–6 during preseason; 7+ once this club has started the championship. */
+  preseasonWeek?: number;
 };
 
 export type HalfPlan = {

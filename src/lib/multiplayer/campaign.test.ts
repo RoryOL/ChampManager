@@ -6,9 +6,12 @@ import { PRESEASON_WEEKS } from "../training";
 import {
   addSeat,
   championshipOf,
+  clubInSeason,
+  clubPreseasonWeek,
   createCampaign,
   forceAdvance,
   liveForClub,
+  preMatchTacticsLocked,
   readyClub,
   startCampaign,
   submitSecondHalf,
@@ -16,8 +19,10 @@ import {
   trainClub,
   trainClubWeek,
   waitingOnSecondHalf,
-  waitingOnWeek,
+  waitingOnClub,
+  withClubTactics,
 } from "./campaign";
+import { mergeCampaigns } from "./merge";
 
 const NOW = 1_700_000_000_000;
 
@@ -51,7 +56,7 @@ function trainFullWeek(
   now: number,
 ) {
   let next = campaign;
-  const sessions = next.phase === "preseason" ? 3 : 1;
+  const sessions = clubInSeason(next, clubId) ? 1 : 3;
   for (let index = 0; index < sessions; index += 1) {
     next = trainClub(next, clubId, session, now + index);
   }
@@ -61,12 +66,35 @@ function trainFullWeek(
 function throughPreseason(campaign = startedCampaign()) {
   let next = campaign;
   for (let week = 1; week <= PRESEASON_WEEKS; week += 1) {
-    next = trainFullWeek(next, "ballyea", "skills", NOW + week * 10);
-    expect(next.preseasonWeek).toBe(week);
-    next = trainFullWeek(next, "inagh-kilnamona", "fitness", NOW + week * 10 + 3);
+    const hostClub = next.seats[0]!.clubId;
+    const guestClub = next.seats[1]!.clubId;
+    next = trainFullWeek(next, hostClub, "skills", NOW + week * 10);
+    expect(clubPreseasonWeek(next, hostClub)).toBe(week + 1);
+    next = trainFullWeek(next, guestClub, "fitness", NOW + week * 10 + 3);
+    expect(clubPreseasonWeek(next, guestClub)).toBe(week + 1);
   }
   expect(next.phase).toBe("season");
+  expect(clubInSeason(next, next.seats[0]!.clubId)).toBe(true);
   return next;
+}
+
+function splitGroupCampaign() {
+  const campaign = createCampaign({
+    hostPlayerId: "host",
+    hostName: "Rory",
+    clubId: "ballyea",
+    waitHours: 24,
+    now: NOW,
+    seed: 42,
+    code: "SPLIT1",
+  });
+  const joined = addSeat(campaign, { playerId: "guest", name: "Siobhan", clubId: "eire-og" });
+  expect(joined.ok).toBe(true);
+  if (!joined.ok) throw new Error(joined.error);
+  const started = startCampaign(joined.campaign, "host", NOW);
+  expect(started.ok).toBe(true);
+  if (!started.ok) throw new Error(started.error);
+  return started.campaign;
 }
 
 describe("multiplayer campaign", () => {
@@ -116,36 +144,71 @@ describe("multiplayer campaign", () => {
     expect(twoPlayerLobby().balance).toBe("standard");
   });
 
-  it("holds preseason until every manager finishes that week's sessions", () => {
+  it("lets each manager run preseason weeks without waiting on the other", () => {
     let campaign = startedCampaign();
     campaign = trainClub(campaign, "ballyea", "skills", NOW + 10);
-    expect(campaign.preseasonWeek).toBe(1);
+    expect(clubPreseasonWeek(campaign, "ballyea")).toBe(1);
     expect(campaign.clubs.ballyea.sessionsDone).toBe(1);
-    expect(waitingOnWeek(campaign).map((seat) => seat.clubId).sort()).toEqual(["ballyea", "inagh-kilnamona"]);
+    expect(waitingOnClub(campaign, "ballyea")).toEqual([]);
     campaign = trainFullWeek(campaign, "ballyea", "skills", NOW + 11);
-    expect(campaign.preseasonWeek).toBe(1);
-    expect(waitingOnWeek(campaign).map((seat) => seat.clubId)).toEqual(["inagh-kilnamona"]);
+    expect(clubPreseasonWeek(campaign, "ballyea")).toBe(2);
+    expect(clubPreseasonWeek(campaign, "inagh-kilnamona")).toBe(1);
+    expect(waitingOnClub(campaign, "inagh-kilnamona")).toEqual([]);
     campaign = trainFullWeek(campaign, "inagh-kilnamona", "recovery", NOW + 20);
-    expect(campaign.preseasonWeek).toBe(2);
-    expect(waitingOnWeek(campaign).map((seat) => seat.clubId).sort()).toEqual(["ballyea", "inagh-kilnamona"]);
+    expect(clubPreseasonWeek(campaign, "inagh-kilnamona")).toBe(2);
+    expect(clubPreseasonWeek(campaign, "ballyea")).toBe(2);
   });
 
   it("lets a manager run a two-session-plus-challenge week in one action", () => {
     let campaign = startedCampaign();
     campaign = trainClubWeek(campaign, "ballyea", "challenge", NOW + 30);
-    expect(campaign.clubs.ballyea.trainingDue).toBe(false);
+    expect(campaign.clubs.ballyea.trainingDue).toBe(true);
     expect(campaign.clubs.ballyea.sessionsDone).toBe(0);
     expect(campaign.clubs.ballyea.weekShape).toBe("challenge");
-    expect(waitingOnWeek(campaign).map((seat) => seat.clubId)).toEqual(["inagh-kilnamona"]);
+    expect(clubPreseasonWeek(campaign, "ballyea")).toBe(2);
+    expect(clubPreseasonWeek(campaign, "inagh-kilnamona")).toBe(1);
     expect(campaign.clubs.ballyea.inbox.some((item) => item.title.includes("complete"))).toBe(true);
   });
 
-  it("fills missing week actions when the host window expires", () => {
+  it("does not auto-advance the other manager's preseason when the wait window expires", () => {
     let campaign = startedCampaign();
     campaign = trainClub(campaign, "ballyea", "skills", NOW + 10);
     campaign = tickCampaign(campaign, NOW + 25 * 60 * 60 * 1000);
-    expect(campaign.preseasonWeek).toBe(2);
+    expect(clubPreseasonWeek(campaign, "ballyea")).toBe(1);
+    expect(clubPreseasonWeek(campaign, "inagh-kilnamona")).toBe(1);
     expect(campaign.clubs["inagh-kilnamona"].trainingDue).toBe(true);
+  });
+
+  it("does not let a joining copy push the host's preseason week forward", () => {
+    const base = startedCampaign();
+    const hostCopy = trainFullWeek(base, "ballyea", "skills", NOW + 10);
+    const guestTick = tickCampaign(base, NOW + 25 * 60 * 60 * 1000);
+    const merged = mergeCampaigns(hostCopy, guestTick);
+    expect(clubPreseasonWeek(merged, "ballyea")).toBe(2);
+    expect(clubPreseasonWeek(merged, "inagh-kilnamona")).toBe(1);
+  });
+
+  it("lets a manager play a computer tie without waiting on the other human", () => {
+    let campaign = throughPreseason(splitGroupCampaign());
+    campaign = readyClub(campaign, "ballyea", NOW + 100);
+    expect(liveForClub(campaign, "ballyea")).toBeTruthy();
+    expect(liveForClub(campaign, "eire-og")).toBeUndefined();
+    expect(campaign.week.ready["eire-og"]).toBeFalsy();
+    const championship = championshipOf(campaign);
+    const ballyeaMatch = championship.matches.find((match) => match.id === liveForClub(campaign, "ballyea")?.matchId);
+    expect(ballyeaMatch && !matchPlayed(ballyeaMatch)).toBe(true);
+  });
+
+  it("locks first-half tactics after a manager confirms a human match", () => {
+    let campaign = throughPreseason();
+    const mentality = campaign.clubs.ballyea.tactics.mentality;
+    campaign = readyClub(campaign, "ballyea", NOW + 100);
+    expect(preMatchTacticsLocked(campaign, "ballyea")).toBe(true);
+    campaign = withClubTactics(campaign, "ballyea", { ...campaign.clubs.ballyea.tactics, mentality: "attacking" });
+    expect(campaign.clubs.ballyea.tactics.mentality).toBe(mentality);
+    campaign = readyClub(campaign, "inagh-kilnamona", NOW + 101);
+    expect(liveForClub(campaign, "ballyea")).toBeTruthy();
+    expect(preMatchTacticsLocked(campaign, "ballyea")).toBe(false);
   });
 
   it("waits on both humans before a first half can be watched, then waits on both second-half plans", () => {
@@ -192,6 +255,15 @@ describe("multiplayer campaign", () => {
     expect(finished && matchPlayed(finished)).toBe(true);
   });
 
+  it("starts a human match when the wait window expires after one manager has confirmed", () => {
+    let campaign = throughPreseason();
+    campaign = readyClub(campaign, "ballyea", NOW + 300);
+    expect(liveForClub(campaign, "ballyea")).toBeUndefined();
+    campaign = tickCampaign(campaign, NOW + 300 + 25 * 60 * 60 * 1000);
+    expect(liveForClub(campaign, "ballyea")).toBeTruthy();
+    expect(campaign.week.ready["inagh-kilnamona"]).toBeTruthy();
+  });
+
   it("ticks training injuries off and writes a recovery note", () => {
     let campaign = startedCampaign();
     const name = campaign.clubs.ballyea.sheet.starters[0]!;
@@ -224,14 +296,11 @@ describe("multiplayer campaign", () => {
     );
   });
 
-  it("runs computer clubs through preseason and changes their championship setup", () => {
+  it("runs computer clubs through preseason when the championship starts", () => {
     const campaign = startedCampaign();
     expect(Object.keys(campaign.clubs).length).toBe(16);
     expect(campaign.clubs.clonlara.tactics).not.toEqual(DEFAULT_TACTICS);
-    let next = trainFullWeek(campaign, "ballyea", "skills", NOW + 10);
-    next = trainFullWeek(next, "inagh-kilnamona", "fitness", NOW + 20);
-    expect(next.preseasonWeek).toBe(2);
-    const cpu = next.clubs.clonlara;
+    const cpu = campaign.clubs.clonlara;
     expect(cpu).toBeTruthy();
     const moved = Object.values(cpu.condition).some(
       (row) => (row.sharpness ?? 0) > 38 || (row.fatigue ?? 0) > 0 || Boolean(row.boosts && Object.keys(row.boosts).length),

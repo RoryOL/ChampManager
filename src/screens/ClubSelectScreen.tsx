@@ -266,7 +266,7 @@ export function ClubSelectScreen({ onTakeCharge, onHost, onJoin, onPreviewTaken 
           {error ? <p className="hint hint--warn">{error}</p> : null}
           <p className="hint">
             {mode === "host"
-              ? "Then pick your club. Friends can join on this phone or on theirs with the invite code. Championship weeks wait until every manager has acted, or until your window closes."
+              ? "Then pick your club. Friends can join on this phone or on theirs with the invite code. Each manager trains and plays their own games; you only wait when you face each other, or until your window closes."
               : looking
                 ? "Looking up that room…"
                 : "Enter the host's invite code. It works on another phone if both have a connection. You can still paste a snapshot if the live room is quiet."}

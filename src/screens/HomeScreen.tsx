@@ -11,6 +11,7 @@ import { formatDate, stageLabel } from "../lib/scoring";
 import { buildPreMatchBriefing } from "../lib/briefing";
 import { averageFitness, averageMatchOverall, DEFAULT_WEEK_SHAPE, MATCH_PREP_OPTIONS, matchPrepTitle, MIN_MATCH_FITNESS, PRESEASON_WEEKS } from "../lib/training";
 import { ratedSquad, sideTeamwork } from "../lib/players";
+import { liveForClub } from "../lib/multiplayer/campaign";
 import { rollClimate, climateSummary } from "../lib/weather";
 
 type Props = {
@@ -132,6 +133,8 @@ export function HomeScreen({
   const opened = save.inbox.find((item) => item.id === openId) ?? null;
   const unread = save.inbox.filter((item) => !item.read).length;
   const weekShape = save.weekShape ?? DEFAULT_WEEK_SHAPE;
+  const myLive = campaign ? liveForClub(campaign, save.clubId) : undefined;
+  const canWatch = Boolean(myLive && !myLive.combined);
 
   const openNews = (item: NewsItem) => {
     setOpenId(item.id);
@@ -221,9 +224,9 @@ export function HomeScreen({
         ) : save.nextMatchPrep && !preseason ? (
           <p className="hint hint--tight">{matchPrepTitle(save.nextMatchPrep)} is in for championship day.</p>
         ) : campaign && preseason && !save.trainingDue ? (
-          <p className="tactic-copy">Your week is in. Waiting on the other managers before it turns.</p>
+          <p className="tactic-copy">Your week is in.</p>
         ) : null}
-        {!preseason && nextMatch && sides && !(campaign && !campaign.week.locked) ? (
+        {!preseason && nextMatch && sides && !(campaign && !canWatch) ? (
           <div className="row-actions">
             <button type="button" className="btn" onClick={onGoToMatch}>
               {campaign
@@ -281,7 +284,7 @@ export function HomeScreen({
           </div>
         ) : null}
         {preseason && !save.trainingDue ? (
-          <p className="hint hint--tight">Round 1 waits after six weeks. Open training when the next week is due.</p>
+          <p className="hint hint--tight">This week is in. Open training when you want the next one.</p>
         ) : null}
       </section>
 

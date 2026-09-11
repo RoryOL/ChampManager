@@ -198,6 +198,7 @@ export default function App() {
               onSwap={game.swapPlayers}
               onSetSheet={game.setSheet}
               onOpenTeam={openTeam}
+              locked={game.tacticsLocked}
             />
           )}
           {page === "fixtures" && selectedMatch && game.save ? (

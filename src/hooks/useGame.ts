@@ -10,6 +10,7 @@ import {
   createCampaign,
   forceAdvance,
   liveForClub,
+  preMatchTacticsLocked,
   readyClub,
   saveFromCampaign,
   setWaitHours,
@@ -1633,5 +1634,6 @@ export function useGame() {
     copyCode,
     copySnapshot,
     readNews,
+    tacticsLocked: Boolean(campaign && activeSeat && preMatchTacticsLocked(campaign, activeSeat.clubId)),
   };
 }

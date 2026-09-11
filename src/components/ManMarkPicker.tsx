@@ -19,6 +19,7 @@ type Props = {
   ourName?: string;
   theirName?: string;
   compact?: boolean;
+  disabled?: boolean;
 };
 
 function playerLine(name: string, xv: RatedPlayer[], sheet: TeamSheet): string {
@@ -41,6 +42,7 @@ export function ManMarkPicker({
   ourName = "Us",
   theirName = "Them",
   compact = false,
+  disabled = false,
 }: Props) {
   const markers = ourSheet.starters
     .map((name, index) => ({ name, index }))
@@ -70,6 +72,7 @@ export function ManMarkPicker({
                 <span>{playerLine(row.name, ourXv, ourSheet)}</span>
                 <select
                   value={selected}
+                  disabled={disabled}
                   onChange={(event) => onChange(setManMark(tactics, row.name, event.target.value || undefined))}
                   aria-label={`Man mark for ${row.name}`}
                 >
