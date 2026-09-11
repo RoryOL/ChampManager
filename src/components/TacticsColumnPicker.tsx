@@ -20,7 +20,6 @@ export function TacticsColumnPicker({ selected, onChange }: Props) {
           </button>
         ) : null}
       </div>
-      <p className="hint hint--tight">Add attributes to the panel list. Pick two names to compare who is better where.</p>
       {ATTRIBUTE_GROUPS.map((group) => (
         <div key={group.id} className="tactics-columns__group">
           <span>{group.label}</span>

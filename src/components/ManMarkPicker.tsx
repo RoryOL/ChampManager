@@ -67,11 +67,6 @@ export function ManMarkPicker({
   return (
     <section className={compact ? "card card--compact" : "card"}>
       <h3>Man marking</h3>
-      <p className="tactic-copy">
-        Defenders can track a named forward; midfielders can track a named midfielder. Marking, pace, strength,
-        workrate and hooking all go toward shutting him down. A full-back on a half-forward pushes onto the half-back
-        line and a half-back drops.
-      </p>
       <ul className="man-mark-list">
         {markers.map((name) => {
           const role = markerRoleFor(name, ourSheet, findPlayer(ourXv, name), pool);
