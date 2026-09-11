@@ -29,15 +29,19 @@ import {
   subEventFor,
   type RolledInjury,
 } from "./injuries";
-import { clubTactics, defaultSheet, expandSheetToPanel, pickPuckoutTarget, sheetPlayers, sideProfile, sideTeamwork, aerialContestRating, type SideProfile } from "./players";
+import { clubTactics, defaultSheet, expandSheetToPanel, pickPuckoutTarget, sheetPlayers, sideProfile, sideTeamwork, sideWorkrate, aerialContestRating, type SideProfile } from "./players";
 import { MATCH_SUB_LIMIT, remainingMatchSubs } from "./subs";
 import { applyManMarkShape, markNegation, resolveMarker } from "./manMarking";
 import { knockoutNeedsExtraTime, periodClock } from "./knockout";
 import {
   attackingTop,
   conversionContext,
+  distanceAttemptChance,
+  distancePressureMul,
+  distanceShotM,
   goalChanceFromDistance,
   makeShot,
+  midfieldDistanceSlot,
   nearestToSpot,
   openPlayConversion,
   setPieceConversion,
@@ -87,8 +91,14 @@ export function freeConversionChance(frees: number, composure: number, underPres
   return Math.min(0.94, Math.max(0.28, 0.2 + frees * 0.032 + composure * 0.008 + underPressure * 0.004));
 }
 
-export function sixtyFiveChance(frees: number, strikingDistance: number, composure: number): number {
-  return Math.min(0.86, Math.max(0.18, 0.1 + frees * 0.028 + strikingDistance * 0.01 + composure * 0.006));
+export function sixtyFiveChance(frees: number, strikingDistance: number, composure: number, shooting = 12): number {
+  return Math.min(
+    0.86,
+    Math.max(
+      0.18,
+      0.1 + frees * 0.028 + strikingDistance * 0.014 + composure * 0.006 + (shooting - 12) * 0.004,
+    ),
+  );
 }
 
 export function sidelinePointChance(
@@ -277,8 +287,28 @@ export function breakHuntRating(
   acceleration: number,
   offTheBall: number,
   firstTouch: number,
+  workrate = 12,
 ): number {
-  return offTheBall * 0.28 + speed * 0.24 + acceleration * 0.24 + firstTouch * 0.24;
+  return offTheBall * 0.22 + speed * 0.18 + acceleration * 0.18 + firstTouch * 0.22 + workrate * 0.2;
+}
+
+/** High workrate + teamwork: win the dirty ball and give it to a better finisher. */
+export function skillFeedChance(workrate: number, teamwork: number): number {
+  return Math.min(0.52, Math.max(0, (workrate - 11) * 0.03 + (teamwork - 11) * 0.016));
+}
+
+export function skillTargetWeight(shooting: number, vision: number, firstTouch: number): number {
+  return shooting * 0.46 + vision * 0.3 + firstTouch * 0.24;
+}
+
+export function sideOil(workrate: number, teamwork: number): number {
+  return workrate * 0.62 + teamwork * 0.38;
+}
+
+/** Mean-reversion when a side is going badly. Low workrate sides stay stuck. */
+export function momentumRevertRate(oil: number, losing: boolean): number {
+  if (!losing) return 0.05;
+  return Math.max(0.012, 0.05 + (oil - 12) * 0.0045);
 }
 
 export function breakWinChance(
@@ -407,7 +437,7 @@ export function lateSoftFreeChance(minute: number, margin: number): number {
 /** One-point games in the last few minutes: the trailer throws another look at the posts. */
 export function lateEqualizerLookChance(minute: number, margin: number): number {
   if (Math.abs(margin) !== 1 || minute < 56) return 0;
-  return 0.12 + latePhase(minute) * 0.1;
+  return 0.16 + latePhase(minute) * 0.12;
 }
 
 export function chaseEffortFromAcc(accumulated: number): number {
@@ -443,12 +473,21 @@ export function tackleChance(
   strength = 12,
   role: TackleRole = "back",
   outnumbered = false,
+  workrate = 12,
 ): number {
   const physical = clampDial(aggression) / 100;
   const press = clampDial(pressure) / 100;
   const base = Math.min(
     0.32,
-    Math.max(0.08, 0.08 + hooking * 0.0035 + strength * 0.0045 + physical * 0.07 + press * 0.06),
+    Math.max(
+      0.08,
+      0.08 +
+        hooking * 0.0035 +
+        strength * 0.0045 +
+        physical * 0.07 +
+        press * 0.06 +
+        (workrate - 12) * (role === "forward" ? 0.0044 : role === "mid" ? 0.0028 : 0.0012),
+    ),
   );
   const roleMul = role === "forward" ? 0.56 : role === "mid" ? 0.94 : 1;
   const numbersMul = outnumbered && role === "forward" ? 0.6 : 1;
@@ -580,6 +619,8 @@ export function nextMomentum(
   current: number,
   event: Pick<MatchEvent, "kind" | "teamId" | "text">,
   homeId: string,
+  homeOil = 12,
+  awayOil = 12,
 ): number {
   const towardHome = event.teamId === homeId ? 1 : -1;
   let delta = 0;
@@ -621,7 +662,16 @@ export function nextMomentum(
     default:
       delta = 0;
   }
-  const drifted = current + (50 - current) * 0.05 + towardHome * delta;
+  const losing = Math.abs(current - 50) >= 6;
+  const oil = current < 50 ? homeOil : current > 50 ? awayOil : (homeOil + awayOil) / 2;
+  const revert = momentumRevertRate(oil, losing);
+  const turning =
+    (towardHome === 1 && current < 48 && delta > 0) || (towardHome === -1 && current > 52 && delta > 0);
+  if (turning) {
+    const turnOil = towardHome === 1 ? homeOil : awayOil;
+    delta *= 1 + Math.max(0, turnOil - 12) * 0.016;
+  }
+  const drifted = current + (50 - current) * revert + towardHome * delta;
   return Math.max(4, Math.min(96, Math.round(drifted)));
 }
 
@@ -817,6 +867,22 @@ export function simulateMatch(options: {
     ratings,
     awayRoster,
   );
+  const homeWorkrate = sideWorkrate(
+    options.homeId,
+    { starters: homeNames, subs: homeSubs },
+    options.homeCondition,
+    ratings,
+    homeRoster,
+  );
+  const awayWorkrate = sideWorkrate(
+    options.awayId,
+    { starters: awayNames, subs: awaySubs },
+    options.awayCondition,
+    ratings,
+    awayRoster,
+  );
+  const homeOil = sideOil(homeWorkrate, homeTeamwork);
+  const awayOil = sideOil(awayWorkrate, awayTeamwork);
   const playerOf = (teamId: string, name: string) =>
     (teamId === options.homeId ? homeRoster : awayRoster).find((player) => player.name === name)
     ?? sheetPlayers(teamId, { starters: teamId === options.homeId ? homeNames : awayNames, subs: [] }, ratings).find(
@@ -993,7 +1059,7 @@ export function simulateMatch(options: {
   ];
 
   const push = (event: Omit<MatchEvent, "momentum">) => {
-    momentum = nextMomentum(momentum, event, options.homeId);
+    momentum = nextMomentum(momentum, event, options.homeId, homeOil, awayOil);
     events.push({ ...event, momentum });
   };
 
@@ -1019,6 +1085,7 @@ export function simulateMatch(options: {
       player.ratings.acceleration,
       player.ratings.offTheBall,
       player.ratings.firstTouch,
+      player.ratings.workrate,
     );
   };
   const contestBreak = (
@@ -1095,6 +1162,7 @@ export function simulateMatch(options: {
             taker?.ratings.frees ?? 11,
             taker?.ratings.strikingDistance ?? 11,
             taker?.ratings.composure ?? 11,
+            taker?.ratings.shooting ?? 12,
           )
         : eventKind === "free"
           ? freeConversionChance(
@@ -1106,6 +1174,7 @@ export function simulateMatch(options: {
               taker?.ratings.frees ?? 11,
               taker?.ratings.strikingDistance ?? 11,
               taker?.ratings.composure ?? 11,
+              taker?.ratings.shooting ?? 12,
             );
 
     const distanceM = eventKind === "sixtyFive" ? 65 : resolved === "longFree" ? 52 : 28;
@@ -1450,6 +1519,7 @@ export function simulateMatch(options: {
             thiefPlayer?.ratings.strength ?? 11,
             "forward",
             outnumbered,
+            thiefPlayer?.ratings.workrate ?? 12,
           ) *
             1.85 *
             hands +
@@ -1529,7 +1599,15 @@ export function simulateMatch(options: {
     }
 
     if (origin !== "press") {
-      if (random() < tackleChance(opp.hooking, oppTactics.aggression ?? 46, oppTactics.pressure ?? 48, opp.strength)) {
+      if (random() < tackleChance(
+        opp.hooking,
+        oppTactics.aggression ?? 46,
+        oppTactics.pressure ?? 48,
+        opp.strength,
+        "back",
+        false,
+        defendingId === options.homeId ? homeWorkrate : awayWorkrate,
+      )) {
         const tackler = pickIndexed(oppNames, backAndMidIndices(oppNames), random);
         const defender = tackler.name;
         push({
@@ -1615,7 +1693,8 @@ export function simulateMatch(options: {
     const tactics = withChaseTactics(tacticsFor(teamId), chase);
     const shooting = clampDial(tactics.shooting ?? 50);
     const teamwork = teamId === options.homeId ? homeTeamwork : awayTeamwork;
-    const baseComplete = passCompleteChance(climate, direct, teamwork);
+    const workrate = teamId === options.homeId ? homeWorkrate : awayWorkrate;
+    const baseComplete = passCompleteChance(climate, direct, teamwork, workrate);
     const contestAerial = (sideId: string, name: string) => {
       const player = playerOf(sideId, name);
       if (!player) return 12;
@@ -1631,6 +1710,7 @@ export function simulateMatch(options: {
     let gatheredLong = false;
     let gatheredFullForward = false;
     let gatheredFromBreak = false;
+    let fromDistanceLook = false;
     let lastPasser: string | undefined;
     let moved: { credits: StatCredit[]; carrier: string; retained: boolean; copy?: string; passer?: string } = {
       credits: [],
@@ -1686,6 +1766,7 @@ export function simulateMatch(options: {
             player?.ratings.acceleration ?? 11,
             player?.ratings.offTheBall ?? 11,
             player?.ratings.firstTouch ?? 11,
+            player?.ratings.workrate ?? 12,
           );
         }
         const aerial = aerialContestRating(
@@ -1817,7 +1898,23 @@ export function simulateMatch(options: {
     } else {
       const occPick = occasionPressure(minute, matchStage);
       const behindPick = chase.deficit > 0;
-      const runPool = indicesWhere(names, (index) => index >= 7);
+      const oppPressure = clampDial(oppTactics.pressure ?? 48);
+      const specialists = indicesWhere(names, (index) => midfieldDistanceSlot(index));
+      const bestDistanceAttempt = specialists.reduce((best, index) => {
+        const player = playerOf(teamId, names[index] ?? "");
+        return Math.max(
+          best,
+          distanceAttemptChance(
+            player?.ratings.strikingDistance ?? 11,
+            player?.ratings.shooting ?? 11,
+            index,
+            oppPressure,
+          ),
+        );
+      }, 0);
+      fromDistanceLook =
+        specialists.length > 0 && random() < bestDistanceAttempt * (chase.chasing ? 1.08 : 0.64);
+      const runPool = indicesWhere(names, (index) => (fromDistanceLook ? midfieldDistanceSlot(index) : index >= 7));
       playerName = pickIndexed(names, runPool.length > 0 ? runPool : names.map((_, i) => i), random, (index) => {
         const player = playerOf(teamId, names[index] ?? "");
         const run =
@@ -1831,7 +1928,10 @@ export function simulateMatch(options: {
         );
         const pressure = (player?.ratings.underPressure ?? 12) * (behindPick ? 0.4 : 0.14) * occPick;
         const line = index >= 12 ? 1.08 : 1;
-        return Math.max(0.12, run * (1 - direct) + aerial * direct * 0.35 + pressure) * line;
+        const dstLook = fromDistanceLook
+          ? (player?.ratings.strikingDistance ?? 11) * 0.55 + (player?.ratings.shooting ?? 11) * 0.4
+          : 0;
+        return Math.max(0.12, run * (1 - direct) + aerial * direct * 0.35 + pressure + dstLook) * line;
       }).name;
       const hops = 1 + Math.floor((1 - direct) * 2) + (shooting > 62 ? 1 : 0);
       const chainPool = names.slice(1, 15);
@@ -1910,6 +2010,34 @@ export function simulateMatch(options: {
         return;
       }
     }
+    if (gatheredFromBreak) {
+      fromDistanceLook = false;
+      const hunter = playerOf(teamId, playerName);
+      if (hunter && random() < skillFeedChance(hunter.ratings.workrate, hunter.ratings.teamwork)) {
+        const skillPool = indicesWhere(names, (index) => names[index] !== playerName);
+        if (skillPool.length > 0) {
+          const fed = pickIndexed(names, skillPool, random, (index) => {
+            const player = playerOf(teamId, names[index] ?? "");
+            const line = index >= 9 ? 1.18 : index >= 7 ? 1 : 0.82;
+            return (
+              skillTargetWeight(
+                player?.ratings.shooting ?? 11,
+                player?.ratings.vision ?? 11,
+                player?.ratings.firstTouch ?? 11,
+              ) * line
+            );
+          });
+          lastPasser = playerName;
+          pendingCredits.push({
+            name: playerName,
+            teamId,
+            passesAttempted: 1,
+            passesCompleted: 1,
+          });
+          playerName = fed.name;
+        }
+      }
+    }
     const shooter = playerOf(teamId, playerName);
     const shooterIndex = Math.max(0, names.indexOf(playerName));
     const striking = shooter?.ratings.strikingDistance ?? 12;
@@ -1929,15 +2057,21 @@ export function simulateMatch(options: {
     );
     const paceBoost = origin === "press" ? { closer: 0, goal: 0, convert: 0 } : runningLookBoost(mismatch, shooterIndex >= 12);
     const runShare = origin === "press" ? 0 : 1 - direct;
+    const oppPressure = clampDial(oppTactics.pressure ?? 48);
+    if (fromDistanceLook && !midfieldDistanceSlot(shooterIndex)) fromDistanceLook = false;
     const distanceM0 = origin === "press"
       ? Math.max(10, Math.min(36, 15 + random() * 18 - (finishing - 12) * 0.35))
       : gatheredLong
         ? gatheredFullForward
           ? Math.max(7, Math.min(16, 8 + random() * 8))
           : Math.max(12, Math.min(28, 16 + random() * 12))
-        : shotDistanceM(shooting, striking, random);
+        : fromDistanceLook
+          ? distanceShotM(striking, random)
+          : shotDistanceM(shooting, striking, random);
     let distanceM = distanceM0;
-    if (chase.huntGoals) {
+    if (fromDistanceLook) {
+      distanceM = Math.max(46, distanceM);
+    } else if (chase.huntGoals) {
       distanceM = Math.max(10, Math.min(30, 11 + random() * 16));
     } else if (gatheredLong && gatheredFullForward) {
       distanceM = Math.min(distanceM, 16);
@@ -1946,10 +2080,10 @@ export function simulateMatch(options: {
     }
     const passerVision = lastPasser ? (playerOf(teamId, lastPasser)?.ratings.vision ?? 12) : 12;
     const visionLook = lastPasser ? visionScoringLookChance(passerVision) : 0;
-    if (origin !== "press" && random() < visionLook) {
+    if (!fromDistanceLook && origin !== "press" && random() < visionLook) {
       distanceM = Math.max(8, Math.min(distanceM, 12 + random() * 14));
     }
-    if (shooting >= 78 && distanceM > 42 && random() < 0.28 && !chase.huntGoals && !gatheredLong) {
+    if (shooting >= 78 && distanceM > 42 && random() < 0.28 && !chase.huntGoals && !gatheredLong && !fromDistanceLook) {
       pendingCredits.push(...moved.credits);
       return;
     }
@@ -1968,6 +2102,7 @@ export function simulateMatch(options: {
     const occ = occasionPressure(minute, matchStage);
     const levelling = chase.deficit >= 1 && chase.deficit <= 3;
     const pressureMul = underPressureMul(shooter?.ratings.underPressure ?? 12, occ, levelling);
+    const distPressMul = fromDistanceLook ? distancePressureMul(oppPressure) : 1;
     const convert =
       (chaoticConvert(
         applyFormChance(
@@ -1991,7 +2126,8 @@ export function simulateMatch(options: {
         visionLook * 0.06) *
       pressureMul *
       numbers.convert *
-      (1 - markCut.convertCut);
+      (1 - markCut.convertCut) *
+      distPressMul;
     const goalChance =
       (goalChanceFromDistance(distanceM, sweeperCut) *
         fiveForwardCut *
@@ -2159,6 +2295,7 @@ export function simulateMatch(options: {
             strength,
             role,
             outnumbered,
+            tacklerPlayer?.ratings.workrate ?? 12,
           ) * 1.35,
         )
       : Math.min(
@@ -2170,6 +2307,8 @@ export function simulateMatch(options: {
               defTactics.pressure ?? 48,
               strength,
               role,
+              false,
+              tacklerPlayer?.ratings.workrate ?? 12,
             ) * 1.15,
         );
     const win = random() < winChance;

@@ -5,7 +5,7 @@ import { buildCoachReport } from "./lib/coach";
 import { applyMatchForm, formValue } from "./lib/form";
 import { migrateSave } from "./lib/gameStorage";
 import { playerMatchRating, seasonStatsFor, lastMatchRating, formatWonLost } from "./lib/matchStats";
-import { nearestToSpot, openPlayConversion, slotPitchPos } from "./lib/shooting";
+import { nearestToSpot, openPlayConversion, slotPitchPos, midfieldDistanceSlot, distanceAttemptChance, distanceShotM, distancePressureMul } from "./lib/shooting";
 import { climateSummary, crossWind, forecastBlurb, halfWindBlurb, matchWindBlurb, parallelWind, passCompleteChance, rollClimate, withWindFor } from "./lib/weather";
 import {
   commentaryFeed,
@@ -28,6 +28,11 @@ import {
   breakWinChance,
   breakFoulChance,
   collectLowBallChance,
+  skillFeedChance,
+  skillTargetWeight,
+  sideOil,
+  momentumRevertRate,
+  nextMomentum,
   passVisionBonus,
   visionScoringLookChance,
   stageFromMatchId,
@@ -428,6 +433,7 @@ describe("match engine", () => {
   it("makes specialist free-takers convert far more dead balls", () => {
     expect(freeConversionChance(19, 18, 18)).toBeGreaterThan(freeConversionChance(10, 11, 11) + 0.2);
     expect(sixtyFiveChance(18, 18, 16)).toBeGreaterThan(sixtyFiveChance(9, 10, 10));
+    expect(sixtyFiveChance(14, 18, 12, 16)).toBeGreaterThan(sixtyFiveChance(14, 10, 12, 10));
     expect(sidelinePointChance(16, 16, 16, 42)).toBeGreaterThan(sidelinePointChance(11, 11, 11, 42) + 0.04);
     expect(sidelineFindChance(16, 15, 15)).toBeGreaterThan(sidelineFindChance(10, 10, 10) + 0.12);
     expect(sidelineCarryM(16, 16, () => 0.5)).toBeGreaterThan(sidelineCarryM(10, 10, () => 0.5) + 12);
@@ -569,7 +575,8 @@ describe("match engine", () => {
   });
 
   it("hunts breaking balls with pace, first touch and off-the-ball, and strength in the crowd", () => {
-    expect(breakHuntRating(18, 18, 18, 18)).toBeGreaterThan(breakHuntRating(9, 9, 9, 9) + 8);
+    expect(breakHuntRating(18, 18, 18, 18, 18)).toBeGreaterThan(breakHuntRating(9, 9, 9, 9, 9) + 8);
+    expect(breakHuntRating(12, 12, 12, 12, 18)).toBeGreaterThan(breakHuntRating(12, 12, 12, 12, 8));
     expect(collectLowBallChance(18)).toBeGreaterThan(collectLowBallChance(8) + 0.2);
     expect(breakWinChance(18, 11, 18, 10)).toBeGreaterThan(breakWinChance(11, 18, 10, 18));
     expect(breakFoulChance(8, 18)).toBeGreaterThan(breakFoulChance(18, 8));
@@ -1325,14 +1332,23 @@ describe("match engine", () => {
         climate: { sky: "sunny", windStrength: 8, windAngle: 12 },
         seed,
       });
-      pressHooks += hot.events.filter((event) => event.kind === "hook" && homePlayers.has(event.playerName)).length;
-      sitHooks += cold.events.filter((event) => event.kind === "hook" && homePlayers.has(event.playerName)).length;
+      const pressTurnovers = (events: typeof hot.events) =>
+        events.filter(
+          (event) =>
+            homePlayers.has(event.playerName) &&
+            (/turns .+ over in their own half/.test(event.text) || /hunts down/.test(event.text)),
+        ).length;
+      pressHooks += pressTurnovers(hot.events);
+      sitHooks += pressTurnovers(cold.events);
     }
     expect(pressHooks).toBeGreaterThan(sitHooks);
   });
 
   it("lets strength win more tackles than a lighter panel", () => {
     expect(tackleChance(12, 46, 48, 18)).toBeGreaterThan(tackleChance(12, 46, 48, 8));
+    expect(tackleChance(12, 46, 48, 12, "back", false, 18)).toBeGreaterThan(
+      tackleChance(12, 46, 48, 12, "back", false, 8),
+    );
   });
 
   it("makes attacker tackling less successful than backs or midfield, and worse when outnumbered", () => {
@@ -1997,6 +2013,36 @@ describe("weather", () => {
     const dry = { sky: "sunny" as const, windStrength: 10, windAngle: 20 };
     const wet = { sky: "wet" as const, windStrength: 10, windAngle: 20 };
     expect(passCompleteChance(wet, 0.2)).toBeLessThan(passCompleteChance(dry, 0.2) - 0.1);
+    expect(passCompleteChance(dry, 0.2, 16, 16)).toBeGreaterThan(passCompleteChance(dry, 0.2, 8, 8));
+  });
+});
+
+describe("distance striking and workrate", () => {
+  it("lets half-backs and midfielders attempt range shots, more so with space", () => {
+    expect(midfieldDistanceSlot(3)).toBe(false);
+    expect(midfieldDistanceSlot(4)).toBe(true);
+    expect(midfieldDistanceSlot(8)).toBe(true);
+    expect(midfieldDistanceSlot(9)).toBe(false);
+    expect(distanceAttemptChance(18, 16, 7, 20)).toBeGreaterThan(distanceAttemptChance(8, 10, 7, 20));
+    expect(distanceAttemptChance(16, 14, 5, 18)).toBeGreaterThan(distanceAttemptChance(16, 14, 5, 88));
+    expect(distanceAttemptChance(16, 14, 7, 48)).toBeGreaterThan(distanceAttemptChance(16, 14, 5, 48));
+    const long = distanceShotM(18, () => 0.5);
+    expect(long).toBeGreaterThanOrEqual(46);
+    expect(long).toBeLessThanOrEqual(70);
+    expect(distancePressureMul(18)).toBeGreaterThan(distancePressureMul(82));
+    expect(distancePressureMul(12)).toBeGreaterThan(1);
+  });
+
+  it("feeds skillful teammates after dirty ball and oils momentum recovery", () => {
+    expect(skillFeedChance(18, 16)).toBeGreaterThan(skillFeedChance(9, 9));
+    expect(skillFeedChance(10, 10)).toBe(0);
+    expect(skillTargetWeight(18, 16, 15)).toBeGreaterThan(skillTargetWeight(10, 10, 10));
+    expect(sideOil(18, 10)).toBeGreaterThan(sideOil(10, 18));
+    expect(momentumRevertRate(16, true)).toBeGreaterThan(momentumRevertRate(8, true));
+    expect(momentumRevertRate(16, false)).toBeLessThan(momentumRevertRate(16, true));
+    expect(nextMomentum(22, { kind: "play", teamId: "ballyea", text: "recycle" }, "ballyea", 16, 8)).toBeGreaterThan(
+      nextMomentum(22, { kind: "play", teamId: "ballyea", text: "recycle" }, "ballyea", 7, 8),
+    );
   });
 
   it("names which team has the wind in each half", () => {
