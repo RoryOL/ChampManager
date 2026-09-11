@@ -901,6 +901,22 @@ export function sideTeamwork(
   return Math.round((total / xv.length) * 10) / 10;
 }
 
+export function sideWorkrate(
+  teamId: string,
+  sheet: TeamSheet,
+  condition: Record<string, PlayerCondition> = {},
+  ctx?: number | RatingsContext,
+  squad?: RatedPlayer[],
+): number {
+  const xv = xvFromSquad(teamId, sheet, ctx, squad);
+  if (xv.length === 0) return 12;
+  const total = xv.reduce(
+    (sum, player) => sum + matchStat(player.ratings.workrate, conditionFor(player.name, condition), "workrate"),
+    0,
+  );
+  return Math.round((total / xv.length) * 10) / 10;
+}
+
 export function clubTactics(teamId: string, balance?: SquadBalance): Tactics {
   if (balance === "balanced") return { ...DEFAULT_TACTICS };
   const value = hash(teamId);
