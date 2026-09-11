@@ -145,10 +145,109 @@ export function liveCoachTip(
   return tips.find((tip) => !already.has(tip)) ?? null;
 }
 
+function scoreLine(score: { goals: number; points: number }): string {
+  return `${score.goals}-${score.points}`;
+}
+
+function notableStandout(players: CoachInput["players"], teamId: string) {
+  return [...players]
+    .filter((player) => player.teamId === teamId && player.rating >= 8)
+    .sort((a, b) => b.rating - a.rating)[0];
+}
+
+/** Third-person write-up for ties that do not involve the manager's club. */
+function buildNeutralReport(input: CoachInput): string[] {
+  const home = input.homeName;
+  const away = input.awayName;
+  const homeStats = input.homeStats;
+  const awayStats = input.awayStats;
+  const homeLine = scoreLine(input.homeScore);
+  const awayLine = scoreLine(input.awayScore);
+  const homeTotal = total(input.homeScore);
+  const awayTotal = total(input.awayScore);
+  const notes: string[] = [];
+  const random = coachRng(input);
+
+  if (homeTotal > awayTotal) {
+    notes.push(
+      pickOne(random, [
+        `${home} beat ${away} ${homeLine} to ${awayLine}.`,
+        `${home} had the better of it, ${homeLine} to ${awayLine}.`,
+        `${home} took the points, ${homeLine} to ${awayLine}.`,
+      ]),
+    );
+  } else if (homeTotal < awayTotal) {
+    notes.push(
+      pickOne(random, [
+        `${away} beat ${home} ${awayLine} to ${homeLine}.`,
+        `${away} had the better of it, ${awayLine} to ${homeLine}.`,
+        `${away} took the points, ${awayLine} to ${homeLine}.`,
+      ]),
+    );
+  } else {
+    notes.push(
+      pickOne(random, [
+        `${home} and ${away} finished level, ${homeLine} apiece.`,
+        `The sides shared the spoils, ${homeLine} each.`,
+        `Neither side could separate it, ${homeLine} apiece.`,
+      ]),
+    );
+  }
+
+  if (homeStats.highFieldingWon > awayStats.highFieldingWon + 1) {
+    notes.push(
+      `${home} won the aerials ${homeStats.highFieldingWon}-${awayStats.highFieldingWon}.`,
+    );
+  } else if (awayStats.highFieldingWon > homeStats.highFieldingWon + 1) {
+    notes.push(
+      `${away} won the aerials ${awayStats.highFieldingWon}-${homeStats.highFieldingWon}.`,
+    );
+  }
+
+  const homeLost = lostPuckouts(homeStats);
+  const awayLost = lostPuckouts(awayStats);
+  if ((homeStats.puckoutsAttempted ?? 0) >= 4 && homeStats.puckoutsWon + 1 <= homeLost) {
+    notes.push(`${home} lost the puck-outs ${homeStats.puckoutsWon}-${homeLost}.`);
+  }
+  if ((awayStats.puckoutsAttempted ?? 0) >= 4 && awayStats.puckoutsWon + 1 <= awayLost) {
+    notes.push(`${away} lost the puck-outs ${awayStats.puckoutsWon}-${awayLost}.`);
+  }
+
+  if (homeStats.tacklesWon > awayStats.tacklesWon + 2) {
+    notes.push(`${home} won the hooks ${homeStats.tacklesWon}-${awayStats.tacklesWon}.`);
+  } else if (awayStats.tacklesWon > homeStats.tacklesWon + 2) {
+    notes.push(`${away} won the hooks ${awayStats.tacklesWon}-${homeStats.tacklesWon}.`);
+  }
+
+  if (input.climate) {
+    notes.push(`Conditions: ${climateSummary(input.climate)}.`);
+  }
+
+  if (homeStats.shots >= 6 && rate(homeStats.scores, homeStats.shots) < 0.48) {
+    notes.push(`${home} were wasteful from play, ${homeStats.scores} scores from ${homeStats.shots} shots.`);
+  }
+  if (awayStats.shots >= 6 && rate(awayStats.scores, awayStats.shots) < 0.48) {
+    notes.push(`${away} were wasteful from play, ${awayStats.scores} scores from ${awayStats.shots} shots.`);
+  }
+  if (homeStats.shots + 3 < awayStats.shots) {
+    notes.push(`${away} had more of the look, ${awayStats.shots} shots to ${homeStats.shots}.`);
+  } else if (awayStats.shots + 3 < homeStats.shots) {
+    notes.push(`${home} had more of the look, ${homeStats.shots} shots to ${awayStats.shots}.`);
+  }
+
+  const homeStar = notableStandout(input.players, input.homeId);
+  const awayStar = notableStandout(input.players, input.awayId);
+  if (homeStar) notes.push(`${homeStar.name} stood out for ${home} (${homeStar.rating}).`);
+  if (awayStar) notes.push(`${awayStar.name} stood out for ${away} (${awayStar.rating}).`);
+
+  return notes.slice(0, 8);
+}
+
 export function buildCoachReport(input: CoachInput): string[] {
   const usIsHome = input.clubId === input.homeId;
   const usIsAway = input.clubId === input.awayId;
   const focused = usIsHome || usIsAway;
+  if (!focused) return buildNeutralReport(input);
   const us = usIsHome ? input.homeStats : usIsAway ? input.awayStats : input.homeStats;
   const them = usIsHome ? input.awayStats : usIsAway ? input.homeStats : input.awayStats;
   const ourTactics = usIsHome ? input.homeTactics : usIsAway ? input.awayTactics : input.homeTactics;

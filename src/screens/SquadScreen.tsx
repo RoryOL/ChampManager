@@ -123,15 +123,7 @@ function PlayerDetail({
               Suspended — straight red. He misses the next match, then he's available again. Two yellows in the one
               game do not carry a ban.
             </p>
-          ) : (
-            <p className="hint hint--tight">
-              Training can lift these numbers a little (up to +2), and the work slows once a rating is already high.
-              Work one area hard and neglected stats can drift a little. Small lifts stack even when the card still
-              shows the same integer. Younger players take the work better and get match fitness back quicker; veterans
-              feel the legs longer. Green is the change from their natural rating. Workrate, composure and ability under
-              pressure do not change in training. Teamwork rises when the same lads play together.
-            </p>
-          )}
+          ) : null}
         </div>
       ) : null}
       {ATTRIBUTE_GROUPS.map((group) => (
@@ -235,11 +227,6 @@ export function SquadScreen({
 
   return (
     <div className="screen">
-      <p className="hint">
-        {ownTeam
-          ? "Tap a row for the full card. Swaps are on Tactics. Green and red are training lifts. Other clubs are on the Table tab."
-          : "Scouting view — inspect the championship panel. You cannot change their team from here. Other clubs are on the Table tab."}
-      </p>
       {viewed ? (
         <section className="club-banner club-banner--overview">
           <span

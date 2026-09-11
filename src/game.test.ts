@@ -2838,6 +2838,87 @@ describe("match intel", () => {
     expect(firsts.size).toBeGreaterThanOrEqual(3);
   });
 
+  it("describes other clubs' matches in the third person", () => {
+    const notes = buildCoachReport({
+      clubId: "ballyea",
+      homeId: "feakle",
+      awayId: "inagh-kilnamona",
+      homeName: "Feakle",
+      awayName: "Inagh-Kilnamona",
+      homeTactics: { ...DEFAULT_TACTICS, build: 88, puckout: 80 },
+      awayTactics: DEFAULT_TACTICS,
+      homeStats: {
+        teamId: "feakle",
+        possessions: 20,
+        passesAttempted: 40,
+        passesCompleted: 22,
+        shots: 8,
+        scores: 2,
+        highFieldingAttempted: 10,
+        highFieldingWon: 2,
+        puckoutsWon: 2,
+        puckoutsAttempted: 8,
+        tacklesAttempted: 8,
+        tacklesWon: 3,
+        groundCovered: 90,
+        fatigue: 40,
+        fitness: 60,
+        overall: 13,
+        rating: 6,
+      },
+      awayStats: {
+        teamId: "inagh-kilnamona",
+        possessions: 24,
+        passesAttempted: 38,
+        passesCompleted: 28,
+        shots: 10,
+        scores: 6,
+        highFieldingAttempted: 10,
+        highFieldingWon: 8,
+        puckoutsWon: 7,
+        tacklesAttempted: 6,
+        tacklesWon: 4,
+        groundCovered: 88,
+        fatigue: 38,
+        fitness: 62,
+        overall: 13,
+        rating: 6.5,
+      },
+      homeScore: { goals: 0, points: 8 },
+      awayScore: { goals: 1, points: 12 },
+      players: [
+        {
+          name: "Shane McGrath",
+          teamId: "feakle",
+          started: true,
+          minutes: 60,
+          possessions: 8,
+          passesAttempted: 6,
+          passesCompleted: 4,
+          shots: 3,
+          scores: 2,
+          highFieldingAttempted: 2,
+          highFieldingWon: 1,
+          puckoutsWon: 0,
+          tacklesAttempted: 1,
+          tacklesWon: 1,
+          groundCovered: 8,
+          fatigue: 30,
+          fitness: 70,
+          overall: 16,
+          rating: 8.4,
+          mood: 52,
+        },
+      ],
+      events: [],
+    });
+    const text = notes.join(" ");
+    expect(text).toMatch(/Inagh-Kilnamona/);
+    expect(text).toMatch(/Feakle/);
+    expect(text).not.toMatch(/\bWe\b|\bThey\b|next session|keep the same shape|the result is the one we wanted/i);
+    expect(text).toMatch(/Shane McGrath/);
+  });
+
   it("moves hidden form from the display, not from sitting on the bench", () => {
     const squad = ratedSquad("ballyea");
     const sheet = defaultSheet("ballyea");

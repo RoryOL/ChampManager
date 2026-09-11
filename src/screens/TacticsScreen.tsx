@@ -155,10 +155,6 @@ export function TacticsScreen({ save, championship, nextMatch, onChange, onSwap,
 
   return (
     <div className="screen">
-      <p className="hint">
-        Whole panel is available. Fifteen start; five substitutions on the day. Tap two names to compare who is better
-        where, then Swap beside the list — it will not move until you confirm.
-      </p>
       <div className="row-actions">
         <button type="button" className="btn" onClick={askCoach}>
           Ask the coach to pick the team
@@ -179,7 +175,6 @@ export function TacticsScreen({ save, championship, nextMatch, onChange, onSwap,
             setFirst(null);
             setSecond(null);
           }}
-          hint="Pick two names in the list, then Swap. A second tap on the same name drops him from the pair."
         />
         {left && right ? <PlayerCompare leftName={left.name} rightName={right.name} lines={compareLines} /> : null}
         <TacticsColumnPicker selected={columns} onChange={setGridColumns} />

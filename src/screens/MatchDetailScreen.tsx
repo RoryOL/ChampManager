@@ -120,7 +120,7 @@ export function MatchDetailScreen({ championship, save, match, report, onBack, o
             />
           </section>
           <section className="card">
-            <h3>Coach report</h3>
+            <h3>{homeId === save.clubId || awayId === save.clubId ? "Coach report" : "Match report"}</h3>
             {report.coachReport.map((note) => (
               <p key={note} className="tactic-copy">
                 {note}

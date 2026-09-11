@@ -7,6 +7,7 @@ import { compactName } from "./lib/display";
 import { difficultyTitle } from "./lib/difficulty";
 import { balanceTitle } from "./lib/balance";
 import { ClubBadge } from "./components/ClubBadge";
+import { HelpButton, HelpSheet } from "./components/HelpSheet";
 import { ClubSelectScreen } from "./screens/ClubSelectScreen";
 import { LobbyScreen } from "./screens/LobbyScreen";
 import { HomeScreen } from "./screens/HomeScreen";
@@ -23,6 +24,7 @@ export default function App() {
   const game = useGame();
   const [page, setPage] = useState<PageId>("home");
   const [fixtureId, setFixtureId] = useState<string | null>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
   const club = game.save ? teamById(game.championship, game.save.clubId) : undefined;
   const winner = game.championId ? teamById(game.championship, game.championId) : undefined;
   const wrapping = Boolean(game.save && !game.live && game.finaleStep && game.finaleStep !== "done" && winner);
@@ -50,9 +52,12 @@ export default function App() {
 
   return (
     <div className="device">
-      <div className="status-bar" aria-hidden="true">
+      <div className="status-bar">
         <span>Capture the Canon</span>
-        <span>{game.campaign ? game.campaign.code : "SHC 26"}</span>
+        <span className="status-bar__trail">
+          <span>{game.campaign ? game.campaign.code : "SHC 26"}</span>
+          {game.save ? <HelpButton onOpen={() => setHelpOpen(true)} /> : null}
+        </span>
       </div>
 
       {!game.save && !game.campaign && (
@@ -229,6 +234,7 @@ export default function App() {
           />
         </>
       )}
+      {game.save ? <HelpSheet open={helpOpen} onClose={() => setHelpOpen(false)} /> : null}
     </div>
   );
 }
