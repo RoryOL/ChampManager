@@ -22,11 +22,13 @@ function TakerSelect({
   value,
   players,
   onChange,
+  numbered = true,
 }: {
   label: string;
   value: string | undefined;
   players: RatedPlayer[];
   onChange: (name: string) => void;
+  numbered?: boolean;
 }) {
   const selected = value && players.some((player) => player.name === value) ? value : "";
   return (
@@ -36,7 +38,7 @@ function TakerSelect({
         <option value="">Best available</option>
         {players.map((player, index) => (
           <option key={player.name} value={player.name}>
-            {index + 1}. {player.name}
+            {numbered ? `${index + 1}. ${player.name}` : player.name}
           </option>
         ))}
       </select>
@@ -64,15 +66,7 @@ export function TacticControls({ tactics, onChange, compact = false, xv = [], di
       </section>
       <section className="card">
         <h3>Build-up</h3>
-        <p className="tactic-copy">
-          Short passing through the lines on the left, direct long ball on the right. Currently{" "}
-          <strong>{buildLabel(tactics.build)}</strong>. A running game needs acceleration and off-the-ball; a long
-          ball is won with aerials, strength and high fielding. Spilled low balls are hunted with pace, first touch
-          and off-the-ball — strength wins the crowd without fouling. Vision from the back and midfield turns
-          distribution into scoring looks. Ability under pressure tells in knockouts and the closing minutes,
-          especially when chasing a leveller. Full forwards who gather it, or who have a real pace edge on their
-          man, get the look at goal.
-        </p>
+        <p className="tactic-status">{buildLabel(tactics.build)}</p>
         <label className="dial">
           <span>Short</span>
           <input
@@ -87,10 +81,7 @@ export function TacticControls({ tactics, onChange, compact = false, xv = [], di
       </section>
       <section className="card">
         <h3>Puck-out</h3>
-        <p className="tactic-copy">
-          Short to the full-back line on the left, long to a midfielder or half-forward on the right. Currently{" "}
-          <strong>{puckoutLabel(tactics.puckout)}</strong>.
-        </p>
+        <p className="tactic-status">{puckoutLabel(tactics.puckout)}</p>
         <label className="dial">
           <span>Short</span>
           <input
@@ -107,21 +98,14 @@ export function TacticControls({ tactics, onChange, compact = false, xv = [], di
             label="Puck-out target"
             value={tactics.puckoutTarget}
             players={xv.slice(7, 12)}
+            numbered={false}
             onChange={(name) => onChange({ ...tactics, puckoutTarget: name || undefined })}
           />
         ) : null}
       </section>
       <section className="card">
         <h3>Aggression</h3>
-        <p className="tactic-copy">
-          Light tackling on the left, aggressive on the right. Currently{" "}
-          <strong>{aggressionLabel(tactics.aggression)}</strong>
-          {tactics.aggression >= 80
-            ? " — hooks land more often, but you will give away frees and yellow cards. Match fitness drops faster."
-            : tactics.aggression < 25
-              ? " — fewer frees given away, fewer blocks."
-              : " — higher aggression costs more match fitness."}
-        </p>
+        <p className="tactic-status">{aggressionLabel(tactics.aggression)}</p>
         <label className="dial">
           <span>Light</span>
           <input
@@ -136,13 +120,7 @@ export function TacticControls({ tactics, onChange, compact = false, xv = [], di
       </section>
       <section className="card">
         <h3>Pressure</h3>
-        <p className="tactic-copy">
-          Sit off on the left, hunt every possession on the right. Currently{" "}
-          <strong>{pressureLabel(tactics.pressure ?? 48)}</strong>
-          {tactics.pressure >= 70
-            ? " — more successful tackles, but the press drains match fitness."
-            : "."}
-        </p>
+        <p className="tactic-status">{pressureLabel(tactics.pressure ?? 48)}</p>
         <label className="dial">
           <span>Sit off</span>
           <input
@@ -157,15 +135,7 @@ export function TacticControls({ tactics, onChange, compact = false, xv = [], di
       </section>
       <section className="card">
         <h3>Shot certainty</h3>
-        <p className="tactic-copy">
-          Shoot on sight on the left, wait for a certain look on the right. Currently{" "}
-          <strong>{shootingLabel(tactics.shooting ?? 50)}</strong>
-          {(tactics.shooting ?? 50) < 30
-            ? " — more shots from distance, more wides."
-            : (tactics.shooting ?? 50) > 72
-              ? " — fewer shots, but they should be higher percentage."
-              : " — a medium shooter should convert around six in ten from a balanced look."}
-        </p>
+        <p className="tactic-status">{shootingLabel(tactics.shooting ?? 50)}</p>
         <label className="dial">
           <span>Speculative</span>
           <input
@@ -189,29 +159,13 @@ export function TacticControls({ tactics, onChange, compact = false, xv = [], di
               onClick={() => onChange({ ...tactics, shape: option.value })}
             >
               <strong>{option.title}</strong>
-              {!compact ? <span>{option.copy}</span> : null}
             </button>
           ))}
         </div>
-        {tactics.shape === "sweeper" ? (
-          <p className="tactic-copy">
-            The extra defender makes a goal a rare look. Five forwards cover more ground — their match fitness drops
-            faster. A send-off drops you to 6-2-5 and you lose the sweeper. A second red leaves you with thirteen men.
-          </p>
-        ) : null}
-        {tactics.mentality === "contain" || tactics.shape === "sweeper" || (tactics.pressure ?? 48) < 30 ? (
-          <p className="tactic-copy">
-            Sitting in or sitting off the press keeps the score down. Fewer scores mean more randomness — the better
-            side is less sure of the win.
-          </p>
-        ) : null}
       </section>
       {xv.length > 0 ? (
         <section className="card">
           <h3>Set-piece takers</h3>
-          <p className="tactic-copy">
-            Long frees and 65s, and close-in frees. Sideline cuts are taken by whoever is nearest the ball.
-          </p>
           <TakerSelect
             label="Long frees"
             value={tactics.longFreeTaker}

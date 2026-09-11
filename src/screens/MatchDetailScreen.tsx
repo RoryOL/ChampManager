@@ -2,7 +2,7 @@ import type { Championship, GameSave, Match, MatchReport } from "../types";
 import { MatchStatsPanel } from "../components/MatchStatsPanel";
 import { ClubBadge } from "../components/ClubBadge";
 import { aggressionLabel, buildLabel, pressureLabel, puckoutLabel } from "../lib/attributes";
-import { compactName, sideLabel } from "../lib/display";
+import { compactName, sideLabel, windSidesFor } from "../lib/display";
 import { buildPreMatchBriefing } from "../lib/briefing";
 import { clubTactics, ratedSquad } from "../lib/players";
 import { resolveMatchSides, teamById } from "../lib/resolve";
@@ -63,21 +63,21 @@ export function MatchDetailScreen({ championship, save, match, report, onBack, o
         {homeId ? (
           <button type="button" className="btn btn--ghost" onClick={() => onOpenTeam(homeId)}>
             {home ? <ClubBadge team={home} size="sm" variant="crest" /> : null}
-            {home ? compactName(home) : "Home"} squad
+            {home ? compactName(home) : sideLabel(championship, match.home)} squad
           </button>
         ) : null}
         {awayId ? (
           <button type="button" className="btn btn--ghost" onClick={() => onOpenTeam(awayId)}>
             {away ? <ClubBadge team={away} size="sm" variant="crest" /> : null}
-            {away ? compactName(away) : "Away"} squad
+            {away ? compactName(away) : sideLabel(championship, match.away)} squad
           </button>
         ) : null}
       </div>
       <section className="card">
         <h3>Tactics</h3>
-        <p className="kicker">{home ? compactName(home) : "Home"}</p>
+        <p className="kicker">{home ? compactName(home) : sideLabel(championship, match.home)}</p>
         <TacticSummary {...homeTactics} />
-        <p className="kicker">{away ? compactName(away) : "Away"}</p>
+        <p className="kicker">{away ? compactName(away) : sideLabel(championship, match.away)}</p>
         <TacticSummary {...awayTactics} />
       </section>
       {report ? (
@@ -85,7 +85,7 @@ export function MatchDetailScreen({ championship, save, match, report, onBack, o
           {report.climate ? (
             <section className="card">
               <h3>Conditions</h3>
-              <p className="tactic-copy">{climateSummary(report.climate)}</p>
+              <p className="tactic-copy">{climateSummary(report.climate, windSidesFor(home, away))}</p>
             </section>
           ) : null}
           {report.shots && report.shots.length > 0 ? (
@@ -101,8 +101,8 @@ export function MatchDetailScreen({ championship, save, match, report, onBack, o
           <section className="card">
             <h3>Match stats</h3>
             <MatchStatsPanel
-              homeName={home ? compactName(home) : "Home"}
-              awayName={away ? compactName(away) : "Away"}
+              homeName={home ? compactName(home) : sideLabel(championship, match.home)}
+              awayName={away ? compactName(away) : sideLabel(championship, match.away)}
               homeId={homeId ?? ""}
               awayId={awayId ?? ""}
               homeStats={report.homeStats}
@@ -120,7 +120,7 @@ export function MatchDetailScreen({ championship, save, match, report, onBack, o
             />
           </section>
           <section className="card">
-            <h3>Coach report</h3>
+            <h3>{homeId === save.clubId || awayId === save.clubId ? "Coach report" : "Match report"}</h3>
             {report.coachReport.map((note) => (
               <p key={note} className="tactic-copy">
                 {note}
@@ -152,7 +152,7 @@ export function MatchDetailScreen({ championship, save, match, report, onBack, o
             ))
           ) : (
             <p className="tactic-copy">
-              Not played yet. {home ? compactName(home) : "Home"} are likely to set up as shown; tap through to scout
+              Not played yet. {home ? compactName(home) : sideLabel(championship, match.home)} are likely to set up as shown; tap through to scout
               the panel.
             </p>
           )}

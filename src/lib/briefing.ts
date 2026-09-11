@@ -54,7 +54,7 @@ export function buildPreMatchBriefing(options: {
   const opponentId = usHome ? awayId : homeId;
   const us = teamById(options.championship, options.clubId);
   const them = opponentId ? teamById(options.championship, opponentId) : undefined;
-  const venue = usHome ? "at home" : "away";
+  const ground = options.match.venue ?? "a neutral ground";
   const theirTactics = options.opponentTactics ?? (opponentId ? clubTactics(opponentId, options.balance) : options.tactics);
   const theirSheet = options.opponentSheet ?? (opponentId ? defaultSheet(opponentId) : options.sheet);
   const theirProfile = opponentId
@@ -66,8 +66,8 @@ export function buildPreMatchBriefing(options: {
   const themName = them ? compactName(them) : "the opposition";
   notes.push(
     pickOne(random, [
-      `${stageLabel(options.match.stage, options.match.round)} ${venue} against ${themName} on ${formatDate(options.match.date)}${options.match.venue ? ` at ${options.match.venue}` : ""}.`,
-      `${themName}, ${venue}, ${formatDate(options.match.date)}${options.match.venue ? ` at ${options.match.venue}` : ""}. ${stageLabel(options.match.stage, options.match.round)} — treat it like a championship hour from the throw-in.`,
+      `${stageLabel(options.match.stage, options.match.round)} against ${themName} on ${formatDate(options.match.date)} at ${ground}.`,
+      `${themName} at ${ground}, ${formatDate(options.match.date)}. ${stageLabel(options.match.stage, options.match.round)} — treat it like a championship hour from the throw-in.`,
     ]),
   );
 

@@ -111,7 +111,10 @@ export function TacticsScreen({ save, championship, nextMatch, onChange, onSwap,
   const opponentSheet = opponentId
     ? expandSheetToPanel(opponentId, save.rivals[opponentId]?.sheet ?? defaultSheet(opponentId, save), save)
     : null;
-  const opponentXv = opponentId && opponentSheet ? sheetPlayers(opponentId, opponentSheet, save) : [];
+  const opponentSquad = useMemo(
+    () => (opponentId ? ratedSquad(opponentId, save) : []),
+    [opponentId, save],
+  );
 
   useEffect(() => {
     if (locked) return;
@@ -181,7 +184,6 @@ export function TacticsScreen({ save, championship, nextMatch, onChange, onSwap,
             setFirst(null);
             setSecond(null);
           }}
-          hint="Pick two names in the list, then Swap. A second tap on the same name drops him from the pair."
         />
         {left && right ? <PlayerCompare leftName={left.name} rightName={right.name} lines={compareLines} /> : null}
         <TacticsColumnPicker selected={columns} onChange={setGridColumns} />
@@ -249,10 +251,11 @@ export function TacticsScreen({ save, championship, nextMatch, onChange, onSwap,
           onChange={onChange}
           ourSheet={sheet}
           theirSheet={opponentSheet}
-          ourXv={xv}
-          theirXv={opponentXv}
+          ourXv={squad}
+          theirXv={opponentSquad}
           ourName={us ? compactName(us) : "Us"}
           theirName={compactName(opponent)}
+          pool="panel"
           disabled={locked}
         />
       ) : null}

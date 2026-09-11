@@ -6,7 +6,7 @@ import { applyMatchForm, formValue } from "./lib/form";
 import { migrateSave } from "./lib/gameStorage";
 import { playerMatchRating, seasonStatsFor, lastMatchRating, formatWonLost } from "./lib/matchStats";
 import { nearestToSpot, openPlayConversion, slotPitchPos } from "./lib/shooting";
-import { crossWind, parallelWind, passCompleteChance, rollClimate, withWindFor } from "./lib/weather";
+import { climateSummary, crossWind, forecastBlurb, halfWindBlurb, matchWindBlurb, parallelWind, passCompleteChance, rollClimate, withWindFor } from "./lib/weather";
 import {
   commentaryFeed,
   attackLookChance,
@@ -64,7 +64,7 @@ import {
   shortPuckoutTakeChance,
   keeperSaveChance,
 } from "./lib/matchEngine";
-import { applyManMarkShape, markNegation, resolveMarker, sanitizeManMarks } from "./lib/manMarking";
+import { applyManMarkShape, isMarkTargetFor, markNegation, markerRoleFor, poolNames, resolveMarker, sanitizeManMarks } from "./lib/manMarking";
 import { aerialContestRating, clubTactics, DEFAULT_TACTICS, defaultSheet, expandSheetToPanel, matchOrderIndex, matchShirtNumber, matchSlot, pickPuckoutTarget, playerAge, ratePlayer, ratedSquad, sheetPlayers, sideStrength, sideTeamwork, swapPlayersInSheet } from "./lib/players";
 import { nextBatch } from "./lib/schedule";
 import { matchPlayed, scoreTotal } from "./lib/scoring";
@@ -483,6 +483,11 @@ describe("match engine", () => {
     const marks = sanitizeManMarks({ [fullBack]: halfForward }, us.starters, them.starters);
     expect(marks[fullBack]).toBe(halfForward);
     expect(sanitizeManMarks({ [us.starters[12]!]: halfForward }, us.starters, them.starters)).toEqual({});
+    const midfielder = us.starters[7]!;
+    const theirMid = them.starters[7]!;
+    expect(sanitizeManMarks({ [midfielder]: theirMid }, us.starters, them.starters)[midfielder]).toBe(theirMid);
+    expect(sanitizeManMarks({ [midfielder]: halfForward }, us.starters, them.starters)).toEqual({});
+    expect(sanitizeManMarks({ [fullBack]: theirMid }, us.starters, them.starters)).toEqual({});
     const shaped = applyManMarkShape(us, them, marks);
     expect(shaped.starters.indexOf(fullBack)).toBeGreaterThanOrEqual(4);
     expect(shaped.starters.indexOf(fullBack)).toBeLessThanOrEqual(6);
@@ -498,6 +503,38 @@ describe("match engine", () => {
     expect(elite.extraCover).toBeGreaterThan(ordinary.extraCover);
     expect(elite.convertCut).toBeGreaterThan(ordinary.convertCut);
     expect(none.extraCover).toBe(0);
+  });
+
+  it("offers the whole panel as markers in tactics and only the fifteen in a match", () => {
+    const us = defaultSheet("ballyea");
+    const them = defaultSheet("eire-og");
+    const ourSquad = ratedSquad("ballyea");
+    const theirSquad = ratedSquad("eire-og");
+    const byName = (squad: typeof ourSquad, name: string) => squad.find((player) => player.name === name);
+    const panel = poolNames(us, "panel");
+    const team = poolNames(us, "team");
+    expect(panel.length).toBeGreaterThan(team.length);
+    expect(team).toEqual(us.starters);
+    expect(panel).toEqual([...us.starters, ...us.subs]);
+
+    const benchDefender = us.subs.find((name) => markerRoleFor(name, us, byName(ourSquad, name), "panel") === "defender");
+    expect(benchDefender).toBeTruthy();
+    if (!benchDefender) return;
+    expect(markerRoleFor(benchDefender, us, byName(ourSquad, benchDefender), "team")).toBeUndefined();
+    expect(markerRoleFor(us.starters[2]!, us, byName(ourSquad, us.starters[2]!), "team")).toBe("defender");
+    expect(markerRoleFor(us.starters[7]!, us, byName(ourSquad, us.starters[7]!), "team")).toBe("midfielder");
+    expect(markerRoleFor(us.starters[12]!, us, byName(ourSquad, us.starters[12]!), "panel")).toBeUndefined();
+
+    expect(isMarkTargetFor("defender", them.starters[12]!, them, byName(theirSquad, them.starters[12]!), "team")).toBe(true);
+    expect(isMarkTargetFor("defender", them.starters[7]!, them, byName(theirSquad, them.starters[7]!), "team")).toBe(false);
+    expect(isMarkTargetFor("midfielder", them.starters[7]!, them, byName(theirSquad, them.starters[7]!), "team")).toBe(true);
+    expect(isMarkTargetFor("midfielder", them.starters[12]!, them, byName(theirSquad, them.starters[12]!), "team")).toBe(false);
+    const benchForward = them.subs.find((name) =>
+      isMarkTargetFor("defender", name, them, byName(theirSquad, name), "panel"),
+    );
+    expect(benchForward).toBeTruthy();
+    if (!benchForward) return;
+    expect(isMarkTargetFor("defender", benchForward, them, byName(theirSquad, benchForward), "team")).toBe(false);
   });
 
   it("applies man-mark shape in the simulated sheet when a full-back tracks a half-forward", () => {
@@ -1961,6 +1998,35 @@ describe("weather", () => {
     const wet = { sky: "wet" as const, windStrength: 10, windAngle: 20 };
     expect(passCompleteChance(wet, 0.2)).toBeLessThan(passCompleteChance(dry, 0.2) - 0.1);
   });
+
+  it("names which team has the wind in each half", () => {
+    const climate = { sky: "windy" as const, windStrength: 80, windAngle: 0 };
+    const sides = { first: "Ballyea", second: "Inagh-Kilnamona" };
+    expect(matchWindBlurb(climate, sides)).toBe(
+      "Ballyea have the wind in the first half; Inagh-Kilnamona have it in the second.",
+    );
+    expect(halfWindBlurb(climate, "first", sides)).toContain("Ballyea have the wind in this half");
+    expect(halfWindBlurb(climate, "first", sides)).toContain("Inagh-Kilnamona will have it");
+    expect(halfWindBlurb(climate, "second", sides)).toContain("Inagh-Kilnamona have the wind in this half");
+    expect(climateSummary(climate, sides)).not.toMatch(/\bHome\b|\bAway\b/);
+  });
+
+  it("flips the named side when the wind blows the other way", () => {
+    const climate = { sky: "windy" as const, windStrength: 80, windAngle: 180 };
+    const sides = { first: "Ballyea", second: "Inagh-Kilnamona" };
+    expect(matchWindBlurb(climate, sides)).toBe(
+      "Inagh-Kilnamona have the wind in the first half; Ballyea have it in the second.",
+    );
+  });
+
+  it("keeps the home-screen forecast vague", () => {
+    expect(forecastBlurb({ sky: "windy", windStrength: 80, windAngle: 0 })).toBe("Expected to be windy");
+    expect(forecastBlurb({ sky: "wet", windStrength: 70, windAngle: 12 })).toBe("Expected to be wet");
+    expect(forecastBlurb({ sky: "cold", windStrength: 40, windAngle: 200 })).toBe("Expected to be cold");
+    expect(forecastBlurb({ sky: "sunny", windStrength: 8, windAngle: 90 })).toBe("Expected to be dry");
+    const outlook = forecastBlurb({ sky: "windy", windStrength: 92, windAngle: 0 });
+    expect(outlook).not.toMatch(/gale|strong wind|first half|second|crossfield|Ballyea|Inagh/i);
+  });
 });
 
 describe("training", () => {
@@ -2522,6 +2588,9 @@ describe("pre-match briefing", () => {
     expect(body).toMatch(/nullify/i);
     expect(body).toMatch(/weakness/i);
     expect(body).toMatch(/teamwork/i);
+    expect(body).not.toMatch(/\bat home\b/i);
+    expect(body).not.toMatch(/\baway\b/i);
+    expect(body).toMatch(/Zimmer Biomet Páirc Chíosóg, Ennis/);
   });
 });
 
@@ -2799,6 +2868,87 @@ describe("match intel", () => {
       firsts.add(notes[0]!);
     }
     expect(firsts.size).toBeGreaterThanOrEqual(3);
+  });
+
+  it("describes other clubs' matches in the third person", () => {
+    const notes = buildCoachReport({
+      clubId: "ballyea",
+      homeId: "feakle",
+      awayId: "inagh-kilnamona",
+      homeName: "Feakle",
+      awayName: "Inagh-Kilnamona",
+      homeTactics: { ...DEFAULT_TACTICS, build: 88, puckout: 80 },
+      awayTactics: DEFAULT_TACTICS,
+      homeStats: {
+        teamId: "feakle",
+        possessions: 20,
+        passesAttempted: 40,
+        passesCompleted: 22,
+        shots: 8,
+        scores: 2,
+        highFieldingAttempted: 10,
+        highFieldingWon: 2,
+        puckoutsWon: 2,
+        puckoutsAttempted: 8,
+        tacklesAttempted: 8,
+        tacklesWon: 3,
+        groundCovered: 90,
+        fatigue: 40,
+        fitness: 60,
+        overall: 13,
+        rating: 6,
+      },
+      awayStats: {
+        teamId: "inagh-kilnamona",
+        possessions: 24,
+        passesAttempted: 38,
+        passesCompleted: 28,
+        shots: 10,
+        scores: 6,
+        highFieldingAttempted: 10,
+        highFieldingWon: 8,
+        puckoutsWon: 7,
+        tacklesAttempted: 6,
+        tacklesWon: 4,
+        groundCovered: 88,
+        fatigue: 38,
+        fitness: 62,
+        overall: 13,
+        rating: 6.5,
+      },
+      homeScore: { goals: 0, points: 8 },
+      awayScore: { goals: 1, points: 12 },
+      players: [
+        {
+          name: "Shane McGrath",
+          teamId: "feakle",
+          started: true,
+          minutes: 60,
+          possessions: 8,
+          passesAttempted: 6,
+          passesCompleted: 4,
+          shots: 3,
+          scores: 2,
+          highFieldingAttempted: 2,
+          highFieldingWon: 1,
+          puckoutsWon: 0,
+          tacklesAttempted: 1,
+          tacklesWon: 1,
+          groundCovered: 8,
+          fatigue: 30,
+          fitness: 70,
+          overall: 16,
+          rating: 8.4,
+          mood: 52,
+        },
+      ],
+      events: [],
+    });
+    const text = notes.join(" ");
+    expect(text).toMatch(/Inagh-Kilnamona/);
+    expect(text).toMatch(/Feakle/);
+    expect(text).not.toMatch(/\bWe\b|\bThey\b|next session|keep the same shape|the result is the one we wanted/i);
+    expect(text).toMatch(/Shane McGrath/);
   });
 
   it("moves hidden form from the display, not from sitting on the bench", () => {

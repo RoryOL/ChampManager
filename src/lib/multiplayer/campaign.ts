@@ -1248,7 +1248,7 @@ function finishSim(
           .sort((left, right) => right.rating - left.rating)[0];
         const standout = star ? ` ${star.name} stood out.` : "";
         return [
-          `${home?.name ?? "Home"} ${formatScore(report.homeScore)} ${away?.name ?? "Away"} ${formatScore(report.awayScore)}.${standout}`,
+          `${home?.name ?? "One side"} ${formatScore(report.homeScore)} ${away?.name ?? "the other"} ${formatScore(report.awayScore)}.${standout}`,
         ];
       });
       const roundup = elsewhereRoundup({
@@ -1317,8 +1317,8 @@ function tryCompleteLive(campaign: Campaign, matchId: string): Campaign {
   const awayTeam = teamById(championship, live.first.awayId);
   const combined = combineHalves(live.first, withHtSubs, {
     clubId: homeHuman ? live.first.homeId : live.first.awayId,
-    homeName: homeTeam ? compactName(homeTeam) : "Home",
-    awayName: awayTeam ? compactName(awayTeam) : "Away",
+    homeName: homeTeam ? compactName(homeTeam) : "one side",
+    awayName: awayTeam ? compactName(awayTeam) : "the other side",
     condition: campaign.clubs[homeHuman ? live.first.homeId : live.first.awayId]?.condition,
   });
   const withEt = applyKnockoutExtraTime(combined, {
@@ -1330,8 +1330,8 @@ function tryCompleteLive(campaign: Campaign, matchId: string): Campaign {
     homeCondition: campaign.clubs[live.first.homeId]?.condition,
     awayCondition: campaign.clubs[live.first.awayId]?.condition,
     remainingWeeks: remainingWeeks(saveFromCampaign(campaign, live.first.homeId), championship, live.first.homeId),
-    homeName: homeTeam ? compactName(homeTeam) : "Home",
-    awayName: awayTeam ? compactName(awayTeam) : "Away",
+    homeName: homeTeam ? compactName(homeTeam) : "one side",
+    awayName: awayTeam ? compactName(awayTeam) : "the other side",
     stage: match.stage,
   });
   const injuries = mergeInjuryMaps(live.injuries, decorated.injuries);

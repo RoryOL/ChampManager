@@ -127,7 +127,7 @@ export type Tactics = {
   sidelineTaker?: string;
   /** Named midfielder or half-forward to hit on attacking puck-outs. */
   puckoutTarget?: string;
-  /** Our defender/midfielder name → opposition attacker name. */
+  /** Our defender/midfielder name → opposition forward/midfielder name. */
   manMarks?: Record<string, string>;
 };
 
