@@ -11,6 +11,7 @@ import {
   createCampaign,
   forceAdvance,
   liveForClub,
+  nextMatchForClub,
   preMatchTacticsLocked,
   readyClub,
   startCampaign,
@@ -232,7 +233,9 @@ describe("multiplayer campaign", () => {
     campaign = submitSecondHalf(campaign, "inagh-kilnamona", live!.matchId, DEFAULT_TACTICS, defaultSheet("inagh-kilnamona"), NOW + 103);
     const finished = championshipOf(campaign).matches.find((match) => match.id === live!.matchId);
     expect(finished && matchPlayed(finished)).toBe(true);
-    expect(liveForClub(campaign, "ballyea")?.combined?.events.some((event) => event.kind === "full")).toBe(true);
+    expect(campaign.week.lives[live!.matchId]?.combined?.events.some((event) => event.kind === "full")).toBe(true);
+    expect(liveForClub(campaign, "ballyea")).toBeUndefined();
+    expect(liveForClub(campaign, "inagh-kilnamona")).toBeUndefined();
 
     const inbox = campaign.clubs.ballyea.inbox;
     expect(inbox.some((item) => item.kind === "match" && item.matchId === live!.matchId)).toBe(true);
@@ -243,6 +246,43 @@ describe("multiplayer campaign", () => {
     if (injured) {
       expect(inbox.some((item) => item.kind === "injury")).toBe(true);
     }
+  });
+
+  it("lets both managers confirm the next championship day after a finished tie", () => {
+    let campaign = throughPreseason();
+    campaign = readyClub(readyClub(campaign, "ballyea", NOW + 100), "inagh-kilnamona", NOW + 101);
+    const firstId = liveForClub(campaign, "ballyea")!.matchId;
+    campaign = submitSecondHalf(campaign, "ballyea", firstId, DEFAULT_TACTICS, defaultSheet("ballyea"), NOW + 102);
+    campaign = submitSecondHalf(campaign, "inagh-kilnamona", firstId, DEFAULT_TACTICS, defaultSheet("inagh-kilnamona"), NOW + 103);
+    expect(liveForClub(campaign, "ballyea")).toBeUndefined();
+    const nextHost = nextMatchForClub(campaign, "ballyea");
+    const nextGuest = nextMatchForClub(campaign, "inagh-kilnamona");
+    expect(nextHost?.id).not.toBe(firstId);
+    expect(nextGuest?.id).not.toBe(firstId);
+    const hostReady = readyClub(campaign, "ballyea", NOW + 200);
+    expect(hostReady.week.ready.ballyea).toBeTruthy();
+    expect(hostReady.revision).toBeGreaterThan(campaign.revision);
+    const guestReady = readyClub(hostReady, "inagh-kilnamona", NOW + 201);
+    expect(guestReady.week.ready["inagh-kilnamona"]).toBeTruthy();
+    const nextLive = liveForClub(guestReady, "ballyea") ?? liveForClub(guestReady, "inagh-kilnamona");
+    if (nextHost?.id === nextGuest?.id) {
+      expect(nextLive?.matchId).toBe(nextHost?.id);
+      expect(nextLive?.combined).toBeFalsy();
+    }
+  });
+
+  it("lets a manager confirm the next day after finishing a computer tie", () => {
+    let campaign = throughPreseason(splitGroupCampaign());
+    campaign = readyClub(campaign, "ballyea", NOW + 100);
+    const first = liveForClub(campaign, "ballyea");
+    expect(first).toBeTruthy();
+    campaign = submitSecondHalf(campaign, "ballyea", first!.matchId, DEFAULT_TACTICS, defaultSheet("ballyea"), NOW + 101);
+    expect(liveForClub(campaign, "ballyea")).toBeUndefined();
+    const next = nextMatchForClub(campaign, "ballyea");
+    expect(next?.id).not.toBe(first!.matchId);
+    campaign = readyClub(campaign, "ballyea", NOW + 102);
+    expect(liveForClub(campaign, "ballyea")?.matchId).toBe(next?.id);
+    expect(liveForClub(campaign, "ballyea")?.combined).toBeFalsy();
   });
 
   it("lets the host force the rest of a human match after half-time", () => {

@@ -1437,10 +1437,9 @@ export function waitingOnSecondHalf(campaign: Campaign, matchId: string): Seat[]
 }
 
 export function liveForClub(campaign: Campaign, clubId: string): MatchLive | undefined {
-  const lives = Object.values(campaign.week.lives).filter(
-    (live) => live.first.homeId === clubId || live.first.awayId === clubId,
+  return Object.values(campaign.week.lives).find(
+    (live) => !live.combined && (live.first.homeId === clubId || live.first.awayId === clubId),
   );
-  return lives.find((live) => !live.combined) ?? lives.at(-1);
 }
 
 export function secondHalfReady(campaign: Campaign, matchId: string): boolean {
