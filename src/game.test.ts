@@ -6,7 +6,7 @@ import { applyMatchForm, formValue } from "./lib/form";
 import { migrateSave } from "./lib/gameStorage";
 import { playerMatchRating, seasonStatsFor, lastMatchRating, formatWonLost } from "./lib/matchStats";
 import { nearestToSpot, openPlayConversion, slotPitchPos } from "./lib/shooting";
-import { crossWind, parallelWind, passCompleteChance, rollClimate, withWindFor } from "./lib/weather";
+import { climateSummary, crossWind, forecastBlurb, halfWindBlurb, matchWindBlurb, parallelWind, passCompleteChance, rollClimate, withWindFor } from "./lib/weather";
 import {
   commentaryFeed,
   attackLookChance,
@@ -1998,6 +1998,35 @@ describe("weather", () => {
     const wet = { sky: "wet" as const, windStrength: 10, windAngle: 20 };
     expect(passCompleteChance(wet, 0.2)).toBeLessThan(passCompleteChance(dry, 0.2) - 0.1);
   });
+
+  it("names which team has the wind in each half", () => {
+    const climate = { sky: "windy" as const, windStrength: 80, windAngle: 0 };
+    const sides = { first: "Ballyea", second: "Inagh-Kilnamona" };
+    expect(matchWindBlurb(climate, sides)).toBe(
+      "Ballyea have the wind in the first half; Inagh-Kilnamona have it in the second.",
+    );
+    expect(halfWindBlurb(climate, "first", sides)).toContain("Ballyea have the wind in this half");
+    expect(halfWindBlurb(climate, "first", sides)).toContain("Inagh-Kilnamona will have it");
+    expect(halfWindBlurb(climate, "second", sides)).toContain("Inagh-Kilnamona have the wind in this half");
+    expect(climateSummary(climate, sides)).not.toMatch(/\bHome\b|\bAway\b/);
+  });
+
+  it("flips the named side when the wind blows the other way", () => {
+    const climate = { sky: "windy" as const, windStrength: 80, windAngle: 180 };
+    const sides = { first: "Ballyea", second: "Inagh-Kilnamona" };
+    expect(matchWindBlurb(climate, sides)).toBe(
+      "Inagh-Kilnamona have the wind in the first half; Ballyea have it in the second.",
+    );
+  });
+
+  it("keeps the home-screen forecast vague", () => {
+    expect(forecastBlurb({ sky: "windy", windStrength: 80, windAngle: 0 })).toBe("Expected to be windy");
+    expect(forecastBlurb({ sky: "wet", windStrength: 70, windAngle: 12 })).toBe("Expected to be wet");
+    expect(forecastBlurb({ sky: "cold", windStrength: 40, windAngle: 200 })).toBe("Expected to be cold");
+    expect(forecastBlurb({ sky: "sunny", windStrength: 8, windAngle: 90 })).toBe("Expected to be dry");
+    const outlook = forecastBlurb({ sky: "windy", windStrength: 92, windAngle: 0 });
+    expect(outlook).not.toMatch(/gale|strong wind|first half|second|crossfield|Ballyea|Inagh/i);
+  });
 });
 
 describe("training", () => {
@@ -2559,6 +2588,9 @@ describe("pre-match briefing", () => {
     expect(body).toMatch(/nullify/i);
     expect(body).toMatch(/weakness/i);
     expect(body).toMatch(/teamwork/i);
+    expect(body).not.toMatch(/\bat home\b/i);
+    expect(body).not.toMatch(/\baway\b/i);
+    expect(body).toMatch(/Zimmer Biomet Páirc Chíosóg, Ennis/);
   });
 });
 

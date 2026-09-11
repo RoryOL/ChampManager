@@ -1,4 +1,5 @@
 import type { Championship, GameSave, Match, MatchPeriod, MatchStage, Score, TeamRef } from "../types";
+import { ENNIS_VENUE, isEnnisStage } from "../data/venues";
 import { scoreTotal, winnerOf } from "./scoring";
 
 export function isKnockoutStage(stage?: MatchStage): boolean {
@@ -64,7 +65,7 @@ export function replayFixture(
     stage: match.stage,
     date: addDays(match.date, 7),
     time: match.time,
-    venue: match.venue,
+    venue: isEnnisStage(match.stage) ? ENNIS_VENUE : match.venue,
     home,
     away,
     homeScore: null,

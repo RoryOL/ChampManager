@@ -11,7 +11,7 @@ import { formatDate, stageLabel } from "../lib/scoring";
 import { buildPreMatchBriefing } from "../lib/briefing";
 import { averageFitness, averageMatchOverall, DEFAULT_WEEK_SHAPE, MATCH_PREP_OPTIONS, matchPrepTitle, MIN_MATCH_FITNESS, PRESEASON_WEEKS } from "../lib/training";
 import { ratedSquad, sideTeamwork } from "../lib/players";
-import { rollClimate, climateSummary } from "../lib/weather";
+import { forecastBlurb, rollClimate } from "../lib/weather";
 
 type Props = {
   championship: Championship;
@@ -258,7 +258,8 @@ export function HomeScreen({
         {!preseason && nextMatch ? (
           <p className="hint hint--tight">
             {stageLabel(nextMatch.stage, nextMatch.round)} · {formatDate(nextMatch.date)}
-            {nextMatch.venue ? ` · ${nextMatch.venue}` : ""} · {climateSummary(rollClimate(save.seed, nextMatch.id))}
+            {nextMatch.venue ? ` · ${nextMatch.venue}` : ""} ·{" "}
+            {forecastBlurb(rollClimate(save.seed, nextMatch.id))}
           </p>
         ) : null}
         {!preseason && nextMatch ? (

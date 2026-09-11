@@ -882,7 +882,7 @@ export function useGame() {
           .sort((a, b) => b.rating - a.rating)
           .slice(0, 1);
         const star = stars[0] ? ` ${stars[0].name} stood out.` : "";
-        return `${otherHome?.name ?? "Home"} ${formatScore(other.homeScore)} ${otherAway?.name ?? "Away"} ${formatScore(other.awayScore)}.${star}`;
+        return `${otherHome?.name ?? "One side"} ${formatScore(other.homeScore)} ${otherAway?.name ?? "the other"} ${formatScore(other.awayScore)}.${star}`;
       });
       const roundup = elsewhereRoundup({
         lines: otherLines,
@@ -1025,8 +1025,8 @@ export function useGame() {
           };
       const combined = combineHalves(first, withHtSubs, {
         clubId: save.clubId,
-        homeName: homeTeam ? compactName(homeTeam) : "Home",
-        awayName: awayTeam ? compactName(awayTeam) : "Away",
+        homeName: homeTeam ? compactName(homeTeam) : "one side",
+        awayName: awayTeam ? compactName(awayTeam) : "the other side",
         condition: save.condition,
       });
       const injuries = [...live.injuries, ...decorated.injuries];

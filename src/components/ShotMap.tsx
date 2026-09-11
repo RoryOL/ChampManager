@@ -22,7 +22,10 @@ export function ShotMap({ shots, home, away, homeId, awayId, climate }: Props) {
   return (
     <section className="shot-map" aria-label="Shot map">
       <h3>Shot map</h3>
-      <p className="hint hint--tight">Filled dots scored. Rings missed. Home shoot toward the top in the first half.</p>
+      <p className="hint hint--tight">
+        Filled dots scored. Rings missed. {home ? compactName(home) : "The first-named side"} shoot toward
+        the top in the first half.
+      </p>
       <svg className="shot-map__pitch" viewBox={`0 0 ${PITCH_WIDTH} ${PITCH_LENGTH}`} role="img">
         <rect className="shot-map__grass" x="0" y="0" width={PITCH_WIDTH} height={PITCH_LENGTH} rx="2" />
         <line className="shot-map__line" x1="0" y1={PITCH_LENGTH / 2} x2={PITCH_WIDTH} y2={PITCH_LENGTH / 2} />
@@ -49,9 +52,9 @@ export function ShotMap({ shots, home, away, homeId, awayId, climate }: Props) {
         ))}
       </svg>
       <p className="shot-map__legend">
-        <span style={{ color: homeAccent.ink }}>{home ? compactName(home) : "Home"}</span>
+        <span style={{ color: homeAccent.ink }}>{home ? compactName(home) : "First side"}</span>
         {" · "}
-        <span style={{ color: awayAccent.ink }}>{away ? compactName(away) : "Away"}</span>
+        <span style={{ color: awayAccent.ink }}>{away ? compactName(away) : "Second side"}</span>
         {climate ? ` · ${windStrengthLabel(climate.windStrength)}` : ""}
       </p>
     </section>
