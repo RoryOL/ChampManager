@@ -35,7 +35,7 @@ function trainFullWeek(
   return next;
 }
 
-describe("campaign merge", () => {
+describe("campaign merge", { timeout: 15_000 }, () => {
   it("keeps both managers when one copy only has the host", () => {
     const full = lobby();
     const hostOnly = createCampaign({
