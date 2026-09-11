@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { generatedLook, lookForPlayer } from "./playerLooks";
-import { PORTRAIT_FACES, portraitId } from "./portraitPack";
+import { PORTRAIT_FACES, portraitId, portraitSrc } from "./portraitPack";
 import { ratedSquad } from "./players";
 
 describe("generated player portraits", () => {
@@ -25,5 +25,11 @@ describe("generated player portraits", () => {
     for (const face of PORTRAIT_FACES) {
       expect(existsSync(`public/portraits/${face.id}.jpg`)).toBe(true);
     }
+  });
+
+  it("prefixes portrait urls with the vite base path so GitHub Pages can find them", () => {
+    const src = portraitSrc("Tony Kelly", 32);
+    expect(src).toBe(`${import.meta.env.BASE_URL}portraits/${portraitId("Tony Kelly", 32)}.jpg`);
+    expect(src.endsWith(".jpg")).toBe(true);
   });
 });

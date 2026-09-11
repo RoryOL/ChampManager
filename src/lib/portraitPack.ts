@@ -81,5 +81,5 @@ export function portraitId(name: string, age: number): string {
 }
 
 export function portraitSrc(name: string, age: number): string {
-  return `/portraits/${portraitId(name, age)}.jpg`;
+  return `${import.meta.env.BASE_URL}portraits/${portraitId(name, age)}.jpg`;
 }
