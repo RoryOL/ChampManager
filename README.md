@@ -49,3 +49,11 @@ npm run build
 ```
 
 A save is stored on the device. Use **Resign** to start again with another club.
+
+## Play in the browser (iPhone or extra Android)
+
+The hosted game is at **https://roryol.github.io/ChampManager/**.
+
+On a phone, open that exact URL in **Chrome** (Android) or **Safari** (iPhone), then Add to Home Screen. It should open full-screen as Capture the Canon, not the github.io homepage.
+
+If an old home-screen shortcut still opens `github.io` with a browser banner, delete that shortcut and add it again after this page has refreshed. Do not add the shortcut from `https://roryol.github.io/` itself.
