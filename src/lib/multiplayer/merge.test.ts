@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { PRESEASON_WEEKS } from "../training";
 import { addSeat, clubPreseasonWeek, createCampaign, readyClub, startCampaign, trainClub } from "./campaign";
-import { mergeCampaigns } from "./merge";
+import { applyRemoteCampaign, freshestCampaign, mergeCampaigns } from "./merge";
 
 const NOW = 1_700_000_000_000;
 
@@ -78,6 +78,54 @@ describe("campaign merge", { timeout: 15_000 }, () => {
     const merged = mergeCampaigns(hostReady, guestReady);
     expect(merged.week.ready.ballyea).toBeTruthy();
     expect(merged.week.ready["inagh-kilnamona"]).toBeTruthy();
+  });
+
+  it("advances a joiner when the host has already started", () => {
+    const started = lobby();
+    const waiting = {
+      ...started,
+      phase: "lobby" as const,
+      clubs: {},
+      revision: started.revision - 1,
+    };
+    const merged = mergeCampaigns(waiting, started);
+    expect(merged.phase).toBe("preseason");
+    expect(merged.seats.map((seat) => seat.clubId).sort()).toEqual(["ballyea", "inagh-kilnamona"]);
+  });
+
+  it("prefers a started championship over an older lobby with a different id", () => {
+    const started = lobby();
+    const staleLobby = createCampaign({
+      hostPlayerId: "host",
+      hostName: "Rory",
+      clubId: "ballyea",
+      waitHours: 24,
+      now: NOW - 1000,
+      seed: 42,
+      code: "TEST01",
+    });
+    const withGuest = addSeat(staleLobby, { playerId: "guest", name: "Siobhan", clubId: "inagh-kilnamona" });
+    if (!withGuest.ok) throw new Error(withGuest.error);
+    const merged = mergeCampaigns(withGuest.campaign, started);
+    expect(merged.phase).toBe("preseason");
+    expect(merged.id).toBe(started.id);
+  });
+
+  it("republishes the started room when a stale lobby comes back over MQTT", () => {
+    const started = lobby();
+    const waiting = { ...started, phase: "lobby" as const, clubs: {}, revision: 1 };
+    const fromHost = applyRemoteCampaign(started, waiting);
+    expect(fromHost.campaign.phase).toBe("preseason");
+    expect(fromHost.publish?.phase).toBe("preseason");
+    const fromGuest = applyRemoteCampaign(waiting, started);
+    expect(fromGuest.campaign.phase).toBe("preseason");
+  });
+
+  it("picks a live started room over a locally stored lobby", () => {
+    const started = lobby();
+    const localLobby = { ...started, phase: "lobby" as const, clubs: {}, revision: 1 };
+    expect(freshestCampaign([localLobby, started])?.phase).toBe("preseason");
+    expect(freshestCampaign([localLobby, null, undefined])?.phase).toBe("lobby");
   });
 
   it("is stable if you merge the same pair twice", () => {

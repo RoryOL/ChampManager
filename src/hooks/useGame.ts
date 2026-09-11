@@ -37,7 +37,7 @@ import {
   rememberLocalSeat,
   setPlayerName,
 } from "../lib/multiplayer/identity";
-import { mergeCampaigns } from "../lib/multiplayer/merge";
+import { applyRemoteCampaign, freshestCampaign } from "../lib/multiplayer/merge";
 import { connectRoom, fetchRoom, type RoomStatus } from "../lib/multiplayer/remote";
 import {
   clearCampaign,
@@ -243,7 +243,11 @@ export function useGame() {
   const [viewTeamId, setViewTeamId] = useState<string | null>(null);
   const [roomStatus, setRoomStatus] = useState<RoomStatus>("offline");
   const campaignRef = useRef<Campaign | null>(null);
-  const roomRef = useRef<{ publish: (campaign: Campaign) => void; disconnect: () => void } | null>(null);
+  const roomRef = useRef<{
+    publish: (campaign: Campaign) => void;
+    remember: (campaign: Campaign) => void;
+    disconnect: () => void;
+  } | null>(null);
 
   const activeSeat = campaign?.seats.find((seat) => seat.playerId === activePlayerId)
     ?? campaign?.seats.find((seat) => isLocalSeat(seat.playerId, player.id));
@@ -285,11 +289,12 @@ export function useGame() {
       onCampaign: (remote) => {
         setCampaign((current) => {
           if (!current || current.code !== remote.code) return current;
-          const merged = mergeCampaigns(current, remote);
-          if (JSON.stringify(merged) === JSON.stringify(current)) return current;
-          persistCampaign(merged);
-          if (JSON.stringify(merged) !== JSON.stringify(remote)) handle.publish(merged);
-          return merged;
+          const { campaign: next, publish } = applyRemoteCampaign(current, remote);
+          handle.remember(next);
+          if (next === current && !publish) return current;
+          if (JSON.stringify(next) !== JSON.stringify(current)) persistCampaign(next);
+          if (publish) handle.publish(publish);
+          return next;
         });
       },
     });
@@ -372,11 +377,9 @@ export function useGame() {
   const joinCampaign = useCallback(
     async (payload: { name: string; clubId: string; code: string; snapshot?: string }) => {
       const snapshot = payload.snapshot ? parseCampaignInvite(payload.snapshot) : null;
-      const room =
-        snapshot ??
-        loadRoom(payload.code) ??
-        (campaign?.code === payload.code ? campaign : null) ??
-        (await fetchRoom(payload.code));
+      const local = loadRoom(payload.code) ?? (campaign?.code === payload.code ? campaign : null);
+      const live = await fetchRoom(payload.code, snapshot || local ? 2500 : 7000);
+      const room = freshestCampaign([live, snapshot, local]);
       if (!room) {
         return {
           ok: false as const,
@@ -385,6 +388,21 @@ export function useGame() {
       }
       const self = setPlayerName(payload.name);
       setPlayer(self);
+      if (room.phase !== "lobby") {
+        const seated =
+          room.seats.find((seat) => seat.playerId === self.id) ??
+          room.seats.find((seat) => isLocalSeat(seat.playerId, self.id)) ??
+          room.seats.find((seat) => seat.clubId === payload.clubId && isLocalSeat(seat.playerId, self.id));
+        if (!seated) {
+          return { ok: false as const, error: "This championship has already started." };
+        }
+        rememberLocalSeat(seated.playerId);
+        commitCampaign(room);
+        setActivePlayerId(seated.playerId);
+        setViewTeamId(seated.clubId);
+        setLive(null);
+        return { ok: true as const };
+      }
       const seatId = room.seats.some((seat) => seat.playerId === self.id) ? randomId() : self.id;
       rememberLocalSeat(seatId);
       const joined = addSeat(room, { playerId: seatId, name: self.name, clubId: payload.clubId });
@@ -399,11 +417,10 @@ export function useGame() {
   );
 
   const previewJoinTaken = useCallback(async (code: string, snapshot?: string) => {
-    const room =
-      (snapshot ? parseCampaignInvite(snapshot) : null) ??
-      loadRoom(code) ??
-      (campaign?.code === code ? campaign : null) ??
-      (await fetchRoom(code));
+    const snapshotCampaign = snapshot ? parseCampaignInvite(snapshot) : null;
+    const local = loadRoom(code) ?? (campaign?.code === code ? campaign : null);
+    const live = await fetchRoom(code, snapshotCampaign || local ? 2500 : 7000);
+    const room = freshestCampaign([live, snapshotCampaign, local]);
     return room?.seats.map((seat) => seat.clubId) ?? [];
   }, [campaign]);
 
