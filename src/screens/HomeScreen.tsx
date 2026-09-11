@@ -4,14 +4,14 @@ import { CampaignWeekCard } from "../components/CampaignWeekCard";
 import { ClubBadge } from "../components/ClubBadge";
 import { NewsKindIcon } from "../components/NewsKindIcon";
 import { WeekShapePicker } from "../components/WeekShapePicker";
-import { compactName, sideLabel, windSidesFor } from "../lib/display";
+import { compactName, sideLabel } from "../lib/display";
 import { NEWS_KIND_LABEL } from "../lib/news";
 import { resolveMatchSides, teamById, teamGroup } from "../lib/resolve";
 import { formatDate, stageLabel } from "../lib/scoring";
 import { buildPreMatchBriefing } from "../lib/briefing";
 import { averageFitness, averageMatchOverall, DEFAULT_WEEK_SHAPE, MATCH_PREP_OPTIONS, matchPrepTitle, MIN_MATCH_FITNESS, PRESEASON_WEEKS } from "../lib/training";
 import { ratedSquad, sideTeamwork } from "../lib/players";
-import { rollClimate, climateSummary } from "../lib/weather";
+import { forecastBlurb, rollClimate } from "../lib/weather";
 
 type Props = {
   championship: Championship;
@@ -259,13 +259,7 @@ export function HomeScreen({
           <p className="hint hint--tight">
             {stageLabel(nextMatch.stage, nextMatch.round)} · {formatDate(nextMatch.date)}
             {nextMatch.venue ? ` · ${nextMatch.venue}` : ""} ·{" "}
-            {climateSummary(
-              rollClimate(save.seed, nextMatch.id),
-              windSidesFor(
-                sides?.homeId ? teamById(championship, sides.homeId) : undefined,
-                sides?.awayId ? teamById(championship, sides.awayId) : undefined,
-              ),
-            )}
+            {forecastBlurb(rollClimate(save.seed, nextMatch.id))}
           </p>
         ) : null}
         {!preseason && nextMatch ? (

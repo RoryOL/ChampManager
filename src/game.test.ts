@@ -6,7 +6,7 @@ import { applyMatchForm, formValue } from "./lib/form";
 import { migrateSave } from "./lib/gameStorage";
 import { playerMatchRating, seasonStatsFor, lastMatchRating, formatWonLost } from "./lib/matchStats";
 import { nearestToSpot, openPlayConversion, slotPitchPos } from "./lib/shooting";
-import { climateSummary, crossWind, halfWindBlurb, matchWindBlurb, parallelWind, passCompleteChance, rollClimate, withWindFor } from "./lib/weather";
+import { climateSummary, crossWind, forecastBlurb, halfWindBlurb, matchWindBlurb, parallelWind, passCompleteChance, rollClimate, withWindFor } from "./lib/weather";
 import {
   commentaryFeed,
   attackLookChance,
@@ -1980,6 +1980,15 @@ describe("weather", () => {
     expect(matchWindBlurb(climate, sides)).toBe(
       "Inagh-Kilnamona have the wind in the first half; Ballyea have it in the second.",
     );
+  });
+
+  it("keeps the home-screen forecast vague", () => {
+    expect(forecastBlurb({ sky: "windy", windStrength: 80, windAngle: 0 })).toBe("Expected to be windy");
+    expect(forecastBlurb({ sky: "wet", windStrength: 70, windAngle: 12 })).toBe("Expected to be wet");
+    expect(forecastBlurb({ sky: "cold", windStrength: 40, windAngle: 200 })).toBe("Expected to be cold");
+    expect(forecastBlurb({ sky: "sunny", windStrength: 8, windAngle: 90 })).toBe("Expected to be dry");
+    const outlook = forecastBlurb({ sky: "windy", windStrength: 92, windAngle: 0 });
+    expect(outlook).not.toMatch(/gale|strong wind|first half|second|crossfield|Ballyea|Inagh/i);
   });
 });
 

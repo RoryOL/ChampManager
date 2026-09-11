@@ -122,6 +122,14 @@ export function halfWindBlurb(
   return `${thisName} have the wind in this half; ${otherName} had it before they switched ends.`;
 }
 
+/** Coarse outlook for the home screen — no strength or direction. */
+export function forecastBlurb(climate: MatchClimate): string {
+  if (climate.sky === "windy") return "Expected to be windy";
+  if (climate.sky === "wet") return "Expected to be wet";
+  if (climate.sky === "cold") return "Expected to be cold";
+  return "Expected to be dry";
+}
+
 export function climateSummary(climate: MatchClimate, sides?: WindSides): string {
   const sky = `${skyLabel(climate.sky)} · ${windStrengthLabel(climate.windStrength)}`;
   if (sides) return `${sky}. ${matchWindBlurb(climate, sides)}`;
