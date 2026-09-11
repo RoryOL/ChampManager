@@ -437,7 +437,7 @@ export function lateSoftFreeChance(minute: number, margin: number): number {
 /** One-point games in the last few minutes: the trailer throws another look at the posts. */
 export function lateEqualizerLookChance(minute: number, margin: number): number {
   if (Math.abs(margin) !== 1 || minute < 56) return 0;
-  return 0.12 + latePhase(minute) * 0.1;
+  return 0.16 + latePhase(minute) * 0.12;
 }
 
 export function chaseEffortFromAcc(accumulated: number): number {
@@ -481,7 +481,12 @@ export function tackleChance(
     0.32,
     Math.max(
       0.08,
-      0.08 + hooking * 0.0035 + strength * 0.0045 + physical * 0.07 + press * 0.06 + (workrate - 12) * 0.0028,
+      0.08 +
+        hooking * 0.0035 +
+        strength * 0.0045 +
+        physical * 0.07 +
+        press * 0.06 +
+        (workrate - 12) * (role === "forward" ? 0.0044 : role === "mid" ? 0.0028 : 0.0012),
     ),
   );
   const roleMul = role === "forward" ? 0.56 : role === "mid" ? 0.94 : 1;
@@ -1907,7 +1912,8 @@ export function simulateMatch(options: {
           ),
         );
       }, 0);
-      fromDistanceLook = specialists.length > 0 && random() < bestDistanceAttempt;
+      fromDistanceLook =
+        specialists.length > 0 && random() < bestDistanceAttempt * (chase.chasing ? 1.08 : 0.64);
       const runPool = indicesWhere(names, (index) => (fromDistanceLook ? midfieldDistanceSlot(index) : index >= 7));
       playerName = pickIndexed(names, runPool.length > 0 ? runPool : names.map((_, i) => i), random, (index) => {
         const player = playerOf(teamId, names[index] ?? "");

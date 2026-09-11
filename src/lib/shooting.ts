@@ -39,7 +39,7 @@ export function distanceAttemptChance(
   const line = slotIndex >= 7 ? 1 : 0.82;
   const press = clampDial(pressure) / 100;
   const space = 1 + (0.48 - press) * 0.28;
-  return Math.min(0.58, Math.max(0, (0.04 + dst * 0.026 + sht * 0.016) * line * space));
+  return Math.min(0.58, Math.max(0, (0.03 + dst * 0.022 + sht * 0.013) * line * space));
 }
 
 export function distanceShotM(strikingDistance: number, random: () => number): number {

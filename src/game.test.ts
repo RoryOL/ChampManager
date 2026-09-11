@@ -1332,8 +1332,14 @@ describe("match engine", () => {
         climate: { sky: "sunny", windStrength: 8, windAngle: 12 },
         seed,
       });
-      pressHooks += hot.events.filter((event) => event.kind === "hook" && homePlayers.has(event.playerName)).length;
-      sitHooks += cold.events.filter((event) => event.kind === "hook" && homePlayers.has(event.playerName)).length;
+      const pressTurnovers = (events: typeof hot.events) =>
+        events.filter(
+          (event) =>
+            homePlayers.has(event.playerName) &&
+            (/turns .+ over in their own half/.test(event.text) || /hunts down/.test(event.text)),
+        ).length;
+      pressHooks += pressTurnovers(hot.events);
+      sitHooks += pressTurnovers(cold.events);
     }
     expect(pressHooks).toBeGreaterThan(sitHooks);
   });
