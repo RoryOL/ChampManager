@@ -48,6 +48,17 @@ button {
   color: inherit;
 }
 
+fieldset.tactic-controls {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-inline-size: 0;
+}
+
+fieldset.tactic-controls:disabled {
+  opacity: 0.65;
+}
+
 .device {
   width: 100%;
   max-width: 430px;

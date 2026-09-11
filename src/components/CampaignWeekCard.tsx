@@ -2,7 +2,7 @@ import type { Campaign, Seat } from "../types";
 import { compactName } from "../lib/display";
 import { teamById } from "../lib/resolve";
 import { seedChampionship } from "../data/championship";
-import { formatDeadline, waitingOnSecondHalf, waitingOnWeek } from "../lib/multiplayer/campaign";
+import { formatDeadline, liveForClub, preMatchTacticsLocked, waitingOnClub, waitingOnSecondHalf, clubInSeason, nextMatchForClub } from "../lib/multiplayer/campaign";
 
 type Props = {
   campaign: Campaign;
@@ -30,14 +30,15 @@ export function CampaignWeekCard({
   onPass,
 }: Props) {
   const others = localSeats.filter((seat) => seat.playerId !== playerId);
-  const waitingWeek = waitingOnWeek(campaign);
-  const live = Object.values(campaign.week.lives).find(
-    (item) => item.first.homeId === clubId || item.first.awayId === clubId,
-  );
-  const waitingHalf = live ? waitingOnSecondHalf(campaign, live.matchId) : [];
+  const waitingWeek = waitingOnClub(campaign, clubId);
+  const live = liveForClub(campaign, clubId);
+  const waitingHalf = live && !live.combined ? waitingOnSecondHalf(campaign, live.matchId) : [];
   const isHost = campaign.hostPlayerId === playerId;
   const isReady = Boolean(campaign.week.ready[clubId]);
-  const needReady = waitingWeek.some((seat) => seat.clubId === clubId);
+  const inSeason = clubInSeason(campaign, clubId);
+  const nextMatch = nextMatchForClub(campaign, clubId);
+  const canConfirm = inSeason && !live && Boolean(nextMatch) && !isReady;
+  const tacticsLocked = preMatchTacticsLocked(campaign, clubId);
 
   return (
     <section className="card">
@@ -53,20 +54,27 @@ export function CampaignWeekCard({
       </p>
       {waitingWeek.length > 0 ? (
         <p>
-          Waiting on {waitingWeek.map((seat) => `${seat.name} (${teamLabel(seat.clubId)})`).join(", ")}.
+          Waiting on {waitingWeek.map((seat) => `${seat.name} (${teamLabel(seat.clubId)})`).join(", ")}
+          {tacticsLocked ? ". Your first-half tactics are locked until half-time." : "."}
         </p>
       ) : live && waitingHalf.length > 0 ? (
         <p>
           First half is in. Waiting on{" "}
-          {waitingHalf.map((seat) => `${seat.name} (${teamLabel(seat.clubId)})`).join(", ")} to set second-half
-          tactics.
+          {waitingHalf.map((seat) => `${seat.name} (${teamLabel(seat.clubId)})`).join(", ")} to start the second
+          half.
         </p>
+      ) : tacticsLocked ? (
+        <p>First-half tactics are locked from the tactics view. The match starts when the other manager confirms.</p>
       ) : (
-        <p>Every manager is in for this week.</p>
+        <p>
+          {inSeason
+            ? "Play your own ties when you are ready. You only wait when you face another manager."
+            : "Train your six preseason weeks in your own time. Other managers do not have to wait on you."}
+        </p>
       )}
-      {campaign.phase === "season" && !campaign.week.locked ? (
+      {inSeason && !live ? (
         <div className="row-actions">
-          {needReady ? (
+          {canConfirm ? (
             <button type="button" className="btn" onClick={onReady}>
               Confirm championship day
             </button>

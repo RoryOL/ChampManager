@@ -41,7 +41,8 @@ function clubProgress(club: ClubRuntime): number {
     injured += row.injury?.weeksLeft ?? 0;
   }
   const sessions = club.sessionsDone ?? 0;
-  return (club.trainingDue ? sessions * 22 : 80) + club.inbox.length * 3 + injured + fatigue / 40;
+  const week = club.preseasonWeek ?? 1;
+  return week * 200 + (club.trainingDue ? sessions * 22 : 80) + club.inbox.length * 3 + injured + fatigue / 40;
 }
 
 function mergeClub(left?: ClubRuntime, right?: ClubRuntime, leftRev = 0, rightRev = 0): ClubRuntime | undefined {
@@ -54,7 +55,7 @@ function mergeClub(left?: ClubRuntime, right?: ClubRuntime, leftRev = 0, rightRe
   return {
     ...ahead,
     inbox: unionInbox(ahead.inbox, behind.inbox),
-    trainingDue: left.trainingDue && right.trainingDue,
+    trainingDue: ahead.trainingDue,
     plans: ahead.plans ?? behind.plans ?? {},
     lastSheet: ahead.lastSheet ?? behind.lastSheet,
     intensity: ahead.intensity ?? behind.intensity,
@@ -62,6 +63,7 @@ function mergeClub(left?: ClubRuntime, right?: ClubRuntime, leftRev = 0, rightRe
     sessionsDone: ahead.sessionsDone ?? behind.sessionsDone ?? 0,
     trainingDeltas: Object.keys(ahead.trainingDeltas ?? {}).length > 0 ? ahead.trainingDeltas : behind.trainingDeltas,
     weekDeltas: Object.keys(ahead.weekDeltas ?? {}).length > 0 ? ahead.weekDeltas : behind.weekDeltas,
+    preseasonWeek: Math.max(left.preseasonWeek ?? 0, right.preseasonWeek ?? 0) || ahead.preseasonWeek,
   };
 }
 
@@ -86,10 +88,10 @@ function mergeLive(left?: MatchLive, right?: MatchLive): MatchLive | undefined {
   };
 }
 
-function soonerDeadline(left: number | null, right: number | null): number | null {
+function laterDeadline(left: number | null, right: number | null): number | null {
   if (left == null) return right;
   if (right == null) return left;
-  return Math.min(left, right);
+  return Math.max(left, right);
 }
 
 function mergeWeek(left: WeekState, right: WeekState): WeekState {
@@ -103,11 +105,11 @@ function mergeWeek(left: WeekState, right: WeekState): WeekState {
     const merged = mergeLive(lives[matchId], live);
     if (merged) lives[matchId] = merged;
   }
-  const locked = left.locked || right.locked;
-  const labelled = left.batchLabel ? left : right;
+  const labelled = (left.batchMatchIds?.length ?? 0) >= (right.batchMatchIds?.length ?? 0) ? left : right;
+  const locked = Object.values(lives).some((live) => !live.combined);
   return {
     locked,
-    deadlineAt: soonerDeadline(left.deadlineAt, right.deadlineAt),
+    deadlineAt: laterDeadline(left.deadlineAt, right.deadlineAt),
     ready,
     lives,
     batchLabel: labelled.batchLabel,

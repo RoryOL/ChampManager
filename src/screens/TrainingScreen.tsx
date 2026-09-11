@@ -341,7 +341,7 @@ export function TrainingScreen({ save, onBack, onTrain, onMatchPrep, onSetPlans,
       ) : (
         <p className="hint hint--tight">
           {preseason
-            ? "This week's sessions are in. Waiting on the calendar to turn."
+            ? "This week's sessions are in. The next week is yours when you want it."
             : save.nextMatchPrep
               ? `${matchPrepTitle(save.nextMatchPrep)} is in. Championship day is next.`
               : "Championship day is next."}

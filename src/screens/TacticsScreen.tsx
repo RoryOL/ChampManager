@@ -28,6 +28,7 @@ type Props = {
   onSwap: (first: string, second: string) => void;
   onSetSheet: (sheet: TeamSheet) => void;
   onOpenTeam?: (teamId: string) => void;
+  locked?: boolean;
 };
 
 function slotLabel(sheet: TeamSheet, name: string): string {
@@ -92,7 +93,7 @@ function comparePanelLines(
   return lines;
 }
 
-export function TacticsScreen({ save, championship, nextMatch, onChange, onSwap, onSetSheet, onOpenTeam }: Props) {
+export function TacticsScreen({ save, championship, nextMatch, onChange, onSwap, onSetSheet, onOpenTeam, locked = false }: Props) {
   const squad = useMemo(() => ratedSquad(save.clubId, save), [save]);
   const byName = useMemo(() => new Map(squad.map((player) => [player.name, player])), [squad]);
   const [first, setFirst] = useState<string | null>(null);
@@ -116,10 +117,11 @@ export function TacticsScreen({ save, championship, nextMatch, onChange, onSwap,
   );
 
   useEffect(() => {
+    if (locked) return;
     const full = expandSheetToPanel(save.clubId, save.sheet, save);
     if (full.subs.length === save.sheet.subs.length && full.starters.length === save.sheet.starters.length) return;
     onSetSheet(full);
-  }, [onSetSheet, save.clubId, save.seed, save.sheet]);
+  }, [locked, onSetSheet, save.clubId, save.seed, save.sheet]);
 
   const setGridColumns = (keys: AttributeKey[]) => {
     setColumns(keys);
@@ -127,13 +129,14 @@ export function TacticsScreen({ save, championship, nextMatch, onChange, onSwap,
   };
 
   const tap = (name: string) => {
+    if (locked) return;
     const next = nextSwapPick(first, second, name);
     setFirst(next.first);
     setSecond(next.second);
   };
 
   const confirmSwap = () => {
-    if (!first || !second) return;
+    if (locked || !first || !second) return;
     const inSheet = (player: string) => sheet.starters.includes(player) || sheet.subs.includes(player);
     if ((isUnavailable(save.condition[first]) && !inSheet(first)) || (isUnavailable(save.condition[second]) && !inSheet(second))) {
       return;
@@ -144,6 +147,7 @@ export function TacticsScreen({ save, championship, nextMatch, onChange, onSwap,
   };
 
   const askCoach = () => {
+    if (locked) return;
     onSetSheet(coachPickSheet(squad, save.condition));
     setFirst(null);
     setSecond(null);
@@ -155,8 +159,13 @@ export function TacticsScreen({ save, championship, nextMatch, onChange, onSwap,
 
   return (
     <div className="screen">
+      <p className="hint">
+        Whole panel is available. Fifteen start; five substitutions on the day. Tap two names to compare who is better
+        where, then Swap beside the list — it will not move until you confirm.
+        {locked ? " First-half tactics and the fifteen are locked until half-time." : ""}
+      </p>
       <div className="row-actions">
-        <button type="button" className="btn" onClick={askCoach}>
+        <button type="button" className="btn" onClick={askCoach} disabled={locked}>
           Ask the coach to pick the team
         </button>
         {opponent && onOpenTeam ? (
@@ -235,7 +244,7 @@ export function TacticsScreen({ save, championship, nextMatch, onChange, onSwap,
           </table>
         </div>
       </div>
-      <TacticControls tactics={save.tactics} onChange={onChange} xv={xv} />
+      <TacticControls tactics={save.tactics} onChange={onChange} xv={xv} disabled={locked} />
       {opponent && opponentSheet ? (
         <ManMarkPicker
           tactics={save.tactics}
@@ -247,6 +256,7 @@ export function TacticsScreen({ save, championship, nextMatch, onChange, onSwap,
           ourName={us ? compactName(us) : "Us"}
           theirName={compactName(opponent)}
           pool="panel"
+          disabled={locked}
         />
       ) : null}
     </div>

@@ -61,8 +61,8 @@ export function LobbyScreen({
             : roomStatus === "connecting"
               ? "Opening the live room so other phones can find this code…"
               : "Local lobby. Other phones need a connection, or paste a snapshot."}{" "}
-          Wait window: {waitLabel(campaign.waitHours)}. Missing managers are filled in when it closes. Human v human
-          ties wait for both second-half plans before full-time.
+          Wait window: {waitLabel(campaign.waitHours)}. Human v human ties wait for both managers to lock tactics, then
+          for both to start the second half, or until this window closes. Other championship games do not wait.
         </p>
         <div className="row-actions">
           <button type="button" className="btn" onClick={onCopyCode}>

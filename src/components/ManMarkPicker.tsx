@@ -20,6 +20,7 @@ type Props = {
   ourName?: string;
   theirName?: string;
   compact?: boolean;
+  disabled?: boolean;
   /** Tactics: whole panel. Match: the fifteen actually selected. */
   pool?: ManMarkPool;
 };
@@ -54,6 +55,7 @@ export function ManMarkPicker({
   ourName = "Us",
   theirName = "Them",
   compact = false,
+  disabled = false,
   pool = "team",
 }: Props) {
   const ourNames = poolNames(ourSheet, pool);
@@ -83,6 +85,7 @@ export function ManMarkPicker({
                 <span>{markerLabel(name, ourXv, ourSheet)}</span>
                 <select
                   value={targets.includes(selected) ? selected : ""}
+                  disabled={disabled}
                   onChange={(event) => onChange(setManMark(tactics, name, event.target.value || undefined))}
                   aria-label={`Man mark for ${name}`}
                 >
