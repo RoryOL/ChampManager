@@ -10,11 +10,43 @@ import type {
 import { migrateDifficulty } from "../difficulty";
 import { migrateBalance } from "../balance";
 
-const PHASE_RANK: Record<Campaign["phase"], number> = {
+export const PHASE_RANK: Record<Campaign["phase"], number> = {
   lobby: 0,
   preseason: 1,
   season: 2,
 };
+
+export function campaignOutranks(left: Campaign, right: Campaign): boolean {
+  const phaseDelta = PHASE_RANK[left.phase] - PHASE_RANK[right.phase];
+  if (phaseDelta !== 0) return phaseDelta > 0;
+  return left.revision > right.revision;
+}
+
+export function freshestCampaign(candidates: Array<Campaign | null | undefined>): Campaign | null {
+  const items = candidates.filter((item): item is Campaign => Boolean(item));
+  if (items.length === 0) return null;
+  return items.reduce((best, item) => {
+    if (campaignOutranks(item, best)) return item;
+    if (campaignOutranks(best, item)) return best;
+    if (item.seats.length !== best.seats.length) return item.seats.length > best.seats.length ? item : best;
+    return best;
+  });
+}
+
+export function applyRemoteCampaign(
+  current: Campaign,
+  remote: Campaign,
+): { campaign: Campaign; publish: Campaign | null } {
+  const merged = mergeCampaigns(current, remote);
+  const sameAsCurrent =
+    merged === current || campaignsEquivalent(merged, current) || JSON.stringify(merged) === JSON.stringify(current);
+  if (sameAsCurrent) {
+    return { campaign: current, publish: campaignOutranks(current, remote) ? current : null };
+  }
+  const sameAsRemote =
+    merged === remote || campaignsEquivalent(merged, remote) || JSON.stringify(merged) === JSON.stringify(remote);
+  return { campaign: merged, publish: sameAsRemote ? null : merged };
+}
 
 function laterPlan(left?: HalfPlan, right?: HalfPlan): HalfPlan | undefined {
   if (!left) return right;
@@ -133,6 +165,9 @@ export function campaignsEquivalent(left: Campaign, right: Campaign): boolean {
 export function mergeCampaigns(left: Campaign, right: Campaign): Campaign {
   if (left.code !== right.code) return left.revision >= right.revision ? left : right;
   if (left.id !== right.id) {
+    if (PHASE_RANK[left.phase] !== PHASE_RANK[right.phase]) {
+      return PHASE_RANK[left.phase] > PHASE_RANK[right.phase] ? left : right;
+    }
     if (left.seats.length !== right.seats.length) return left.seats.length >= right.seats.length ? left : right;
     return left.createdAt <= right.createdAt ? left : right;
   }

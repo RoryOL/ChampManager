@@ -1,6 +1,7 @@
 import type { MqttClient } from "mqtt";
 import type { Campaign } from "../../types";
 import { normaliseCode } from "./codes";
+import { campaignOutranks } from "./merge";
 import { parseCampaignInvite } from "./store";
 
 const BROKER_URL = "wss://broker.emqx.io:8084/mqtt";
@@ -18,21 +19,43 @@ export function connectRoom(
     onCampaign: (campaign: Campaign) => void;
     onStatus?: (status: RoomStatus) => void;
   },
-): { publish: (campaign: Campaign) => void; disconnect: () => void } {
+): { publish: (campaign: Campaign) => void; remember: (campaign: Campaign) => void; disconnect: () => void } {
   const topic = topicFor(code);
   let client: MqttClient | null = null;
   let lastSent = "";
   let queued: Campaign | null = null;
+  let best: Campaign | null = null;
   let stopped = false;
+  let republishTimer: ReturnType<typeof setTimeout> | null = null;
   options.onStatus?.("connecting");
+
+  const remember = (campaign: Campaign) => {
+    if (normaliseCode(campaign.code) !== normaliseCode(code)) return;
+    if (!queued || campaignOutranks(campaign, queued) || !campaignOutranks(queued, campaign)) {
+      queued = campaign;
+    }
+    if (!best || campaignOutranks(campaign, best) || !campaignOutranks(best, campaign)) {
+      best = campaign;
+    }
+  };
 
   const publishNow = (campaign: Campaign) => {
     if (normaliseCode(campaign.code) !== normaliseCode(code)) return;
+    if (best && campaignOutranks(best, campaign)) return;
     const payload = JSON.stringify(campaign);
     lastSent = payload;
-    queued = campaign;
+    remember(campaign);
     if (!client?.connected) return;
     client.publish(topic, payload, { qos: 1, retain: true });
+  };
+
+  const publishQueued = () => {
+    if (stopped || !queued) return;
+    if (best && campaignOutranks(best, queued)) {
+      publishNow(best);
+      return;
+    }
+    publishNow(queued);
   };
 
   void import("mqtt").then((mod) => {
@@ -51,7 +74,10 @@ export function connectRoom(
       if (stopped) return;
       options.onStatus?.("live");
       client?.subscribe(topic, { qos: 1 }, () => {
-        if (queued) publishNow(queued);
+        if (republishTimer) clearTimeout(republishTimer);
+        // Let the retained championship arrive before we republish, so a stale
+        // lobby on this phone cannot overwrite a championship that already started.
+        republishTimer = setTimeout(publishQueued, 400);
       });
     });
 
@@ -70,14 +96,17 @@ export function connectRoom(
       if (!text || text === lastSent) return;
       const campaign = parseCampaignInvite(text);
       if (!campaign || normaliseCode(campaign.code) !== normaliseCode(code)) return;
+      remember(campaign);
       options.onCampaign(campaign);
     });
   });
 
   return {
     publish: publishNow,
+    remember,
     disconnect: () => {
       stopped = true;
+      if (republishTimer) clearTimeout(republishTimer);
       options.onStatus?.("offline");
       client?.end(true);
       client = null;
