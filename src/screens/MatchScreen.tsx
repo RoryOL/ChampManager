@@ -38,6 +38,7 @@ type Props = {
   waitingOn?: { name: string; clubId: string }[];
   onPassDevice?: (playerId: string) => void;
   passSeats?: { playerId: string; name: string }[];
+  onRefreshRoom?: () => void;
 };
 
 export function MatchScreen({
@@ -54,6 +55,7 @@ export function MatchScreen({
   waitingOn = [],
   onPassDevice,
   passSeats = [],
+  onRefreshRoom,
 }: Props) {
   const { homeId, awayId } = resolveMatchSides(championship, live.match);
   const home = homeId ? teamById(championship, homeId) : undefined;
@@ -361,6 +363,13 @@ export function MatchScreen({
           ) : (
             <p className="tactic-copy">Keep the app open or come back after the wait window.</p>
           )}
+          {onRefreshRoom ? (
+            <div className="row-actions">
+              <button type="button" className="btn btn--ghost" onClick={() => void onRefreshRoom()}>
+                Check for updates
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : live.phase === "half-time" || live.phase === "extra-time" || live.phase === "extra-half" ? (
         <div className="ht-panel">

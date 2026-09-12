@@ -438,6 +438,35 @@ function opponentIdFor(match: { homeId: string; awayId: string }, clubId: string
   return match.homeId === clubId ? match.awayId : match.homeId;
 }
 
+function matchProgress(match: Match): number {
+  if (match.stage === "group") return match.round ?? 1;
+  if (match.stage === "quarter-final" || match.stage === "relegation-semi") return 10;
+  if (match.stage === "semi-final" || match.stage === "relegation-final") return 11;
+  return 12;
+}
+
+export function waitingOnEarlierRound(campaign: Campaign, clubId: string): Seat[] {
+  const mine = nextMatchForClub(campaign, clubId);
+  if (!mine) return [];
+  const championship = championshipOf(campaign);
+  const ahead = matchProgress(mine);
+  return campaign.seats.flatMap((seat) => {
+    if (seat.clubId === clubId) return [];
+    if (!clubInSeason(campaign, seat.clubId)) {
+      return campaign.phase === "season" ? [seat] : [];
+    }
+    const live = liveForClub(campaign, seat.clubId);
+    if (live) {
+      const row = championship.matches.find((match) => match.id === live.matchId);
+      if (!row || matchPlayed(row)) return [];
+      return matchProgress(row) < ahead ? [seat] : [];
+    }
+    const theirNext = nextMatchForClub(campaign, seat.clubId);
+    if (!theirNext) return [];
+    return matchProgress(theirNext) < ahead ? [seat] : [];
+  });
+}
+
 export function nextHumanMatchIsPvp(campaign: Campaign, clubId: string): boolean {
   const match = nextMatchForClub(campaign, clubId);
   if (!match) return false;
@@ -469,7 +498,7 @@ export function waitingOnWeek(campaign: Campaign): Seat[] {
 export function waitingOnClub(campaign: Campaign, clubId: string): Seat[] {
   if (campaign.phase === "lobby" || !clubId) return [];
   const live = liveForClub(campaign, clubId);
-  if (live) return waitingOnSecondHalf(campaign, live.matchId);
+  if (live) return waitingOnSecondHalf(campaign, live.matchId).filter((seat) => seat.clubId !== clubId);
   if (!clubInSeason(campaign, clubId) || !campaign.week.ready[clubId]) return [];
   const match = nextMatchForClub(campaign, clubId);
   if (!match) return [];
@@ -792,6 +821,7 @@ export function trainClubWeek(
 export function readyClub(campaign: Campaign, clubId: string, now = Date.now()): Campaign {
   const club = campaign.clubs[clubId];
   if (!club || !clubInSeason(campaign, clubId) || liveForClub(campaign, clubId)) return campaign;
+  if (waitingOnEarlierRound(campaign, clubId).length > 0) return campaign;
   const match = nextMatchForClub(campaign, clubId);
   if (!match || !sidesFixed(championshipOf(campaign), match)) return campaign;
   const pvp = nextHumanMatchIsPvp(campaign, clubId);
@@ -1379,6 +1409,23 @@ function withOpenLives(campaign: Campaign): Campaign {
   return { ...campaign, week: { ...campaign.week, locked, deadlineAt } };
 }
 
+function pruneStaleOpenLives(campaign: Campaign): Campaign {
+  const championship = championshipOf(campaign);
+  let changed = false;
+  const lives: Campaign["week"]["lives"] = {};
+  for (const [id, live] of Object.entries(campaign.week.lives)) {
+    if (!live.combined) {
+      const row = championship.matches.find((match) => match.id === id);
+      if (campaign.reports[id] || (row && matchPlayed(row))) {
+        changed = true;
+        continue;
+      }
+    }
+    lives[id] = live;
+  }
+  return changed ? { ...campaign, week: { ...campaign.week, lives } } : campaign;
+}
+
 export function tickCampaign(campaign: Campaign, now = Date.now()): Campaign {
   if (campaign.phase === "lobby") return campaign;
   let next = withAllClubs(campaign);
@@ -1388,7 +1435,7 @@ export function tickCampaign(campaign: Campaign, now = Date.now()): Campaign {
   }
   next = progressMatches(next, now);
   if (deadlinePassed(next, now)) next = fillMissingSecondHalves(next);
-  return withOpenLives(next);
+  return withOpenLives(pruneStaleOpenLives(next));
 }
 
 export function submitSecondHalf(
@@ -1437,9 +1484,14 @@ export function waitingOnSecondHalf(campaign: Campaign, matchId: string): Seat[]
 }
 
 export function liveForClub(campaign: Campaign, clubId: string): MatchLive | undefined {
-  return Object.values(campaign.week.lives).find(
-    (live) => !live.combined && (live.first.homeId === clubId || live.first.awayId === clubId),
-  );
+  const championship = championshipOf(campaign);
+  return Object.values(campaign.week.lives).find((live) => {
+    if (live.combined) return false;
+    if (live.first.homeId !== clubId && live.first.awayId !== clubId) return false;
+    if (campaign.reports[live.matchId]) return false;
+    const row = championship.matches.find((match) => match.id === live.matchId);
+    return !row || !matchPlayed(row);
+  });
 }
 
 export function secondHalfReady(campaign: Campaign, matchId: string): boolean {

@@ -104,6 +104,7 @@ export default function App() {
           onCopySnapshot={() => void game.copySnapshot()}
           roomStatus={game.roomStatus}
           onRetryRoom={game.retryRoom}
+          onRefreshRoom={() => void game.refreshRoom()}
         />
       )}
 
@@ -122,6 +123,7 @@ export default function App() {
           waitingOn={game.waitingHalf.filter((seat) => seat.clubId !== game.save?.clubId)}
           onPassDevice={game.passDevice}
           passSeats={game.localSeats.filter((seat) => seat.playerId !== game.activeSeat?.playerId)}
+          onRefreshRoom={() => void game.refreshRoom()}
         />
       )}
 
@@ -169,6 +171,8 @@ export default function App() {
               onUnready={game.undoReady}
               onForce={game.forceWeek}
               onPass={game.passDevice}
+              onRefreshRoom={() => void game.refreshRoom()}
+              onRetryRoom={game.retryRoom}
               onReadNews={game.readNews}
               onOpenMatch={(matchId) => {
                 setFixtureId(matchId);

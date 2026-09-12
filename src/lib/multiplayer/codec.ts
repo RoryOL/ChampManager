@@ -51,8 +51,26 @@ export function unwrapCampaignJson(raw: string): string | null {
   }
 }
 
+export function slimCampaignForWire(campaign: Campaign): Campaign {
+  const lives: Campaign["week"]["lives"] = {};
+  for (const [id, live] of Object.entries(campaign.week.lives)) {
+    if (live.combined || campaign.reports[id]) continue;
+    lives[id] = live;
+  }
+  const clubs: Campaign["clubs"] = { ...campaign.clubs };
+  for (const clubId of Object.keys(clubs)) {
+    const club = clubs[clubId];
+    if (club && club.inbox.length > 24) clubs[clubId] = { ...club, inbox: club.inbox.slice(0, 24) };
+  }
+  return {
+    ...campaign,
+    clubs,
+    week: { ...campaign.week, lives },
+  };
+}
+
 export function encodeCampaign(campaign: Campaign): string {
-  const json = JSON.stringify(campaign);
+  const json = JSON.stringify(slimCampaignForWire(campaign));
   if (json.length <= PLAIN_CAMPAIGN_LIMIT) return json;
   const envelope: GzipEnvelope = {
     v: 1,

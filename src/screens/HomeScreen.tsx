@@ -30,6 +30,8 @@ type Props = {
   onUnready?: () => void;
   onForce?: () => void;
   onPass?: (playerId: string) => void;
+  onRefreshRoom?: () => void;
+  onRetryRoom?: () => void;
   onReadNews: (id: string) => void;
   onOpenMatch: (matchId: string) => void;
   onOpenPlayer: (name: string) => void;
@@ -103,6 +105,8 @@ export function HomeScreen({
   onUnready,
   onForce,
   onPass,
+  onRefreshRoom,
+  onRetryRoom,
   onReadNews,
   onOpenMatch,
   onOpenPlayer,
@@ -343,6 +347,8 @@ export function HomeScreen({
           onUnready={onUnready}
           onForce={onForce}
           onPass={onPass}
+          onRefreshRoom={onRefreshRoom}
+          onRetryRoom={onRetryRoom}
         />
       ) : null}
 
