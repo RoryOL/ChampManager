@@ -2,7 +2,7 @@ import type { IClientOptions, MqttClient } from "mqtt";
 import type { Campaign } from "../../types";
 import { normaliseCode } from "./codes";
 import { campaignOutranks } from "./merge";
-import { parseCampaignInvite } from "./store";
+import { encodeCampaign, decodeCampaign } from "./codec";
 
 /** Public brokers, first working one wins. EMQX is last — it has been refusing MQTT. */
 export const BROKER_URLS = [
@@ -18,6 +18,7 @@ export type RoomStatus = "offline" | "connecting" | "live";
 export type RoomProbe = {
   connected: boolean;
   campaign: Campaign | null;
+  brokerUrl?: string;
 };
 
 export type JoinPreview = {
@@ -28,6 +29,20 @@ export type JoinPreview = {
   source: "live" | "snapshot" | "local" | "none";
 };
 
+const roomBrokers = new Map<string, string>();
+
+export function rememberRoomBroker(code: string, url: string): void {
+  roomBrokers.set(normaliseCode(code), url);
+}
+
+export function roomBroker(code: string): string | undefined {
+  return roomBrokers.get(normaliseCode(code));
+}
+
+export function resetRoomBrokers(): void {
+  roomBrokers.clear();
+}
+
 function topicFor(code: string): string {
   return `capture-the-canon/v1/${normaliseCode(code)}`;
 }
@@ -36,9 +51,11 @@ function clientId(code: string): string {
   return `cm-${normaliseCode(code).slice(0, 4)}-${Math.random().toString(16).slice(2, 10)}`;
 }
 
-function brokerList(options: { brokerUrl?: string; brokerUrls?: string[] }): string[] {
+function brokerList(code: string, options: { brokerUrl?: string; brokerUrls?: string[] }): string[] {
   if (options.brokerUrl) return [options.brokerUrl];
   if (options.brokerUrls?.length) return options.brokerUrls;
+  const preferred = roomBroker(code);
+  if (preferred) return [preferred, ...BROKER_URLS.filter((url) => url !== preferred)];
   return BROKER_URLS;
 }
 
@@ -105,7 +122,8 @@ export function connectRoom(
   const publishNow = (campaign: Campaign) => {
     if (normaliseCode(campaign.code) !== normaliseCode(code)) return;
     if (best && campaignOutranks(best, campaign)) return;
-    const payload = JSON.stringify(campaign);
+    // Throw-in is ~160KB raw and public brokers drop it; lobby JSON stays plain.
+    const payload = encodeCampaign(campaign);
     lastSent = payload;
     remember(campaign);
     if (!client?.connected) return;
@@ -151,7 +169,7 @@ export function connectRoom(
     next.on("message", (_topic, payload) => {
       const text = payload.toString();
       if (!text || text === lastSent) return;
-      const campaign = parseCampaignInvite(text);
+      const campaign = decodeCampaign(text);
       if (!campaign || normaliseCode(campaign.code) !== normaliseCode(code)) return;
       remember(campaign);
       options.onCampaign(campaign);
@@ -162,7 +180,7 @@ export function connectRoom(
   void import("mqtt").then(async (mod) => {
     if (stopped) return;
     const mqtt = mod.default;
-    const urls = brokerList(options);
+    const urls = brokerList(code, options);
     for (const url of urls) {
       if (stopped) return;
       const next = await tryBroker(mqtt, url, clientId(code));
@@ -171,6 +189,7 @@ export function connectRoom(
         return;
       }
       if (next) {
+        rememberRoomBroker(code, url);
         attach(next);
         return;
       }
@@ -206,7 +225,7 @@ export function probeRoom(code: string, timeoutMs = 10_000, brokerUrl?: string):
       if (hold) clearTimeout(hold);
       clearTimeout(timer);
       handle.disconnect();
-      resolve({ connected, campaign });
+      resolve({ connected, campaign, brokerUrl: roomBroker(normalised) });
     };
 
     const handle = connectRoom(normalised, {
