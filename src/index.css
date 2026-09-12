@@ -389,6 +389,7 @@ html.native-app .device {
 .choice-row,
 .match-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
 }
 
