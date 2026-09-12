@@ -25,7 +25,11 @@ Download the APK from GitHub (this is a direct file, not an in-chat link):
 
 On a phone, open that URL in Chrome. If Android blocks the install, allow **Install unknown apps** for Chrome, then install. Open **Capture the Canon** from the launcher.
 
-This is a debug-signed APK (fine for sideloading; not a Play Store build). Every push to `main` rebuilds it, commits `releases/ChampManager.apk`, and uploads a copy under **Actions → Android APK → Artifacts**.
+This is a **sideload-signed** APK (fine for installing from GitHub; not a Play Store build). Every push to `main` rebuilds it, commits `releases/ChampManager.apk`, and uploads a copy under **Actions → Android APK → Artifacts**.
+
+Android will only update an existing install if the new APK is signed with the **same key**. Older GitHub zips were signed with a fresh debug key on every CI run, so the phone treated each zip as a different app and asked you to uninstall first. Builds from this repo now share one sideload key, and the version code goes up with each commit, so you can tap the new APK to update in place.
+
+If you already have an older build installed, uninstall **once**, install this APK, and later GitHub zips should update without wiping the app. A save already on the phone is kept across those in-place updates.
 
 To rebuild it locally (needs JDK 21 and the Android SDK):
 

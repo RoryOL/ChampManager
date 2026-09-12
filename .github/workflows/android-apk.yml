@@ -12,6 +12,8 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -27,7 +29,7 @@ jobs:
       - run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleDebug
+          ./gradlew assembleDebug -PsideloadVersionCode="$(git rev-list --count HEAD)"
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
