@@ -196,15 +196,29 @@ export function campaignBalance(campaign: Campaign): SquadBalance {
 export function withCampaignDefaults(campaign: Campaign): Campaign {
   const clubs = { ...campaign.clubs };
   for (const [clubId, club] of Object.entries(clubs)) {
-    if (club.preseasonWeek == null) {
-      clubs[clubId] = { ...club, preseasonWeek: campaign.preseasonWeek };
-    }
+    const inbox = Array.isArray(club.inbox) ? club.inbox : [];
+    clubs[clubId] = {
+      ...club,
+      inbox,
+      sheet: club.sheet ?? defaultSheet(clubId),
+      preseasonWeek: club.preseasonWeek ?? campaign.preseasonWeek ?? 1,
+    };
   }
   return {
     ...campaign,
     difficulty: campaignDifficulty(campaign),
     balance: campaignBalance(campaign),
+    seats: Array.isArray(campaign.seats) ? campaign.seats : [],
+    matches: Array.isArray(campaign.matches) ? campaign.matches : [],
+    extraMatches: Array.isArray(campaign.extraMatches) ? campaign.extraMatches : [],
+    reports: campaign.reports ?? {},
     clubs,
+    week: {
+      locked: Boolean(campaign.week?.locked),
+      deadlineAt: campaign.week?.deadlineAt ?? null,
+      ready: campaign.week?.ready ?? {},
+      lives: campaign.week?.lives ?? {},
+    },
   };
 }
 
@@ -338,15 +352,15 @@ export function saveFromCampaign(campaign: Campaign, clubId: string): GameSave {
     difficulty: campaignDifficulty(campaign),
     balance: campaignBalance(campaign),
     tactics: club.tactics,
-    sheet: expandSheetToPanel(clubId, club.sheet, campaign.seed),
-    matches: campaign.matches,
+    sheet: expandSheetToPanel(clubId, club.sheet ?? defaultSheet(clubId), campaign.seed),
+    matches: campaign.matches ?? [],
     extraMatches: campaign.extraMatches ?? [],
-    inbox: club.inbox,
+    inbox: Array.isArray(club.inbox) ? club.inbox : [],
     phase: clubPreseasonWeek(campaign, clubId) > PRESEASON_WEEKS ? "season" : "preseason",
     preseasonWeek: clubPreseasonWeek(campaign, clubId),
     condition: withStartingForm(club.condition, squadNames(clubId, campaign.seed), campaign.seed),
     trainingDue: club.trainingDue,
-    reports: campaign.reports,
+    reports: campaign.reports ?? {},
     ambition: ambitionFor(clubId).target,
     plans: club.plans ?? {},
     lastSheet: club.lastSheet ? expandSheetToPanel(clubId, club.lastSheet, campaign.seed) : club.lastSheet,
@@ -1399,7 +1413,7 @@ function fillMissingSecondHalves(campaign: Campaign): Campaign {
 }
 
 function withOpenLives(campaign: Campaign): Campaign {
-  const locked = Object.values(campaign.week.lives).some((live) => !live.combined);
+  const locked = Object.values(campaign.week?.lives ?? {}).some((live) => !live.combined);
   const deadlineAt = locked
     ? campaign.week.deadlineAt
     : Object.keys(campaign.week.ready).some((clubId) => nextHumanMatchIsPvp(campaign, clubId))
@@ -1413,7 +1427,7 @@ function pruneStaleOpenLives(campaign: Campaign): Campaign {
   const championship = championshipOf(campaign);
   let changed = false;
   const lives: Campaign["week"]["lives"] = {};
-  for (const [id, live] of Object.entries(campaign.week.lives)) {
+  for (const [id, live] of Object.entries(campaign.week?.lives ?? {})) {
     if (!live.combined) {
       const row = championship.matches.find((match) => match.id === id);
       if (campaign.reports[id] || (row && matchPlayed(row))) {
@@ -1485,7 +1499,7 @@ export function waitingOnSecondHalf(campaign: Campaign, matchId: string): Seat[]
 
 export function liveForClub(campaign: Campaign, clubId: string): MatchLive | undefined {
   const championship = championshipOf(campaign);
-  return Object.values(campaign.week.lives).find((live) => {
+  return Object.values(campaign.week?.lives ?? {}).find((live) => {
     if (live.combined) return false;
     if (live.first.homeId !== clubId && live.first.awayId !== clubId) return false;
     if (campaign.reports[live.matchId]) return false;

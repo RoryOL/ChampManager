@@ -134,8 +134,9 @@ export function HomeScreen({
   const form = averageMatchOverall(squad, save.condition, save.sheet.starters);
   const preseason = save.phase === "preseason";
   const formDelta = Math.round((form.match - form.ability) * 10) / 10;
-  const opened = save.inbox.find((item) => item.id === openId) ?? null;
-  const unread = save.inbox.filter((item) => !item.read).length;
+  const inbox = save.inbox ?? [];
+  const opened = inbox.find((item) => item.id === openId) ?? null;
+  const unread = inbox.filter((item) => !item.read).length;
   const weekShape = save.weekShape ?? DEFAULT_WEEK_SHAPE;
   const myLive = campaign ? liveForClub(campaign, save.clubId) : undefined;
   const canWatch = Boolean(myLive && !myLive.combined);
@@ -358,10 +359,10 @@ export function HomeScreen({
           {unread > 0 ? <em className="news-count">{unread} new</em> : null}
         </h3>
         <ul className="inbox news-feed">
-          {save.inbox.length === 0 ? (
+          {inbox.length === 0 ? (
             <li className="empty">Set your team, then go to the first match.</li>
           ) : (
-            save.inbox.map((item) => (
+            inbox.map((item) => (
               <li key={item.id}>
                 <button
                   type="button"

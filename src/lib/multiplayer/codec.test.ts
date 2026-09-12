@@ -75,4 +75,19 @@ describe("campaign wire codec", () => {
     expect(decodeCampaign(encodeCampaign(fat))?.week.lives.open?.matchId).toBe("open");
     expect(decodeCampaign(encodeCampaign(fat))?.week.lives.done).toBeUndefined();
   });
+
+  it("encodes a championship even if week or inbox is missing", () => {
+    const { started } = startedCampaign();
+    const bare = {
+      ...started,
+      week: undefined,
+      clubs: {
+        ...started.clubs,
+        ballyea: { ...started.clubs.ballyea, inbox: undefined },
+      },
+    } as unknown as typeof started;
+    const encoded = encodeCampaign(bare);
+    expect(decodeCampaign(encoded)?.code).toBe("WIRE01");
+    expect(slimCampaignForWire(bare).week.lives).toEqual({});
+  });
 });

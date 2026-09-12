@@ -14,6 +14,7 @@ import {
   nextMatchForClub,
   preMatchTacticsLocked,
   readyClub,
+  saveFromCampaign,
   startCampaign,
   submitSecondHalf,
   tickCampaign,
@@ -22,6 +23,7 @@ import {
   waitingOnSecondHalf,
   waitingOnClub,
   waitingOnEarlierRound,
+  withCampaignDefaults,
   withClubTactics,
 } from "./campaign";
 import { mergeCampaigns } from "./merge";
@@ -114,6 +116,26 @@ describe("multiplayer campaign", () => {
       now: NOW,
     }), "host", NOW);
     expect(tooSoon.ok).toBe(false);
+  });
+
+  it("fills missing week and inbox so a stored championship can still be drawn", () => {
+    const started = startedCampaign();
+    const bare = {
+      ...started,
+      week: undefined,
+      clubs: {
+        ...started.clubs,
+        ballyea: { ...started.clubs.ballyea, inbox: undefined, sheet: undefined },
+      },
+    } as unknown as ReturnType<typeof startedCampaign>;
+    const hydrated = withCampaignDefaults(bare);
+    expect(hydrated.week.lives).toEqual({});
+    expect(hydrated.clubs.ballyea.inbox).toEqual([]);
+    expect(hydrated.clubs.ballyea.sheet.starters.length).toBeGreaterThan(0);
+    const save = saveFromCampaign(hydrated, "ballyea");
+    expect(save.inbox).toEqual([]);
+    expect(liveForClub(hydrated, "ballyea")).toBeUndefined();
+    expect(waitingOnEarlierRound(hydrated, "ballyea")).toEqual([]);
   });
 
   it("stores the host's difficulty on a new championship", () => {

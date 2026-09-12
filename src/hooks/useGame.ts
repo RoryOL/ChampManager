@@ -230,7 +230,13 @@ function localSeatsFor(campaign: Campaign, selfId: string): Seat[] {
 
 export function useGame() {
   const [soloSave, setSoloSave] = useState<GameSave | null>(() => loadSave());
-  const [campaign, setCampaign] = useState<Campaign | null>(() => loadCampaign());
+  const [campaign, setCampaign] = useState<Campaign | null>(() => {
+    try {
+      return loadCampaign();
+    } catch {
+      return null;
+    }
+  });
   const [player, setPlayer] = useState(() => ensurePlayer());
   const [activePlayerId, setActivePlayerId] = useState(() => {
     const self = ensurePlayer();
@@ -504,6 +510,12 @@ export function useGame() {
     setPicked(null);
     setViewTeamId(null);
   }, []);
+
+  const claimSeat = useCallback((playerId: string) => {
+    if (!campaign?.seats.some((seat) => seat.playerId === playerId)) return;
+    rememberLocalSeat(playerId);
+    setActivePlayerId(playerId);
+  }, [campaign]);
 
   const resign = useCallback(() => {
     if (campaign) {
@@ -1683,6 +1695,7 @@ export function useGame() {
     addHotseat,
     startLobby,
     leaveCampaign,
+    claimSeat,
     resign,
     setSeasonWrap,
     startNewSeason,
