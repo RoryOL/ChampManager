@@ -287,6 +287,19 @@ describe("multiplayer campaign", () => {
     expect(liveForClub(campaign, "ballyea")).toBeUndefined();
     const next = nextMatchForClub(campaign, "ballyea");
     expect(next?.id).not.toBe(first!.matchId);
+    const stale = {
+      ...campaign,
+      week: {
+        ...campaign.week,
+        lives: {
+          ...campaign.week.lives,
+          [first!.matchId]: { matchId: first!.matchId, first: first!.first },
+        },
+      },
+    };
+    expect(liveForClub(stale, "ballyea")).toBeUndefined();
+    expect(waitingOnEarlierRound(stale, "eire-og")).toEqual([]);
+    expect(tickCampaign(stale, NOW + 102).week.lives[first!.matchId]).toBeUndefined();
     const blocked = readyClub(campaign, "ballyea", NOW + 102);
     expect(blocked.week.ready.ballyea).toBeFalsy();
     expect(liveForClub(blocked, "ballyea")).toBeUndefined();

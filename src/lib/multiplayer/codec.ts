@@ -54,7 +54,8 @@ export function unwrapCampaignJson(raw: string): string | null {
 export function slimCampaignForWire(campaign: Campaign): Campaign {
   const lives: Campaign["week"]["lives"] = {};
   for (const [id, live] of Object.entries(campaign.week.lives)) {
-    if (!live.combined) lives[id] = live;
+    if (live.combined || campaign.reports[id]) continue;
+    lives[id] = live;
   }
   const clubs: Campaign["clubs"] = { ...campaign.clubs };
   for (const clubId of Object.keys(clubs)) {

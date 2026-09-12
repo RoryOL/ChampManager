@@ -458,7 +458,8 @@ export function waitingOnEarlierRound(campaign: Campaign, clubId: string): Seat[
     const live = liveForClub(campaign, seat.clubId);
     if (live) {
       const row = championship.matches.find((match) => match.id === live.matchId);
-      return row && matchProgress(row) < ahead ? [seat] : [];
+      if (!row || matchPlayed(row)) return [];
+      return matchProgress(row) < ahead ? [seat] : [];
     }
     const theirNext = nextMatchForClub(campaign, seat.clubId);
     if (!theirNext) return [];
@@ -1408,6 +1409,23 @@ function withOpenLives(campaign: Campaign): Campaign {
   return { ...campaign, week: { ...campaign.week, locked, deadlineAt } };
 }
 
+function pruneStaleOpenLives(campaign: Campaign): Campaign {
+  const championship = championshipOf(campaign);
+  let changed = false;
+  const lives: Campaign["week"]["lives"] = {};
+  for (const [id, live] of Object.entries(campaign.week.lives)) {
+    if (!live.combined) {
+      const row = championship.matches.find((match) => match.id === id);
+      if (campaign.reports[id] || (row && matchPlayed(row))) {
+        changed = true;
+        continue;
+      }
+    }
+    lives[id] = live;
+  }
+  return changed ? { ...campaign, week: { ...campaign.week, lives } } : campaign;
+}
+
 export function tickCampaign(campaign: Campaign, now = Date.now()): Campaign {
   if (campaign.phase === "lobby") return campaign;
   let next = withAllClubs(campaign);
@@ -1417,7 +1435,7 @@ export function tickCampaign(campaign: Campaign, now = Date.now()): Campaign {
   }
   next = progressMatches(next, now);
   if (deadlinePassed(next, now)) next = fillMissingSecondHalves(next);
-  return withOpenLives(next);
+  return withOpenLives(pruneStaleOpenLives(next));
 }
 
 export function submitSecondHalf(
@@ -1466,9 +1484,14 @@ export function waitingOnSecondHalf(campaign: Campaign, matchId: string): Seat[]
 }
 
 export function liveForClub(campaign: Campaign, clubId: string): MatchLive | undefined {
-  return Object.values(campaign.week.lives).find(
-    (live) => !live.combined && (live.first.homeId === clubId || live.first.awayId === clubId),
-  );
+  const championship = championshipOf(campaign);
+  return Object.values(campaign.week.lives).find((live) => {
+    if (live.combined) return false;
+    if (live.first.homeId !== clubId && live.first.awayId !== clubId) return false;
+    if (campaign.reports[live.matchId]) return false;
+    const row = championship.matches.find((match) => match.id === live.matchId);
+    return !row || !matchPlayed(row);
+  });
 }
 
 export function secondHalfReady(campaign: Campaign, matchId: string): boolean {
