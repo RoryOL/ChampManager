@@ -26,7 +26,7 @@ import type {
 import { compactName } from "../display";
 import { briefingNews } from "../briefing";
 import { championshipFromSave, SAVE_VERSION } from "../gameStorage";
-import { DEFAULT_DIFFICULTY, migrateDifficulty, performanceBoostFor } from "../difficulty";
+import { DEFAULT_DIFFICULTY, matchBoostsFor, migrateDifficulty } from "../difficulty";
 import { DEFAULT_BALANCE, migrateBalance } from "../balance";
 import {
   applySimToClub,
@@ -1106,7 +1106,7 @@ function simulateSides(
         }
       : undefined,
     injuryBudget: first ? remainingInjuryBudget(first.events, homeId, awayId) : undefined,
-    performanceBoost: performanceBoostFor(
+    ...matchBoostsFor(
       campaignDifficulty(campaign),
       campaign.seats.map((seat) => seat.clubId),
     ),

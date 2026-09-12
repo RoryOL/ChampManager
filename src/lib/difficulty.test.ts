@@ -3,11 +3,15 @@ import { DEFAULT_TACTICS, defaultSheet, ratedSquad } from "./players";
 import {
   assumedOpponentTactics,
   blendTactics,
+  clubMatchLift,
   cpuAdaptWeight,
+  cpuAttackGap,
+  cpuContainGap,
   cpuHalfTimeSkill,
   inferOpponentTactics,
   liftSquadRatings,
   migrateDifficulty,
+  oppositionLift,
   performanceLift,
 } from "./difficulty";
 import type { MatchReport } from "../types";
@@ -20,6 +24,19 @@ describe("difficulty", () => {
     expect(performanceLift("intercounty")).toBe(0);
   });
 
+  it("lifts computer panels on senior and intercounty, never the human club", () => {
+    expect(oppositionLift("junior")).toBe(0);
+    expect(oppositionLift("intermediate")).toBe(0);
+    expect(oppositionLift("senior")).toBe(1);
+    expect(oppositionLift("intercounty")).toBe(2);
+    expect(clubMatchLift("ballyea", "junior", ["ballyea"])).toBe(2);
+    expect(clubMatchLift("eire-og", "junior", ["ballyea"])).toBe(0);
+    expect(clubMatchLift("ballyea", "intercounty", ["ballyea"])).toBe(0);
+    expect(clubMatchLift("eire-og", "intercounty", ["ballyea"])).toBe(2);
+    expect(clubMatchLift("ballyea", "senior", ["ballyea"])).toBe(0);
+    expect(clubMatchLift("eire-og", "senior", ["ballyea"])).toBe(1);
+  });
+
   it("keeps computer managers simple on junior and fully adapted on senior", () => {
     expect(cpuAdaptWeight("junior")).toBe(0);
     expect(cpuAdaptWeight("intermediate")).toBe(0.4);
@@ -28,6 +45,9 @@ describe("difficulty", () => {
     expect(cpuHalfTimeSkill("intermediate")).toBe("late");
     expect(cpuHalfTimeSkill("senior")).toBe("full");
     expect(cpuHalfTimeSkill("intercounty")).toBe("scout");
+    expect(cpuContainGap("intercounty")).toBeLessThan(cpuContainGap("senior"));
+    expect(cpuContainGap("senior")).toBeLessThan(cpuContainGap("junior"));
+    expect(cpuAttackGap("intercounty")).toBeLessThan(cpuAttackGap("senior"));
   });
 
   it("treats missing saves as senior", () => {
@@ -41,6 +61,9 @@ describe("difficulty", () => {
     expect(blendTactics(DEFAULT_TACTICS, adapted, 1).mentality).toBe("attacking");
     expect(blendTactics(DEFAULT_TACTICS, adapted, 0.4).mentality).toBe(DEFAULT_TACTICS.mentality);
     expect(blendTactics(DEFAULT_TACTICS, adapted, 0.4).build).toBeGreaterThan(DEFAULT_TACTICS.build);
+    const withMarks = { ...adapted, manMarks: { "Conor Cleary": "Shane O'Donnell" } };
+    expect(blendTactics(DEFAULT_TACTICS, withMarks, 1).manMarks).toEqual(withMarks.manMarks);
+    expect(blendTactics(DEFAULT_TACTICS, withMarks, 0.4).manMarks).toBeUndefined();
   });
 
   it("infers opponent tactics from a previous report", () => {

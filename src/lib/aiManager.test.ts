@@ -5,6 +5,7 @@ import {
   createManagedClub,
   pairChallengeMatches,
   pickCpuHalfPlan,
+  pickCpuManMarks,
   pickCpuSheet,
   pickCpuTactics,
   restAndPrepManagedClub,
@@ -208,6 +209,37 @@ describe("computer club manager", () => {
     });
     expect(withHistory.shooting).toBeLessThanOrEqual(withoutHistory.shooting);
     expect(withHistory.shape === "sweeper" || withHistory.shooting <= withoutHistory.shooting).toBe(true);
+  });
+
+  it("names a marker on intercounty and leaves junior on club personality", () => {
+    const climate = { sky: "sunny" as const, windStrength: 10, windAngle: 0 };
+    const junior = pickCpuTactics({
+      teamId: "ballyea",
+      opponentId: "eire-og",
+      seed: 9,
+      matchKey: "even-day",
+      climate,
+      difficulty: "junior",
+      opponentTactics: DEFAULT_TACTICS,
+    });
+    const intercounty = pickCpuTactics({
+      teamId: "ballyea",
+      opponentId: "eire-og",
+      seed: 9,
+      matchKey: "even-day",
+      climate,
+      difficulty: "intercounty",
+      opponentTactics: DEFAULT_TACTICS,
+    });
+    expect(junior.manMarks).toBeUndefined();
+    expect(intercounty.manMarks && Object.keys(intercounty.manMarks).length).toBeGreaterThan(0);
+    const ourSheet = defaultSheet("ballyea");
+    const theirSheet = defaultSheet("eire-og");
+    const marks = pickCpuManMarks(ourSheet, theirSheet, ratedSquad("eire-og", 9));
+    const marker = Object.keys(marks ?? {})[0];
+    const target = marks?.[marker ?? ""];
+    expect(ourSheet.starters.slice(1, 7)).toContain(marker);
+    expect(theirSheet.starters.slice(9, 15)).toContain(target);
   });
 
   it("pairs computer clubs for preseason challenges", () => {
