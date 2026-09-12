@@ -31,4 +31,12 @@ export const HELP_SECTIONS: HelpSection[] = [
       "Defenders can track a named forward; midfielders can track a named midfielder. Marking, pace, strength, workrate and hooking all go toward shutting him down. A full-back on a half-forward pushes onto the half-back line and a half-back drops. In tactics you can assign anyone on the panel; on match day only the fifteen on the field are offered.",
     ],
   },
+  {
+    id: "updates",
+    title: "Updates",
+    paragraphs: [
+      "On the Android app, Capture the Canon checks GitHub when you open it. If a newer APK is there, tap Update and Android installs it over this one. You do not need to download a zip from Actions. A save already on the phone is kept.",
+      "The first update may ask you to allow installs from this app. After that, later GitHub builds should install in place while they share the same sideload key.",
+    ],
+  },
 ];

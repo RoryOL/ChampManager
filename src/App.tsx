@@ -1,7 +1,9 @@
 import { useState } from "react";
 import type { Match, PageId } from "./types";
 import { useGame } from "./hooks/useGame";
+import { useAppUpdate } from "./hooks/useAppUpdate";
 import { BottomNav } from "./components/BottomNav";
+import { UpdateBanner, UpdateSheet } from "./components/UpdateSheet";
 import { teamById } from "./lib/resolve";
 import { compactName } from "./lib/display";
 import { difficultyTitle } from "./lib/difficulty";
@@ -22,6 +24,7 @@ import { SeasonEndScreen } from "./screens/SeasonEndScreen";
 
 export default function App() {
   const game = useGame();
+  const update = useAppUpdate();
   const [page, setPage] = useState<PageId>("home");
   const [fixtureId, setFixtureId] = useState<string | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -59,6 +62,9 @@ export default function App() {
           {game.save ? <HelpButton onOpen={() => setHelpOpen(true)} /> : null}
         </span>
       </div>
+      {update.bannerOpen && update.manifest ? (
+        <UpdateBanner versionName={update.manifest.versionName} onOpen={update.reopen} />
+      ) : null}
 
       {!game.save && !game.campaign && (
         <ClubSelectScreen
@@ -236,6 +242,19 @@ export default function App() {
         </>
       )}
       {game.save ? <HelpSheet open={helpOpen} onClose={() => setHelpOpen(false)} /> : null}
+      {update.sheetOpen && update.manifest ? (
+        <UpdateSheet
+          phase={update.phase}
+          currentName={update.current.versionName}
+          manifest={update.manifest}
+          progress={update.progress}
+          error={update.error}
+          onUpdate={() => void update.startUpdate()}
+          onAllow={() => void update.allowInstalls()}
+          onLater={update.dismiss}
+          onRetry={() => void update.startUpdate()}
+        />
+      ) : null}
     </div>
   );
 }
