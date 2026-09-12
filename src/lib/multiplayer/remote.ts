@@ -1,16 +1,77 @@
-import type { MqttClient } from "mqtt";
+import type { IClientOptions, MqttClient } from "mqtt";
 import type { Campaign } from "../../types";
 import { normaliseCode } from "./codes";
 import { campaignOutranks } from "./merge";
 import { parseCampaignInvite } from "./store";
 
-const BROKER_URL = "wss://broker.emqx.io:8084/mqtt";
+/** Public brokers, first working one wins. EMQX is last — it has been refusing MQTT. */
+export const BROKER_URLS = [
+  "wss://broker.hivemq.com:8884/mqtt",
+  "wss://test.mosquitto.org:8081/mqtt",
+  "wss://broker.emqx.io:8084/mqtt",
+];
+
 const USER_AGENT = "ChampManager/1.0";
 
 export type RoomStatus = "offline" | "connecting" | "live";
 
+export type RoomProbe = {
+  connected: boolean;
+  campaign: Campaign | null;
+};
+
+export type JoinPreview = {
+  connected: boolean;
+  found: boolean;
+  clubs: string[];
+  hostName?: string;
+  source: "live" | "snapshot" | "local" | "none";
+};
+
 function topicFor(code: string): string {
   return `capture-the-canon/v1/${normaliseCode(code)}`;
+}
+
+function clientId(code: string): string {
+  return `cm-${normaliseCode(code).slice(0, 4)}-${Math.random().toString(16).slice(2, 10)}`;
+}
+
+function brokerList(options: { brokerUrl?: string; brokerUrls?: string[] }): string[] {
+  if (options.brokerUrl) return [options.brokerUrl];
+  if (options.brokerUrls?.length) return options.brokerUrls;
+  return BROKER_URLS;
+}
+
+function tryBroker(
+  mqtt: (typeof import("mqtt"))["default"],
+  url: string,
+  id: string,
+): Promise<MqttClient | null> {
+  return new Promise((resolve) => {
+    const client = mqtt.connect(url, {
+      clientId: id,
+      clean: true,
+      reconnectPeriod: 0,
+      connectTimeout: 5000,
+      username: USER_AGENT,
+      protocolVersion: 4,
+    } satisfies IClientOptions);
+    let settled = false;
+    const finish = (value: MqttClient | null) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      client.removeAllListeners("connect");
+      client.removeAllListeners("error");
+      client.removeAllListeners("close");
+      if (!value) client.end(true);
+      resolve(value);
+    };
+    const timer = setTimeout(() => finish(null), 5500);
+    client.once("connect", () => finish(client));
+    client.once("error", () => finish(null));
+    client.once("close", () => finish(null));
+  });
 }
 
 export function connectRoom(
@@ -19,6 +80,7 @@ export function connectRoom(
     onCampaign: (campaign: Campaign) => void;
     onStatus?: (status: RoomStatus) => void;
     brokerUrl?: string;
+    brokerUrls?: string[];
   },
 ): { publish: (campaign: Campaign) => void; remember: (campaign: Campaign) => void; disconnect: () => void } {
   const topic = topicFor(code);
@@ -59,40 +121,34 @@ export function connectRoom(
     publishNow(queued);
   };
 
-  void import("mqtt").then((mod) => {
-    if (stopped) return;
-    const mqtt = mod.default;
-    client = mqtt.connect(options.brokerUrl ?? BROKER_URL, {
-      clientId: `cm-${normaliseCode(code).slice(0, 4)}-${Math.random().toString(16).slice(2, 10)}`,
-      clean: true,
-      reconnectPeriod: 4000,
-      connectTimeout: 8000,
-      username: USER_AGENT,
-      protocolVersion: 4,
-    });
-
-    client.on("connect", () => {
-      if (stopped) return;
+  const attach = (next: MqttClient) => {
+    client = next;
+    if (next.options) next.options.reconnectPeriod = 4000;
+    let live = false;
+    const goLive = () => {
+      if (stopped || live) return;
+      live = true;
       options.onStatus?.("live");
-      client?.subscribe(topic, { qos: 1 }, () => {
+      next.subscribe(topic, { qos: 1 }, () => {
         if (republishTimer) clearTimeout(republishTimer);
         // Let the retained championship arrive before we republish, so a stale
         // lobby on this phone cannot overwrite a championship that already started.
         republishTimer = setTimeout(publishQueued, 400);
       });
-    });
-
-    client.on("reconnect", () => {
+    };
+    next.on("connect", goLive);
+    next.on("reconnect", () => {
+      live = false;
       if (!stopped) options.onStatus?.("connecting");
     });
-    client.on("close", () => {
+    next.on("close", () => {
+      live = false;
       if (!stopped) options.onStatus?.("offline");
     });
-    client.on("error", () => {
+    next.on("error", () => {
       if (!stopped) options.onStatus?.("offline");
     });
-
-    client.on("message", (_topic, payload) => {
+    next.on("message", (_topic, payload) => {
       const text = payload.toString();
       if (!text || text === lastSent) return;
       const campaign = parseCampaignInvite(text);
@@ -100,6 +156,26 @@ export function connectRoom(
       remember(campaign);
       options.onCampaign(campaign);
     });
+    if (next.connected) goLive();
+  };
+
+  void import("mqtt").then(async (mod) => {
+    if (stopped) return;
+    const mqtt = mod.default;
+    const urls = brokerList(options);
+    for (const url of urls) {
+      if (stopped) return;
+      const next = await tryBroker(mqtt, url, clientId(code));
+      if (stopped) {
+        next?.end(true);
+        return;
+      }
+      if (next) {
+        attach(next);
+        return;
+      }
+    }
+    if (!stopped) options.onStatus?.("offline");
   });
 
   return {
@@ -115,23 +191,46 @@ export function connectRoom(
   };
 }
 
-export function fetchRoom(code: string, timeoutMs = 7000): Promise<Campaign | null> {
+export function probeRoom(code: string, timeoutMs = 10_000, brokerUrl?: string): Promise<RoomProbe> {
   const normalised = normaliseCode(code);
-  if (normalised.length < 4) return Promise.resolve(null);
+  if (normalised.length < 4) return Promise.resolve({ connected: false, campaign: null });
 
   return new Promise((resolve) => {
     let settled = false;
-    const finish = (campaign: Campaign | null) => {
+    let connected = false;
+    let campaign: Campaign | null = null;
+    let hold: ReturnType<typeof setTimeout> | null = null;
+    const finish = () => {
       if (settled) return;
       settled = true;
+      if (hold) clearTimeout(hold);
       clearTimeout(timer);
       handle.disconnect();
-      resolve(campaign);
+      resolve({ connected, campaign });
     };
 
     const handle = connectRoom(normalised, {
-      onCampaign: (campaign) => finish(campaign),
+      brokerUrl,
+      onStatus: (status) => {
+        if (status !== "live") return;
+        connected = true;
+        if (campaign) {
+          finish();
+          return;
+        }
+        if (hold) clearTimeout(hold);
+        hold = setTimeout(finish, 900);
+      },
+      onCampaign: (next) => {
+        campaign = next;
+        if (connected) finish();
+      },
     });
-    const timer = setTimeout(() => finish(null), timeoutMs);
+    const timer = setTimeout(finish, timeoutMs);
   });
+}
+
+export async function fetchRoom(code: string, timeoutMs = 10_000, brokerUrl?: string): Promise<Campaign | null> {
+  const probe = await probeRoom(code, timeoutMs, brokerUrl);
+  return probe.campaign;
 }

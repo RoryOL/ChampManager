@@ -81,6 +81,7 @@ export default function App() {
           onCopyCode={() => void game.copyCode()}
           onCopySnapshot={() => void game.copySnapshot()}
           roomStatus={game.roomStatus}
+          onRetryRoom={game.retryRoom}
         />
       )}
 

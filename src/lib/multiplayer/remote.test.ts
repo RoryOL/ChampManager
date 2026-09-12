@@ -4,7 +4,7 @@ import { Aedes } from "aedes";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createCampaign, addSeat, startCampaign } from "./campaign";
 import { applyRemoteCampaign } from "./merge";
-import { connectRoom } from "./remote";
+import { connectRoom, probeRoom } from "./remote";
 
 const NOW = 1_700_000_000_000;
 
@@ -122,4 +122,49 @@ describe("live room", () => {
     expect(received.phase).toBe("preseason");
     expect(received.seats.map((seat) => seat.clubId).sort()).toEqual(["ballyea", "inagh-kilnamona"]);
   }, 20_000);
+
+  it("probes a live room and an empty code separately", async () => {
+    const campaign = createCampaign({
+      hostPlayerId: "host",
+      hostName: "Rory",
+      clubId: "ballyea",
+      waitHours: 0,
+      now: NOW,
+      seed: 7,
+      code: `T${Math.random().toString(36).slice(2, 7).toUpperCase()}`,
+    });
+    const host = openRoom(campaign.code, { onCampaign: () => undefined });
+    await waitUntilLive(campaign.code);
+    host.publish(campaign);
+    const found = await probeRoom(campaign.code, 5000, brokerUrl);
+    expect(found.connected).toBe(true);
+    expect(found.campaign?.id).toBe(campaign.id);
+
+    const empty = await probeRoom(`E${Math.random().toString(36).slice(2, 7).toUpperCase()}`, 4000, brokerUrl);
+    expect(empty.connected).toBe(true);
+    expect(empty.campaign).toBeNull();
+    host.disconnect();
+  }, 15_000);
+
+  it("falls through a dead broker to a working one", async () => {
+    const seen: string[] = [];
+    const handle = connectRoom("FALL01", {
+      brokerUrls: ["mqtt://127.0.0.1:9", brokerUrl],
+      onCampaign: () => undefined,
+      onStatus: (status) => {
+        seen.push(status);
+      },
+    });
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("did not fail over")), 8000);
+      const wait = setInterval(() => {
+        if (seen.includes("live")) {
+          clearInterval(wait);
+          clearTimeout(timer);
+          resolve();
+        }
+      }, 50);
+    });
+    handle.disconnect();
+  }, 15_000);
 });

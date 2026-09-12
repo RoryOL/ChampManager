@@ -2375,6 +2375,10 @@ html.native-app .device {
   color: #f0b429;
 }
 
+.hint--ok {
+  color: #8fd19e;
+}
+
 .hint--tight {
   margin-top: 8px;
 }

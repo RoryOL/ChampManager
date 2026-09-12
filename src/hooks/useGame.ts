@@ -38,7 +38,7 @@ import {
   setPlayerName,
 } from "../lib/multiplayer/identity";
 import { applyRemoteCampaign, freshestCampaign } from "../lib/multiplayer/merge";
-import { connectRoom, fetchRoom, type RoomStatus } from "../lib/multiplayer/remote";
+import { connectRoom, probeRoom, type JoinPreview, type RoomStatus } from "../lib/multiplayer/remote";
 import {
   clearCampaign,
   exportCampaign,
@@ -242,6 +242,7 @@ export function useGame() {
   const [picked, setPicked] = useState<string | null>(null);
   const [viewTeamId, setViewTeamId] = useState<string | null>(null);
   const [roomStatus, setRoomStatus] = useState<RoomStatus>("offline");
+  const [roomEpoch, setRoomEpoch] = useState(0);
   const campaignRef = useRef<Campaign | null>(null);
   const roomRef = useRef<{
     publish: (campaign: Campaign) => void;
@@ -305,7 +306,7 @@ export function useGame() {
       handle.disconnect();
       if (roomRef.current === handle) roomRef.current = null;
     };
-  }, [campaign?.code]);
+  }, [campaign?.code, roomEpoch]);
 
   useEffect(() => {
     if (!campaign) return;
@@ -374,16 +375,22 @@ export function useGame() {
     [commitCampaign],
   );
 
+  const retryRoom = useCallback(() => {
+    setRoomEpoch((value) => value + 1);
+  }, []);
+
   const joinCampaign = useCallback(
     async (payload: { name: string; clubId: string; code: string; snapshot?: string }) => {
       const snapshot = payload.snapshot ? parseCampaignInvite(payload.snapshot) : null;
       const local = loadRoom(payload.code) ?? (campaign?.code === payload.code ? campaign : null);
-      const live = await fetchRoom(payload.code, snapshot || local ? 2500 : 7000);
-      const room = freshestCampaign([live, snapshot, local]);
+      const probe = await probeRoom(payload.code, snapshot || local ? 4000 : 12_000);
+      const room = freshestCampaign([probe.campaign, snapshot, local]);
       if (!room) {
         return {
           ok: false as const,
-          error: "No championship for that invite. Check the code — both phones need a connection — or paste a snapshot.",
+          error: probe.connected
+            ? "That code is live but empty. Ask the host to stay in the lobby, then press Check room again."
+            : "Could not reach the live room. Press Check room, or paste a snapshot if you have one.",
         };
       }
       const self = setPlayerName(payload.name);
@@ -416,12 +423,27 @@ export function useGame() {
     [campaign, commitCampaign],
   );
 
-  const previewJoinTaken = useCallback(async (code: string, snapshot?: string) => {
+  const previewJoinTaken = useCallback(async (code: string, snapshot?: string): Promise<JoinPreview> => {
     const snapshotCampaign = snapshot ? parseCampaignInvite(snapshot) : null;
     const local = loadRoom(code) ?? (campaign?.code === code ? campaign : null);
-    const live = await fetchRoom(code, snapshotCampaign || local ? 2500 : 7000);
-    const room = freshestCampaign([live, snapshotCampaign, local]);
-    return room?.seats.map((seat) => seat.clubId) ?? [];
+    const probe = code.trim().length >= 4
+      ? await probeRoom(code, snapshotCampaign || local ? 4000 : 12_000)
+      : { connected: false, campaign: null };
+    const room = freshestCampaign([probe.campaign, snapshotCampaign, local]);
+    const source: JoinPreview["source"] = probe.campaign
+      ? "live"
+      : snapshotCampaign
+        ? "snapshot"
+        : local
+          ? "local"
+          : "none";
+    return {
+      connected: probe.connected,
+      found: Boolean(room),
+      clubs: room?.seats.map((seat) => seat.clubId) ?? [],
+      hostName: room?.seats.find((seat) => seat.playerId === room.hostPlayerId)?.name,
+      source,
+    };
   }, [campaign]);
 
   const addHotseat = useCallback(
@@ -1613,6 +1635,7 @@ export function useGame() {
     playedCount,
     waitingHalf,
     roomStatus,
+    retryRoom,
     championId,
     finaleStep,
     takeCharge,

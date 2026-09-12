@@ -19,6 +19,7 @@ type Props = {
   onAddManager: (name: string, clubId: string) => { ok: true } | { ok: false; error: string };
   onCopyCode: () => void;
   onCopySnapshot: () => void;
+  onRetryRoom?: () => void;
 };
 
 export function LobbyScreen({
@@ -31,6 +32,7 @@ export function LobbyScreen({
   onCopyCode,
   onCopySnapshot,
   roomStatus = "offline",
+  onRetryRoom,
 }: Props) {
   const host = campaign.hostPlayerId === playerId;
   const [name, setName] = useState("");
@@ -57,10 +59,10 @@ export function LobbyScreen({
         <h2 className="invite-code">{campaign.code}</h2>
         <p className="hint">
           {roomStatus === "live"
-            ? "Live room is up. Friends can join from another phone with this code."
+            ? "Live room is up. Friends can join from another phone with this code — they should press Check room after typing it."
             : roomStatus === "connecting"
               ? "Opening the live room so other phones can find this code…"
-              : "Local lobby. Other phones need a connection, or paste a snapshot."}{" "}
+              : "Live room is down, so other phones cannot join with the code yet. Stay here and press Retry live room, or share a snapshot."}{" "}
           Wait window: {waitLabel(campaign.waitHours)}. Human v human ties wait for both managers to lock tactics, then
           for both to start the second half, or until this window closes. Other championship games do not wait.
         </p>
@@ -71,6 +73,11 @@ export function LobbyScreen({
           <button type="button" className="btn btn--ghost" onClick={onCopySnapshot}>
             Copy snapshot
           </button>
+          {roomStatus !== "live" && onRetryRoom ? (
+            <button type="button" className="btn btn--ghost" onClick={onRetryRoom}>
+              Retry live room
+            </button>
+          ) : null}
         </div>
         {host ? (
           <label className="field">
