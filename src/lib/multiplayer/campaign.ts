@@ -1292,15 +1292,13 @@ function finishSim(
   const ready = { ...campaign.week.ready };
   delete ready[sim.homeId];
   delete ready[sim.awayId];
-  const lives = { ...campaign.week.lives };
-  delete lives[sim.matchId];
   return {
     ...campaign,
     matches: nextMatches,
     extraMatches,
     reports,
     clubs,
-    week: { ...campaign.week, ready, lives },
+    week: { ...campaign.week, ready },
   };
 }
 

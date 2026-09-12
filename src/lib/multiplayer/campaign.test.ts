@@ -199,6 +199,12 @@ describe("multiplayer campaign", () => {
     const championship = championshipOf(campaign);
     const ballyeaMatch = championship.matches.find((match) => match.id === liveForClub(campaign, "ballyea")?.matchId);
     expect(ballyeaMatch && !matchPlayed(ballyeaMatch)).toBe(true);
+    const matchId = liveForClub(campaign, "ballyea")!.matchId;
+    campaign = submitSecondHalf(campaign, "ballyea", matchId, DEFAULT_TACTICS, defaultSheet("ballyea"), NOW + 101);
+    expect(championshipOf(campaign).matches.find((match) => match.id === matchId && matchPlayed(match))).toBeTruthy();
+    expect(campaign.week.lives[matchId]?.combined).toBeTruthy();
+    expect(liveForClub(campaign, "ballyea")).toBeUndefined();
+    expect(liveForClub(campaign, "eire-og")).toBeUndefined();
   });
 
   it("locks first-half tactics after a manager confirms a human match", () => {
@@ -234,7 +240,7 @@ describe("multiplayer campaign", () => {
     campaign = submitSecondHalf(campaign, "inagh-kilnamona", live!.matchId, DEFAULT_TACTICS, defaultSheet("inagh-kilnamona"), NOW + 103);
     const finished = championshipOf(campaign).matches.find((match) => match.id === live!.matchId);
     expect(finished && matchPlayed(finished)).toBe(true);
-    expect(campaign.week.lives[live!.matchId]).toBeUndefined();
+    expect(campaign.week.lives[live!.matchId]?.combined).toBeTruthy();
     expect(liveForClub(campaign, "ballyea")).toBeUndefined();
     expect(liveForClub(campaign, "inagh-kilnamona")).toBeUndefined();
 

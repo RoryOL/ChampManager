@@ -107,7 +107,7 @@ export function CampaignWeekCard({
           </button>
         ) : null}
       </div>
-      {isHost && (waitingWeek.length > 0 || waitingHalf.length > 0) ? (
+      {isHost && waitingRound.length === 0 && (waitingWeek.length > 0 || waitingHalf.length > 0) ? (
         <div className="row-actions">
           <button type="button" className="btn btn--ghost" onClick={onForce}>
             Play on without them

@@ -327,14 +327,21 @@ export function useGame() {
   useEffect(() => {
     if (!campaign || !live || live.phase !== "half-wait") return;
     const row = campaign.week.lives[live.user.matchId];
-    if (!row?.combined) return;
-    const halfIndex = row.combined.events.findIndex((event) => event.kind === "half") + 1;
-    setLive({
-      ...live,
-      user: row.combined,
-      phase: "second",
-      cursor: Math.max(halfIndex, 1),
-    });
+    if (row?.combined) {
+      const halfIndex = row.combined.events.findIndex((event) => event.kind === "half") + 1;
+      setLive({
+        ...live,
+        user: row.combined,
+        phase: "second",
+        cursor: Math.max(halfIndex, 1),
+      });
+      return;
+    }
+    const played = Boolean(
+      campaign.reports[live.user.matchId] ||
+        championshipOf(campaign).matches.find((item) => item.id === live.user.matchId && matchPlayed(item)),
+    );
+    if (played) setLive({ ...live, cursor: live.user.events.length, phase: "finished" });
   }, [campaign, live]);
 
   const takeCharge = useCallback((clubId: string, difficulty = DEFAULT_DIFFICULTY, balance?: SquadBalance) => {
@@ -975,8 +982,13 @@ export function useGame() {
       if (campaign && activeSeat) {
         const next = submitSecondHalf(campaign, activeSeat.clubId, live.user.matchId, tactics, sheet);
         commitCampaign(next);
-        const row = next.week.lives[live.user.matchId];
+        const matchId = live.user.matchId;
+        const row = next.week.lives[matchId];
         const waiting = row ? waitingOnSecondHalf(next, row.matchId) : [];
+        const played = Boolean(
+          next.reports[matchId] ||
+            championshipOf(next).matches.find((item) => item.id === matchId && matchPlayed(item)),
+        );
         if (row?.combined && waiting.length === 0) {
           const halfIndex = row.combined.events.findIndex((event) => event.kind === "half") + 1;
           if (skipPlayback) {
@@ -999,6 +1011,10 @@ export function useGame() {
             cursor: Math.max(halfIndex, 1),
             injuries: row.injuries?.[activeSeat.clubId] ?? live.injuries,
           });
+          return;
+        }
+        if (played && waiting.length === 0) {
+          setLive({ ...live, cursor: live.user.events.length, phase: "finished" });
           return;
         }
         setLive({ ...live, phase: "half-wait" });
