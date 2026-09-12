@@ -3,7 +3,7 @@ import { seedChampionship } from "./data/championship";
 import { ageResponse, GRADE_LABEL, profileFor } from "./data/playerProfiles";
 import { buildCoachReport } from "./lib/coach";
 import { applyMatchForm, formValue } from "./lib/form";
-import { migrateSave } from "./lib/gameStorage";
+import { migrateSave, newSave } from "./lib/gameStorage";
 import { playerMatchRating, seasonStatsFor, lastMatchRating, formatWonLost } from "./lib/matchStats";
 import { nearestToSpot, openPlayConversion, slotPitchPos, midfieldDistanceSlot, distanceAttemptChance, distanceShotM, distancePressureMul } from "./lib/shooting";
 import { climateSummary, crossWind, forecastBlurb, halfWindBlurb, matchWindBlurb, parallelWind, passCompleteChance, rollClimate, withWindFor } from "./lib/weather";
@@ -75,7 +75,7 @@ import { nextBatch } from "./lib/schedule";
 import { matchPlayed, scoreTotal } from "./lib/scoring";
 import { ATTRIBUTE_KEYS, MENTAL_KEYS, puckoutLabel } from "./lib/attributes";
 import { applyMatchFatigue, applyTeamwork, applyTraining, applyFullTrainingWeek, applyWeekSession, averageMatchOverall, bankedLift, boostTotal, clampFatigue, defaultCondition, fitnessOf, formatBoostDelta, isOvertrained, liftSquadForPrep, matchFatigueDelta, matchStat, MIN_MATCH_FITNESS, recoverBetweenMatches, sessionForSlot, tableLift, TRAINABLE_KEYS, trainedOverallLift, trainedRatings, trainedStat, trainingDelta, trainingGainFactor, weekCoachCopy } from "./lib/training";
-import { buildPreMatchBriefing } from "./lib/briefing";
+import { buildPreMatchBriefing, buildPreMatchRatings, formatSideRating, matchBriefingInput, sideRatingDelta } from "./lib/briefing";
 import type { PlayerMatchStats, PlayerRatings, RatedPlayer, Score, Tactics } from "./types";
 import { nextSwapPick } from "./components/SwapConfirmBar";
 import { MATCH_SUB_LIMIT, appearanceOf, isSubstitutionSwap, remainingMatchSubs, sheetChangeSubEvents } from "./lib/subs";
@@ -2637,6 +2637,46 @@ describe("pre-match briefing", () => {
     expect(body).not.toMatch(/\bat home\b/i);
     expect(body).not.toMatch(/\baway\b/i);
     expect(body).toMatch(/Zimmer Biomet Páirc Chíosóg, Ennis/);
+  });
+
+  it("compares our attack and defence with the next opposition", () => {
+    const match = seedChampionship.matches.find((item) => item.id === "g1-r1-a");
+    expect(match).toBeTruthy();
+    const save = newSave("ballyea");
+    const scout = buildPreMatchRatings(matchBriefingInput(save, seedChampionship, match!));
+    expect(scout).toBeTruthy();
+    expect(scout?.ourName).toBe("Ballyea");
+    expect(scout?.theirName).toBe("Inagh-Kilnamona");
+    expect(scout!.ourAttack).toBeGreaterThan(8);
+    expect(scout!.ourDefence).toBeGreaterThan(8);
+    expect(scout!.theirAttack).toBeGreaterThan(8);
+    expect(scout!.theirDefence).toBeGreaterThan(8);
+    expect(scout!.ourAttack).toBeLessThan(20);
+    expect(scout!.theirDefence).toBeLessThan(20);
+
+    const attacking = buildPreMatchRatings({
+      ...matchBriefingInput(save, seedChampionship, match!),
+      tactics: { ...DEFAULT_TACTICS, mentality: "attacking" },
+    });
+    expect(attacking!.ourAttack).toBeGreaterThan(scout!.ourAttack);
+    expect(attacking!.ourDefence).toBeLessThan(scout!.ourDefence);
+    expect(attacking!.theirAttack).toBeCloseTo(scout!.theirAttack, 5);
+    expect(attacking!.theirDefence).toBeCloseTo(scout!.theirDefence, 5);
+
+    const sitting = buildPreMatchRatings({
+      ...matchBriefingInput(save, seedChampionship, match!),
+      tactics: { ...DEFAULT_TACTICS, mentality: "contain" },
+    });
+    expect(sitting!.ourDefence).toBeGreaterThan(scout!.ourDefence);
+    expect(sitting!.ourAttack).toBeLessThan(scout!.ourAttack);
+  });
+
+  it("formats side ratings to one decimal and deltas from our view", () => {
+    expect(formatSideRating(14.84)).toBe("14.8");
+    expect(formatSideRating(13)).toBe("13.0");
+    expect(sideRatingDelta(15.12, 13.48)).toBe(1.6);
+    expect(sideRatingDelta(12.1, 14.2)).toBe(-2.1);
+    expect(sideRatingDelta(14.84, 14.76)).toBe(0.1);
   });
 });
 

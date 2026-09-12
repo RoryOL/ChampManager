@@ -590,6 +590,7 @@ function withClubBriefing(club: ClubRuntime, clubId: string, campaign: Campaign)
       balance: campaignBalance(campaign),
       opponentSheet: rival?.sheet,
       opponentTactics: rival?.tactics,
+      opponentCondition: rival?.condition,
     }),
   ]);
 }

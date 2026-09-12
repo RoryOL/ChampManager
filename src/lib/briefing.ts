@@ -19,6 +19,85 @@ import { aggressionLabel, buildLabel, pressureLabel } from "./attributes";
 import { shootingLabel } from "./shooting";
 import { conditionFor, matchStat } from "./training";
 
+export type PreMatchBriefingOptions = {
+  clubId: string;
+  match: Match;
+  championship: Championship;
+  tactics: Tactics;
+  sheet: TeamSheet;
+  condition: Record<string, PlayerCondition>;
+  seed?: number;
+  balance?: SquadBalance;
+  opponentSheet?: TeamSheet;
+  opponentTactics?: Tactics;
+  opponentCondition?: Record<string, PlayerCondition>;
+};
+
+export type PreMatchRatings = {
+  ourName: string;
+  theirName: string;
+  ourAttack: number;
+  ourDefence: number;
+  theirAttack: number;
+  theirDefence: number;
+};
+
+export function formatSideRating(value: number): string {
+  return (Math.round(value * 10) / 10).toFixed(1);
+}
+
+export function sideRatingDelta(ours: number, theirs: number): number {
+  return Math.round((ours - theirs) * 10) / 10;
+}
+
+export function matchBriefingInput(save: GameSave, championship: Championship, match: Match): PreMatchBriefingOptions {
+  const { homeId, awayId } = resolveMatchSides(championship, match);
+  const opponentId = homeId === save.clubId ? awayId : homeId;
+  const rival = opponentId ? save.rivals[opponentId] : undefined;
+  return {
+    clubId: save.clubId,
+    match,
+    championship,
+    tactics: save.tactics,
+    sheet: save.sheet,
+    condition: save.condition,
+    seed: save.seed,
+    balance: save.balance,
+    opponentSheet: rival?.sheet,
+    opponentTactics: rival?.tactics,
+    opponentCondition: rival?.condition,
+  };
+}
+
+function preMatchSides(options: PreMatchBriefingOptions) {
+  const ratings = { seed: options.seed, balance: options.balance };
+  const { homeId, awayId } = resolveMatchSides(options.championship, options.match);
+  const opponentId = homeId === options.clubId ? awayId : homeId;
+  const us = teamById(options.championship, options.clubId);
+  const them = opponentId ? teamById(options.championship, opponentId) : undefined;
+  const theirTactics = options.opponentTactics ?? (opponentId ? clubTactics(opponentId, options.balance) : options.tactics);
+  const theirSheet = options.opponentSheet ?? (opponentId ? defaultSheet(opponentId, ratings) : options.sheet);
+  const theirCondition = options.opponentCondition ?? {};
+  const theirProfile = opponentId
+    ? sideProfile(opponentId, theirSheet, theirTactics, theirCondition, ratings)
+    : sideProfile(options.clubId, options.sheet, options.tactics, {}, ratings);
+  const ourProfile = sideProfile(options.clubId, options.sheet, options.tactics, options.condition, ratings);
+  return { ratings, opponentId, us, them, theirTactics, theirSheet, theirProfile, ourProfile };
+}
+
+export function buildPreMatchRatings(options: PreMatchBriefingOptions): PreMatchRatings | null {
+  const { opponentId, us, them, ourProfile, theirProfile } = preMatchSides(options);
+  if (!opponentId) return null;
+  return {
+    ourName: us ? compactName(us) : "Us",
+    theirName: them ? compactName(them) : "the opposition",
+    ourAttack: ourProfile.attack,
+    ourDefence: ourProfile.defence,
+    theirAttack: theirProfile.attack,
+    theirDefence: theirProfile.defence,
+  };
+}
+
 function threatLine(teamId: string, sheet: TeamSheet, ctx?: number | { seed?: number; balance?: SquadBalance }): string {
   const xv = sheetPlayers(teamId, sheet, ctx);
   const scored = [...xv].sort((a, b) => b.ratings.overall - a.ratings.overall);
@@ -36,31 +115,9 @@ function threatLine(teamId: string, sheet: TeamSheet, ctx?: number | { seed?: nu
   return parts.join(". ") + ".";
 }
 
-export function buildPreMatchBriefing(options: {
-  clubId: string;
-  match: Match;
-  championship: Championship;
-  tactics: Tactics;
-  sheet: TeamSheet;
-  condition: Record<string, PlayerCondition>;
-  seed?: number;
-  balance?: SquadBalance;
-  opponentSheet?: TeamSheet;
-  opponentTactics?: Tactics;
-}): { title: string; notes: string[] } {
-  const ratings = { seed: options.seed, balance: options.balance };
-  const { homeId, awayId } = resolveMatchSides(options.championship, options.match);
-  const usHome = homeId === options.clubId;
-  const opponentId = usHome ? awayId : homeId;
-  const us = teamById(options.championship, options.clubId);
-  const them = opponentId ? teamById(options.championship, opponentId) : undefined;
+export function buildPreMatchBriefing(options: PreMatchBriefingOptions): { title: string; notes: string[] } {
+  const { ratings, opponentId, us, them, theirTactics, theirSheet, theirProfile, ourProfile } = preMatchSides(options);
   const ground = options.match.venue ?? "a neutral ground";
-  const theirTactics = options.opponentTactics ?? (opponentId ? clubTactics(opponentId, options.balance) : options.tactics);
-  const theirSheet = options.opponentSheet ?? (opponentId ? defaultSheet(opponentId) : options.sheet);
-  const theirProfile = opponentId
-    ? sideProfile(opponentId, theirSheet, theirTactics, {}, ratings)
-    : sideProfile(options.clubId, options.sheet, options.tactics, {}, ratings);
-  const ourProfile = sideProfile(options.clubId, options.sheet, options.tactics, options.condition, ratings);
   const random = createRng(seedFrom(`${options.seed ?? 1}:${options.match.id}:brief`));
   const notes: string[] = [];
   const themName = them ? compactName(them) : "the opposition";
@@ -179,18 +236,7 @@ export function buildPreMatchBriefing(options: {
   return { title, notes };
 }
 
-export function briefingNews(options: {
-  clubId: string;
-  match: Match;
-  championship: Championship;
-  tactics: Tactics;
-  sheet: TeamSheet;
-  condition: Record<string, PlayerCondition>;
-  seed: number;
-  balance?: SquadBalance;
-  opponentSheet?: TeamSheet;
-  opponentTactics?: Tactics;
-}): NewsItem {
+export function briefingNews(options: PreMatchBriefingOptions): NewsItem {
   const built = buildPreMatchBriefing(options);
   return newsItem({
     id: `briefing-${options.match.id}-${options.clubId}`,
@@ -211,24 +257,10 @@ export function ensureMatchBriefing(save: GameSave, championship: Championship):
   if (!match || matchPlayed(match)) return save;
   const id = `briefing-${match.id}-${save.clubId}`;
   if (save.inbox.some((item) => item.id === id)) return save;
-  const { homeId, awayId } = resolveMatchSides(championship, match);
-  const opponentId = homeId === save.clubId ? awayId : homeId;
-  const rival = opponentId ? save.rivals[opponentId] : undefined;
   return {
     ...save,
     inbox: [
-      briefingNews({
-        clubId: save.clubId,
-        match,
-        championship,
-        tactics: save.tactics,
-        sheet: save.sheet,
-        condition: save.condition,
-        seed: save.seed,
-        balance: save.balance,
-        opponentSheet: rival?.sheet,
-        opponentTactics: rival?.tactics,
-      }),
+      briefingNews(matchBriefingInput(save, championship, match)),
       ...save.inbox,
     ].slice(0, 80),
   };

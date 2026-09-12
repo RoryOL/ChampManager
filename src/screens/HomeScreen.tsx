@@ -2,13 +2,14 @@ import { useState } from "react";
 import type { Campaign, Championship, GameSave, Match, MatchPrep, NewsItem, Seat, WeekShape } from "../types";
 import { CampaignWeekCard } from "../components/CampaignWeekCard";
 import { ClubBadge } from "../components/ClubBadge";
+import { MatchRatingsCompare } from "../components/MatchRatingsCompare";
 import { NewsKindIcon } from "../components/NewsKindIcon";
 import { WeekShapePicker } from "../components/WeekShapePicker";
 import { compactName, sideLabel } from "../lib/display";
 import { NEWS_KIND_LABEL } from "../lib/news";
 import { resolveMatchSides, teamById, teamGroup } from "../lib/resolve";
 import { formatDate, stageLabel } from "../lib/scoring";
-import { buildPreMatchBriefing } from "../lib/briefing";
+import { buildPreMatchBriefing, buildPreMatchRatings, matchBriefingInput } from "../lib/briefing";
 import { averageFitness, averageMatchOverall, DEFAULT_WEEK_SHAPE, MATCH_PREP_OPTIONS, matchPrepTitle, MIN_MATCH_FITNESS, PRESEASON_WEEKS } from "../lib/training";
 import { ratedSquad, sideTeamwork } from "../lib/players";
 import { liveForClub } from "../lib/multiplayer/campaign";
@@ -139,6 +140,8 @@ export function HomeScreen({
   const weekShape = save.weekShape ?? DEFAULT_WEEK_SHAPE;
   const myLive = campaign ? liveForClub(campaign, save.clubId) : undefined;
   const canWatch = Boolean(myLive && !myLive.combined);
+  const briefingInput = nextMatch ? matchBriefingInput(save, championship, nextMatch) : null;
+  const scout = briefingInput ? buildPreMatchRatings(briefingInput) : null;
 
   const openNews = (item: NewsItem) => {
     setOpenId(item.id);
@@ -269,19 +272,20 @@ export function HomeScreen({
             {forecastBlurb(rollClimate(save.seed, nextMatch.id))}
           </p>
         ) : null}
-        {!preseason && nextMatch ? (
+        {scout ? (
+          <MatchRatingsCompare
+            us={club}
+            them={opponent}
+            ourAttack={scout.ourAttack}
+            ourDefence={scout.ourDefence}
+            theirAttack={scout.theirAttack}
+            theirDefence={scout.theirDefence}
+          />
+        ) : null}
+        {!preseason && nextMatch && briefingInput ? (
           <div className="coach-brief">
             <p className="kicker">Coach notes</p>
-            {buildPreMatchBriefing({
-              clubId: save.clubId,
-              match: nextMatch,
-              championship,
-              tactics: save.tactics,
-              sheet: save.sheet,
-              condition: save.condition,
-              seed: save.seed,
-              balance: save.balance,
-            }).notes.map((note) => (
+            {buildPreMatchBriefing(briefingInput).notes.map((note) => (
               <p key={note} className="hint hint--tight">
                 {note}
               </p>
