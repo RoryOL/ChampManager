@@ -53,9 +53,10 @@ captures/
 .idea/navEditor.xml
 
 # Keystore files
-# Uncomment the following lines if you do not want to check your keystore files in.
-#*.jks
-#*.keystore
+# The sideload key is checked in so GitHub APKs can update in place.
+*.jks
+*.keystore
+!app/sideload.keystore
 
 # External native build folder generated in Android Studio 2.2 and later
 .externalNativeBuild

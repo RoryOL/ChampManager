@@ -1,5 +1,25 @@
 apply plugin: 'com.android.application'
 
+def sideloadVersionCode() {
+    if (project.hasProperty('sideloadVersionCode')) {
+        return project.property('sideloadVersionCode').toString().toInteger()
+    }
+    try {
+        def out = new ByteArrayOutputStream()
+        exec {
+            commandLine 'git', 'rev-list', '--count', 'HEAD'
+            standardOutput = out
+        }
+        return Math.max(1, out.toString().trim().toInteger())
+    } catch (Exception ignored) {
+        return 1
+    }
+}
+
+def sideloadVersionName() {
+    return "1.0.${sideloadVersionCode()}"
+}
+
 android {
     namespace "ie.clare.champmanager"
     compileSdk rootProject.ext.compileSdkVersion
@@ -7,8 +27,8 @@ android {
         applicationId "ie.clare.champmanager"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode sideloadVersionCode()
+        versionName sideloadVersionName()
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,8 +36,20 @@ android {
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        sideload {
+            storeFile file("sideload.keystore")
+            storePassword "champmanager"
+            keyAlias "sideload"
+            keyPassword "champmanager"
+        }
+    }
     buildTypes {
+        debug {
+            signingConfig signingConfigs.sideload
+        }
         release {
+            signingConfig signingConfigs.sideload
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
