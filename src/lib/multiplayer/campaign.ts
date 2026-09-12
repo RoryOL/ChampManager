@@ -438,6 +438,34 @@ function opponentIdFor(match: { homeId: string; awayId: string }, clubId: string
   return match.homeId === clubId ? match.awayId : match.homeId;
 }
 
+function matchProgress(match: Match): number {
+  if (match.stage === "group") return match.round ?? 1;
+  if (match.stage === "quarter-final" || match.stage === "relegation-semi") return 10;
+  if (match.stage === "semi-final" || match.stage === "relegation-final") return 11;
+  return 12;
+}
+
+export function waitingOnEarlierRound(campaign: Campaign, clubId: string): Seat[] {
+  const mine = nextMatchForClub(campaign, clubId);
+  if (!mine) return [];
+  const championship = championshipOf(campaign);
+  const ahead = matchProgress(mine);
+  return campaign.seats.flatMap((seat) => {
+    if (seat.clubId === clubId) return [];
+    if (!clubInSeason(campaign, seat.clubId)) {
+      return campaign.phase === "season" ? [seat] : [];
+    }
+    const live = liveForClub(campaign, seat.clubId);
+    if (live) {
+      const row = championship.matches.find((match) => match.id === live.matchId);
+      return row && matchProgress(row) < ahead ? [seat] : [];
+    }
+    const theirNext = nextMatchForClub(campaign, seat.clubId);
+    if (!theirNext) return [];
+    return matchProgress(theirNext) < ahead ? [seat] : [];
+  });
+}
+
 export function nextHumanMatchIsPvp(campaign: Campaign, clubId: string): boolean {
   const match = nextMatchForClub(campaign, clubId);
   if (!match) return false;
@@ -792,6 +820,7 @@ export function trainClubWeek(
 export function readyClub(campaign: Campaign, clubId: string, now = Date.now()): Campaign {
   const club = campaign.clubs[clubId];
   if (!club || !clubInSeason(campaign, clubId) || liveForClub(campaign, clubId)) return campaign;
+  if (waitingOnEarlierRound(campaign, clubId).length > 0) return campaign;
   const match = nextMatchForClub(campaign, clubId);
   if (!match || !sidesFixed(championshipOf(campaign), match)) return campaign;
   const pvp = nextHumanMatchIsPvp(campaign, clubId);
@@ -1263,13 +1292,15 @@ function finishSim(
   const ready = { ...campaign.week.ready };
   delete ready[sim.homeId];
   delete ready[sim.awayId];
+  const lives = { ...campaign.week.lives };
+  delete lives[sim.matchId];
   return {
     ...campaign,
     matches: nextMatches,
     extraMatches,
     reports,
     clubs,
-    week: { ...campaign.week, ready },
+    week: { ...campaign.week, ready, lives },
   };
 }
 

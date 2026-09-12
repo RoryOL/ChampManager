@@ -20,6 +20,7 @@ type Props = {
   onCopyCode: () => void;
   onCopySnapshot: () => void;
   onRetryRoom?: () => void;
+  onRefreshRoom?: () => void;
 };
 
 export function LobbyScreen({
@@ -33,6 +34,7 @@ export function LobbyScreen({
   onCopySnapshot,
   roomStatus = "offline",
   onRetryRoom,
+  onRefreshRoom,
 }: Props) {
   const host = campaign.hostPlayerId === playerId;
   const [name, setName] = useState("");
@@ -73,6 +75,11 @@ export function LobbyScreen({
           <button type="button" className="btn btn--ghost" onClick={onCopySnapshot}>
             Copy snapshot
           </button>
+          {onRefreshRoom ? (
+            <button type="button" className="btn btn--ghost" onClick={() => void onRefreshRoom()}>
+              Check for updates
+            </button>
+          ) : null}
           {roomStatus !== "live" && onRetryRoom ? (
             <button type="button" className="btn btn--ghost" onClick={onRetryRoom}>
               Retry live room

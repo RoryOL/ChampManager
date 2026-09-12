@@ -380,6 +380,25 @@ export function useGame() {
     setRoomEpoch((value) => value + 1);
   }, []);
 
+  const refreshRoom = useCallback(async () => {
+    const current = campaignRef.current;
+    if (!current?.code) return;
+    const probe = await probeRoom(current.code, 10_000, roomBroker(current.code));
+    if (probe.campaign) {
+      setCampaign((local) => {
+        if (!local || local.code !== probe.campaign!.code) return local;
+        const { campaign: next, publish } = applyRemoteCampaign(local, probe.campaign!);
+        roomRef.current?.remember(next);
+        if (JSON.stringify(next) !== JSON.stringify(local)) persistCampaign(next);
+        roomRef.current?.publish(publish ?? next);
+        return next;
+      });
+    } else {
+      roomRef.current?.publish(current);
+    }
+    setRoomEpoch((value) => value + 1);
+  }, []);
+
   const joinCampaign = useCallback(
     async (payload: { name: string; clubId: string; code: string; snapshot?: string }) => {
       const snapshot = payload.snapshot ? parseCampaignInvite(payload.snapshot) : null;
@@ -1638,6 +1657,7 @@ export function useGame() {
     waitingHalf,
     roomStatus,
     retryRoom,
+    refreshRoom,
     championId,
     finaleStep,
     takeCharge,

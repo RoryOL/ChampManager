@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { addSeat, createCampaign, startCampaign } from "./campaign";
-import { decodeCampaign, encodeCampaign, PLAIN_CAMPAIGN_LIMIT, unwrapCampaignJson } from "./codec";
+import { decodeCampaign, encodeCampaign, PLAIN_CAMPAIGN_LIMIT, slimCampaignForWire, unwrapCampaignJson } from "./codec";
 
 const NOW = 1_700_000_000_000;
 
@@ -48,5 +48,31 @@ describe("campaign wire codec", () => {
     const decoded = decodeCampaign(JSON.stringify(started));
     expect(decoded?.phase).toBe("preseason");
     expect(unwrapCampaignJson(JSON.stringify(started))?.includes('"preseason"')).toBe(true);
+  });
+
+  it("drops finished live matches from the MQTT payload", () => {
+    const { started } = startedCampaign();
+    const fat = {
+      ...started,
+      week: {
+        ...started.week,
+        lives: {
+          done: {
+            matchId: "done",
+            first: { matchId: "done", events: [{ kind: "score" }] },
+            combined: { matchId: "done", events: [{ kind: "full" }] },
+          },
+          open: {
+            matchId: "open",
+            first: { matchId: "open", homeId: "ballyea", awayId: "clonlara", events: [] },
+          },
+        },
+      },
+    } as unknown as typeof started;
+    const slim = slimCampaignForWire(fat);
+    expect(slim.week.lives.done).toBeUndefined();
+    expect(slim.week.lives.open?.matchId).toBe("open");
+    expect(decodeCampaign(encodeCampaign(fat))?.week.lives.open?.matchId).toBe("open");
+    expect(decodeCampaign(encodeCampaign(fat))?.week.lives.done).toBeUndefined();
   });
 });

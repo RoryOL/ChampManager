@@ -14,7 +14,7 @@ export const BROKER_URLS = [
 const USER_AGENT = "ChampManager/1.0";
 const BROKER_STORE = "capture-the-canon-room-brokers";
 const DISCOVER_WAIT_MS = 800;
-const LOBBY_HEARTBEAT_MS = 2500;
+const ROOM_HEARTBEAT_MS = 4000;
 
 export type RoomStatus = "offline" | "connecting" | "live";
 
@@ -301,10 +301,12 @@ export function connectRoom(
     if (best && campaignOutranks(best, campaign)) return;
     // Throw-in is ~160KB raw and public brokers drop it; lobby JSON stays plain.
     const payload = encodeCampaign(campaign);
-    lastSent = payload;
     remember(campaign);
     if (!client?.connected) return;
-    client.publish(topic, payload, { qos: 1, retain: true });
+    lastSent = payload;
+    client.publish(topic, payload, { qos: 1, retain: true }, (error) => {
+      if (error) lastSent = "";
+    });
   };
 
   const publishQueued = () => {
@@ -336,9 +338,9 @@ export function connectRoom(
       });
       if (heartbeat) clearInterval(heartbeat);
       heartbeat = setInterval(() => {
-        if (stopped || !client?.connected || queued?.phase !== "lobby") return;
+        if (stopped || !client?.connected || !queued) return;
         publishQueued();
-      }, LOBBY_HEARTBEAT_MS);
+      }, ROOM_HEARTBEAT_MS);
     };
     next.on("connect", goLive);
     next.on("reconnect", () => {

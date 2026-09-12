@@ -21,6 +21,7 @@ import {
   trainClubWeek,
   waitingOnSecondHalf,
   waitingOnClub,
+  waitingOnEarlierRound,
   withClubTactics,
 } from "./campaign";
 import { mergeCampaigns } from "./merge";
@@ -233,7 +234,7 @@ describe("multiplayer campaign", () => {
     campaign = submitSecondHalf(campaign, "inagh-kilnamona", live!.matchId, DEFAULT_TACTICS, defaultSheet("inagh-kilnamona"), NOW + 103);
     const finished = championshipOf(campaign).matches.find((match) => match.id === live!.matchId);
     expect(finished && matchPlayed(finished)).toBe(true);
-    expect(campaign.week.lives[live!.matchId]?.combined?.events.some((event) => event.kind === "full")).toBe(true);
+    expect(campaign.week.lives[live!.matchId]).toBeUndefined();
     expect(liveForClub(campaign, "ballyea")).toBeUndefined();
     expect(liveForClub(campaign, "inagh-kilnamona")).toBeUndefined();
 
@@ -271,7 +272,7 @@ describe("multiplayer campaign", () => {
     }
   });
 
-  it("lets a manager confirm the next day after finishing a computer tie", () => {
+  it("does not let a manager start the next round while another human is still on this one", () => {
     let campaign = throughPreseason(splitGroupCampaign());
     campaign = readyClub(campaign, "ballyea", NOW + 100);
     const first = liveForClub(campaign, "ballyea");
@@ -280,9 +281,25 @@ describe("multiplayer campaign", () => {
     expect(liveForClub(campaign, "ballyea")).toBeUndefined();
     const next = nextMatchForClub(campaign, "ballyea");
     expect(next?.id).not.toBe(first!.matchId);
-    campaign = readyClub(campaign, "ballyea", NOW + 102);
-    expect(liveForClub(campaign, "ballyea")?.matchId).toBe(next?.id);
-    expect(liveForClub(campaign, "ballyea")?.combined).toBeFalsy();
+    const blocked = readyClub(campaign, "ballyea", NOW + 102);
+    expect(blocked.week.ready.ballyea).toBeFalsy();
+    expect(liveForClub(blocked, "ballyea")).toBeUndefined();
+    expect(waitingOnEarlierRound(blocked, "ballyea").map((seat) => seat.clubId)).toEqual(["eire-og"]);
+
+    campaign = readyClub(campaign, "eire-og", NOW + 103);
+    const guestLive = liveForClub(campaign, "eire-og");
+    expect(guestLive).toBeTruthy();
+    campaign = submitSecondHalf(
+      campaign,
+      "eire-og",
+      guestLive!.matchId,
+      DEFAULT_TACTICS,
+      defaultSheet("eire-og"),
+      NOW + 104,
+    );
+    const allowed = readyClub(campaign, "ballyea", NOW + 105);
+    expect(allowed.week.ready.ballyea).toBeTruthy();
+    expect(liveForClub(allowed, "ballyea")?.matchId).toBe(next?.id);
   });
 
   it("lets the host force the rest of a human match after half-time", () => {
