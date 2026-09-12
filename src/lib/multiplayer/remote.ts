@@ -4,10 +4,10 @@ import { normaliseCode } from "./codes";
 import { campaignOutranks, freshestCampaign } from "./merge";
 import { encodeCampaign, decodeCampaign } from "./codec";
 
-/** Public brokers, first working one wins. EMQX is last — it has been refusing MQTT. */
+/** Public brokers. Mosquitto first — HiveMQ often hangs on CONNACK. EMQX last. */
 export const BROKER_URLS = [
-  "wss://broker.hivemq.com:8884/mqtt",
   "wss://test.mosquitto.org:8081/mqtt",
+  "wss://broker.hivemq.com:8884/mqtt",
   "wss://broker.emqx.io:8084/mqtt",
 ];
 
@@ -221,6 +221,52 @@ function pickDiscovered(rows: Array<Discovered | null>): {
   return { chosen: winner ?? null, connected: found.length > 0 };
 }
 
+async function discoverFirst(
+  mqtt: (typeof import("mqtt"))["default"],
+  urls: string[],
+  code: string,
+  waitMs: number,
+): Promise<{ chosen: Discovered | null; connected: boolean }> {
+  if (urls.length === 0) return { chosen: null, connected: false };
+  if (urls.length === 1) {
+    const row = await discoverBroker(mqtt, urls[0], code, waitMs);
+    return { chosen: row, connected: Boolean(row) };
+  }
+
+  return new Promise((resolve) => {
+    let settled = false;
+    let pending = urls.length;
+    const rows: Discovered[] = [];
+    const finish = (chosen: Discovered | null, connected: boolean) => {
+      if (settled) return;
+      settled = true;
+      for (const row of rows) {
+        if (row !== chosen) closeClient(row.client);
+      }
+      resolve({ chosen, connected });
+    };
+
+    for (const url of urls) {
+      void discoverBroker(mqtt, url, code, waitMs).then((row) => {
+        pending -= 1;
+        if (settled) {
+          closeClient(row?.client);
+          return;
+        }
+        if (row) rows.push(row);
+        if (row?.campaign) {
+          finish(row, true);
+          return;
+        }
+        if (pending === 0) {
+          const picked = pickDiscovered(rows);
+          finish(picked.chosen, picked.connected);
+        }
+      });
+    }
+  });
+}
+
 export function connectRoom(
   code: string,
   options: {
@@ -337,9 +383,7 @@ export function connectRoom(
       return;
     }
 
-    const { chosen } = pickDiscovered(
-      await Promise.all(urls.map((url) => discoverBroker(mqtt, url, code, DISCOVER_WAIT_MS))),
-    );
+    const { chosen } = await discoverFirst(mqtt, urls, code, DISCOVER_WAIT_MS);
     if (stopped) {
       closeClient(chosen?.client);
       return;
@@ -383,13 +427,8 @@ export async function probeRoom(code: string, timeoutMs = 10_000, brokerUrl?: st
 
   const mqtt = (await import("mqtt")).default;
   const urls = searchBrokerList(normalised, brokerUrl);
-  const started = Date.now();
-  const results = await Promise.all(urls.map((url) => discoverBroker(mqtt, url, normalised, DISCOVER_WAIT_MS)));
-  if (Date.now() - started > timeoutMs && !results.some((row) => row?.campaign)) {
-    for (const row of results) closeClient(row?.client);
-    return { connected: results.some(Boolean), campaign: null, brokerUrl: roomBroker(normalised) };
-  }
-  const { chosen, connected } = pickDiscovered(results);
+  const waitMs = Math.min(DISCOVER_WAIT_MS, Math.max(250, timeoutMs));
+  const { chosen, connected } = await discoverFirst(mqtt, urls, normalised, waitMs);
   closeClient(chosen?.client);
   if (chosen?.campaign) {
     rememberRoomBroker(normalised, chosen.url);

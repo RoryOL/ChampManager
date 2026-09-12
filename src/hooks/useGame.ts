@@ -38,7 +38,7 @@ import {
   setPlayerName,
 } from "../lib/multiplayer/identity";
 import { applyRemoteCampaign, freshestCampaign } from "../lib/multiplayer/merge";
-import { connectRoom, forgetRoomBroker, probeRoom, type JoinPreview, type RoomStatus } from "../lib/multiplayer/remote";
+import { connectRoom, forgetRoomBroker, probeRoom, roomBroker, type JoinPreview, type RoomStatus } from "../lib/multiplayer/remote";
 import {
   clearCampaign,
   exportCampaign,
@@ -384,7 +384,7 @@ export function useGame() {
     async (payload: { name: string; clubId: string; code: string; snapshot?: string }) => {
       const snapshot = payload.snapshot ? parseCampaignInvite(payload.snapshot) : null;
       const local = loadRoom(payload.code) ?? (campaign?.code === payload.code ? campaign : null);
-      const probe = await probeRoom(payload.code, 12_000);
+      const probe = await probeRoom(payload.code, 12_000, roomBroker(payload.code));
       const room = freshestCampaign([probe.campaign, snapshot, local]);
       if (!room) {
         return {
@@ -429,7 +429,7 @@ export function useGame() {
     const snapshotCampaign = snapshot ? parseCampaignInvite(snapshot) : null;
     const local = loadRoom(code) ?? (campaign?.code === code ? campaign : null);
     const probe = code.trim().length >= 4
-      ? await probeRoom(code, 12_000)
+      ? await probeRoom(code, 12_000, roomBroker(code))
       : { connected: false, campaign: null };
     const room = freshestCampaign([probe.campaign, snapshotCampaign, local]);
     const source: JoinPreview["source"] = probe.campaign
