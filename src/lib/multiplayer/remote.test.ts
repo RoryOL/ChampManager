@@ -4,7 +4,7 @@ import { Aedes } from "aedes";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createCampaign, addSeat, startCampaign } from "./campaign";
 import { applyRemoteCampaign } from "./merge";
-import { connectRoom, probeRoom } from "./remote";
+import { connectRoom, probeRoom, resetRoomBrokers } from "./remote";
 
 const NOW = 1_700_000_000_000;
 
@@ -13,6 +13,7 @@ let broker: Aedes;
 let server: Server;
 
 beforeEach(async () => {
+  resetRoomBrokers();
   broker = await Aedes.createBroker();
   server = createServer(broker.handle);
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -166,5 +167,36 @@ describe("live room", () => {
       }, 50);
     });
     handle.disconnect();
+  }, 15_000);
+
+  it("keeps later joins on the broker that already has the lobby", async () => {
+    const campaign = createCampaign({
+      hostPlayerId: "host",
+      hostName: "Rory",
+      clubId: "ballyea",
+      waitHours: 0,
+      now: NOW,
+      seed: 7,
+      code: `S${Math.random().toString(36).slice(2, 7).toUpperCase()}`,
+    });
+    const host = openRoom(campaign.code, { onCampaign: () => undefined });
+    await waitUntilLive(campaign.code);
+    host.publish(campaign);
+    const found = await probeRoom(campaign.code, 5000, brokerUrl);
+    expect(found.campaign?.id).toBe(campaign.id);
+
+    const received = await new Promise<typeof campaign>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("guest used a different broker")), 8000);
+      const guest = connectRoom(campaign.code, {
+        onCampaign: (next) => {
+          clearTimeout(timer);
+          guest.disconnect();
+          resolve(next);
+        },
+      });
+    });
+
+    host.disconnect();
+    expect(received.id).toBe(campaign.id);
   }, 15_000);
 });
