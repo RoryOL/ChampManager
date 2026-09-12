@@ -145,6 +145,10 @@ export function useAppUpdate() {
     if (phase === "downloading") return;
     setSheetOpen(false);
     setDismissed(true);
+    if (phase === "installing" || phase === "error") {
+      setPhase("available");
+      setProgress({ received: 0, total: 0 });
+    }
   };
 
   const reopen = () => {
