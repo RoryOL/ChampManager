@@ -28,7 +28,7 @@ import {
   withClubTraining,
   withSeasonWrap,
 } from "../lib/multiplayer/campaign";
-import { DEFAULT_DIFFICULTY, performanceBoostFor } from "../lib/difficulty";
+import { DEFAULT_DIFFICULTY, matchBoostsFor } from "../lib/difficulty";
 import { randomId } from "../lib/multiplayer/codes";
 import {
   clearLocalSeats,
@@ -165,7 +165,7 @@ function extraTimeOptions(
     remainingWeeks: remainingWeeks(save, championship, save.clubId),
     homeName: home ? compactName(home) : sim.homeId,
     awayName: away ? compactName(away) : sim.awayId,
-    performanceBoost: performanceBoostFor(save.difficulty, [save.clubId]),
+    ...matchBoostsFor(save.difficulty, [save.clubId]),
     homePrep: sim.homeId === save.clubId ? save.nextMatchPrep : save.rivals[sim.homeId]?.nextMatchPrep,
     awayPrep: sim.awayId === save.clubId ? save.nextMatchPrep : save.rivals[sim.awayId]?.nextMatchPrep,
     homeCondition: sim.homeId === save.clubId ? save.condition : save.rivals[sim.homeId]?.condition,
@@ -629,7 +629,7 @@ export function useGame() {
             seed: save.seed,
             gameSeed: save.seed,
             balance: save.balance,
-            performanceBoost: performanceBoostFor(save.difficulty, [save.clubId]),
+            ...matchBoostsFor(save.difficulty, [save.clubId]),
             homePrep: homeId === save.clubId ? save.nextMatchPrep : homeClub?.nextMatchPrep,
             awayPrep: awayId === save.clubId ? save.nextMatchPrep : awayClub?.nextMatchPrep,
             stage: match.stage,
@@ -1086,7 +1086,7 @@ export function useGame() {
           ),
         },
         injuryBudget: remainingInjuryBudget(first.events, homeId, awayId),
-        performanceBoost: performanceBoostFor(save.difficulty, [save.clubId]),
+        ...matchBoostsFor(save.difficulty, [save.clubId]),
         homePrep: homeId === save.clubId ? save.nextMatchPrep : cpuClub?.nextMatchPrep,
         awayPrep: awayId === save.clubId ? save.nextMatchPrep : cpuClub?.nextMatchPrep,
         stage: live.match.stage,

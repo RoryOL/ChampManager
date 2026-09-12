@@ -719,6 +719,76 @@ describe("match engine", () => {
     expect(attackHome).toBeGreaterThan(sitHome);
   });
 
+  it("rewards a stronger side for attacking instead of leaving the default mid-block", () => {
+    const attacking: Tactics = { ...DEFAULT_TACTICS, mentality: "attacking", shape: "traditional", pressure: 70, build: 62 };
+    const sitting: Tactics = { ...DEFAULT_TACTICS, mentality: "contain", shape: "sweeper", pressure: 22 };
+    let attackMargin = 0;
+    let defaultMargin = 0;
+    let sitMargin = 0;
+    for (let seed = 1; seed <= 56; seed += 1) {
+      const shared = {
+        matchId: "g2-r1-a",
+        homeId: "eire-og",
+        awayId: "scariff",
+        awayTactics: DEFAULT_TACTICS,
+        climate: { sky: "sunny" as const, windStrength: 8, windAngle: 90 },
+        seed,
+      };
+      const open = simulateMatch({ ...shared, homeTactics: attacking });
+      const mid = simulateMatch({ ...shared, homeTactics: DEFAULT_TACTICS });
+      const cagey = simulateMatch({ ...shared, homeTactics: sitting });
+      attackMargin += scoreTotal(open.homeScore) - scoreTotal(open.awayScore);
+      defaultMargin += scoreTotal(mid.homeScore) - scoreTotal(mid.awayScore);
+      sitMargin += scoreTotal(cagey.homeScore) - scoreTotal(cagey.awayScore);
+    }
+    expect(attackMargin).toBeGreaterThan(defaultMargin);
+    expect(defaultMargin).toBeGreaterThan(sitMargin);
+  });
+
+  it("lets a weaker side concede fewer with a sweeper than with the default 6-2-6", () => {
+    const attackingAway: Tactics = { ...DEFAULT_TACTICS, mentality: "attacking", shape: "traditional", pressure: 72 };
+    const sweeper: Tactics = { ...DEFAULT_TACTICS, mentality: "contain", shape: "sweeper" };
+    let defaultGoals = 0;
+    let sweeperGoals = 0;
+    for (let seed = 1; seed <= 48; seed += 1) {
+      const shared = {
+        matchId: "g2-r1-a",
+        homeId: "scariff",
+        awayId: "eire-og",
+        awayTactics: attackingAway,
+        climate: { sky: "sunny" as const, windStrength: 8, windAngle: 90 },
+        seed,
+      };
+      defaultGoals += simulateMatch({ ...shared, homeTactics: DEFAULT_TACTICS }).awayScore.goals;
+      sweeperGoals += simulateMatch({ ...shared, homeTactics: sweeper }).awayScore.goals;
+    }
+    expect(sweeperGoals).toBeLessThan(defaultGoals);
+  });
+
+  it("makes a computer panel with an Intercounty-style lift harder to beat", () => {
+    let evenMargin = 0;
+    let liftedMargin = 0;
+    for (let seed = 1; seed <= 48; seed += 1) {
+      const shared = {
+        matchId: "g2-r1-a",
+        homeId: "eire-og",
+        awayId: "scariff",
+        homeTactics: DEFAULT_TACTICS,
+        awayTactics: DEFAULT_TACTICS,
+        climate: { sky: "sunny" as const, windStrength: 8, windAngle: 90 },
+        seed,
+      };
+      const even = simulateMatch(shared);
+      const lifted = simulateMatch({
+        ...shared,
+        oppositionBoost: { excludeClubIds: ["eire-og"], amount: 2 },
+      });
+      evenMargin += scoreTotal(even.homeScore) - scoreTotal(even.awayScore);
+      liftedMargin += scoreTotal(lifted.homeScore) - scoreTotal(lifted.awayScore);
+    }
+    expect(liftedMargin).toBeLessThan(evenMargin);
+  });
+
   it("takes a sent-off player off the field and plays 6-2-5", () => {
     const sheet = defaultSheet("ballyea");
     const sent = sheet.starters[4]!;
