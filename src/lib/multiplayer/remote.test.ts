@@ -4,7 +4,7 @@ import { Aedes } from "aedes";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createCampaign, addSeat, startCampaign } from "./campaign";
 import { applyRemoteCampaign } from "./merge";
-import { connectRoom, probeRoom, resetRoomBrokers } from "./remote";
+import { connectRoom, probeRoom, rememberRoomBroker, resetRoomBrokers } from "./remote";
 
 const NOW = 1_700_000_000_000;
 
@@ -198,5 +198,86 @@ describe("live room", () => {
 
     host.disconnect();
     expect(received.id).toBe(campaign.id);
+  }, 15_000);
+
+  it("joins the broker that already has the lobby instead of an empty earlier one", async () => {
+    const emptyBroker = await Aedes.createBroker();
+    const emptyServer = createServer(emptyBroker.handle);
+    await new Promise<void>((resolve) => emptyServer.listen(0, "127.0.0.1", resolve));
+    const emptyUrl = `mqtt://127.0.0.1:${(emptyServer.address() as AddressInfo).port}`;
+
+    const campaign = createCampaign({
+      hostPlayerId: "host",
+      hostName: "Rory",
+      clubId: "ballyea",
+      waitHours: 0,
+      now: NOW,
+      seed: 7,
+      code: `B${Math.random().toString(36).slice(2, 7).toUpperCase()}`,
+    });
+    const host = openRoom(campaign.code, { onCampaign: () => undefined });
+    await waitUntilLive(campaign.code);
+    host.publish(campaign);
+
+    const received = await new Promise<typeof campaign>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("guest published onto the empty broker")), 8000);
+      const guest = connectRoom(campaign.code, {
+        brokerUrls: [emptyUrl, brokerUrl],
+        onCampaign: (next) => {
+          clearTimeout(timer);
+          guest.disconnect();
+          resolve(next);
+        },
+      });
+    });
+
+    host.disconnect();
+    await new Promise<void>((resolve) => emptyBroker.close(() => resolve()));
+    await new Promise<void>((resolve) => emptyServer.close(() => resolve()));
+    expect(received.id).toBe(campaign.id);
+    expect(received.seats[0]?.clubId).toBe("ballyea");
+  }, 15_000);
+
+  it("does not fail over after a room is pinned to a broker", async () => {
+    rememberRoomBroker("PIN01", "mqtt://127.0.0.1:9");
+    const seen: string[] = [];
+    const handle = connectRoom("PIN01", {
+      onCampaign: () => undefined,
+      onStatus: (status) => {
+        seen.push(status);
+      },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    handle.disconnect();
+    expect(seen).toContain("connecting");
+    expect(seen).not.toContain("live");
+  }, 10_000);
+
+  it("probes an empty broker then finds the lobby on the next one", async () => {
+    const emptyBroker = await Aedes.createBroker();
+    const emptyServer = createServer(emptyBroker.handle);
+    await new Promise<void>((resolve) => emptyServer.listen(0, "127.0.0.1", resolve));
+    const emptyUrl = `mqtt://127.0.0.1:${(emptyServer.address() as AddressInfo).port}`;
+
+    const campaign = createCampaign({
+      hostPlayerId: "host",
+      hostName: "Rory",
+      clubId: "ballyea",
+      waitHours: 0,
+      now: NOW,
+      seed: 7,
+      code: `Q${Math.random().toString(36).slice(2, 7).toUpperCase()}`,
+    });
+    const host = openRoom(campaign.code, { onCampaign: () => undefined });
+    await waitUntilLive(campaign.code);
+    host.publish(campaign);
+
+    const found = await probeRoom(campaign.code, 8000, [emptyUrl, brokerUrl]);
+    host.disconnect();
+    await new Promise<void>((resolve) => emptyBroker.close(() => resolve()));
+    await new Promise<void>((resolve) => emptyServer.close(() => resolve()));
+    expect(found.connected).toBe(true);
+    expect(found.campaign?.id).toBe(campaign.id);
+    expect(found.brokerUrl).toBe(brokerUrl);
   }, 15_000);
 });

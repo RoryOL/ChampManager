@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  apkDownloadUrl,
   builtAppVersion,
   isAllowedApkUrl,
   isNewerVersion,
   parseUpdateManifest,
   pluginErrorCode,
+  pluginErrorMessage,
   manifestRequestUrl,
+  toRawGitHubFileUrl,
 } from "./appUpdate";
 
 describe("GitHub app updates", () => {
@@ -66,5 +69,18 @@ describe("GitHub app updates", () => {
     const version = builtAppVersion();
     expect(version.versionCode).toBeGreaterThan(0);
     expect(version.versionName).toBe(`1.0.${version.versionCode}`);
+  });
+
+  it("downloads the APK from raw GitHub instead of the html redirect", () => {
+    expect(toRawGitHubFileUrl("https://github.com/RoryOL/ChampManager/raw/main/releases/ChampManager.apk")).toBe(
+      "https://raw.githubusercontent.com/RoryOL/ChampManager/main/releases/ChampManager.apk",
+    );
+    expect(
+      apkDownloadUrl("https://github.com/RoryOL/ChampManager/raw/main/releases/ChampManager.apk", 247, 99),
+    ).toBe("https://raw.githubusercontent.com/RoryOL/ChampManager/main/releases/ChampManager.apk?v=247&t=99");
+    expect(pluginErrorMessage({ message: "Could not reach GitHub." }, "fallback")).toBe("Could not reach GitHub.");
+    expect(pluginErrorMessage({}, "Could not check GitHub for an update.")).toBe(
+      "Could not check GitHub for an update.",
+    );
   });
 });

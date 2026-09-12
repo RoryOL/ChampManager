@@ -118,6 +118,16 @@ html.native-app .device {
 .status-bar__version {
   letter-spacing: 0.04em;
   font-variant-numeric: tabular-nums;
+  border: 0;
+  padding: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.status-bar__version.is-warn {
+  color: #f0b429;
 }
 
 .help-btn {

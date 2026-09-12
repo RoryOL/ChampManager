@@ -22,7 +22,7 @@ public class ExampleUnitTest {
         );
         assertTrue(
             AppUpdatePlugin.isAllowedUpdateUrl(
-                "https://raw.githubusercontent.com/RoryOL/ChampManager/main/releases/version.json?t=1"
+                "https://raw.githubusercontent.com/RoryOL/ChampManager/main/releases/ChampManager.apk?v=247"
             )
         );
         assertFalse(AppUpdatePlugin.isAllowedUpdateUrl("https://evil.example/ChampManager.apk"));
