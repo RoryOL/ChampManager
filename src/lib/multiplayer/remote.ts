@@ -1,17 +1,20 @@
 import type { IClientOptions, MqttClient } from "mqtt";
 import type { Campaign } from "../../types";
 import { normaliseCode } from "./codes";
-import { campaignOutranks } from "./merge";
+import { campaignOutranks, freshestCampaign } from "./merge";
 import { encodeCampaign, decodeCampaign } from "./codec";
 
-/** Public brokers, first working one wins. EMQX is last — it has been refusing MQTT. */
+/** Public brokers. Mosquitto first — HiveMQ often hangs on CONNACK. EMQX last. */
 export const BROKER_URLS = [
-  "wss://broker.hivemq.com:8884/mqtt",
   "wss://test.mosquitto.org:8081/mqtt",
+  "wss://broker.hivemq.com:8884/mqtt",
   "wss://broker.emqx.io:8084/mqtt",
 ];
 
 const USER_AGENT = "ChampManager/1.0";
+const BROKER_STORE = "capture-the-canon-room-brokers";
+const DISCOVER_WAIT_MS = 800;
+const LOBBY_HEARTBEAT_MS = 2500;
 
 export type RoomStatus = "offline" | "connecting" | "live";
 
@@ -29,18 +32,56 @@ export type JoinPreview = {
   source: "live" | "snapshot" | "local" | "none";
 };
 
-const roomBrokers = new Map<string, string>();
+type Discovered = {
+  url: string;
+  client: MqttClient | null;
+  campaign: Campaign | null;
+};
+
+function readStoredBrokers(): Array<[string, string]> {
+  try {
+    if (typeof sessionStorage === "undefined") return [];
+    const raw = sessionStorage.getItem(BROKER_STORE);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (row): row is [string, string] =>
+        Array.isArray(row) && typeof row[0] === "string" && typeof row[1] === "string",
+    );
+  } catch {
+    return [];
+  }
+}
+
+const roomBrokers = new Map<string, string>(readStoredBrokers());
+
+function persistBrokers(): void {
+  try {
+    if (typeof sessionStorage === "undefined") return;
+    sessionStorage.setItem(BROKER_STORE, JSON.stringify([...roomBrokers]));
+  } catch {
+    // private mode / tests
+  }
+}
 
 export function rememberRoomBroker(code: string, url: string): void {
   roomBrokers.set(normaliseCode(code), url);
+  persistBrokers();
 }
 
 export function roomBroker(code: string): string | undefined {
   return roomBrokers.get(normaliseCode(code));
 }
 
+export function forgetRoomBroker(code: string): void {
+  roomBrokers.delete(normaliseCode(code));
+  persistBrokers();
+}
+
 export function resetRoomBrokers(): void {
   roomBrokers.clear();
+  persistBrokers();
 }
 
 function topicFor(code: string): string {
@@ -51,12 +92,39 @@ function clientId(code: string): string {
   return `cm-${normaliseCode(code).slice(0, 4)}-${Math.random().toString(16).slice(2, 10)}`;
 }
 
+function uniqueUrls(urls: Array<string | undefined>): string[] {
+  const seen = new Set<string>();
+  const list: string[] = [];
+  for (const url of urls) {
+    if (!url || seen.has(url)) continue;
+    seen.add(url);
+    list.push(url);
+  }
+  return list;
+}
+
 function brokerList(code: string, options: { brokerUrl?: string; brokerUrls?: string[] }): string[] {
   if (options.brokerUrl) return [options.brokerUrl];
   if (options.brokerUrls?.length) return options.brokerUrls;
   const preferred = roomBroker(code);
-  if (preferred) return [preferred, ...BROKER_URLS.filter((url) => url !== preferred)];
+  // Once a code has a broker, stay there. Failover publishes the lobby onto a
+  // different public broker, and the host never sees the joiner.
+  if (preferred) return [preferred];
   return BROKER_URLS;
+}
+
+function searchBrokerList(code: string, brokerUrl?: string | string[]): string[] {
+  if (Array.isArray(brokerUrl)) return uniqueUrls(brokerUrl);
+  if (brokerUrl) return [brokerUrl];
+  return uniqueUrls([roomBroker(code), ...BROKER_URLS]);
+}
+
+function closeClient(client: MqttClient | null | undefined): void {
+  try {
+    client?.end(true);
+  } catch {
+    // already closed
+  }
 }
 
 function tryBroker(
@@ -69,7 +137,7 @@ function tryBroker(
       clientId: id,
       clean: true,
       reconnectPeriod: 0,
-      connectTimeout: 5000,
+      connectTimeout: 3500,
       username: USER_AGENT,
       protocolVersion: 4,
     } satisfies IClientOptions);
@@ -79,15 +147,123 @@ function tryBroker(
       settled = true;
       clearTimeout(timer);
       client.removeAllListeners("connect");
-      client.removeAllListeners("error");
       client.removeAllListeners("close");
       if (!value) client.end(true);
       resolve(value);
     };
-    const timer = setTimeout(() => finish(null), 5500);
+    const timer = setTimeout(() => finish(null), 4000);
+    client.on("error", () => finish(null));
     client.once("connect", () => finish(client));
-    client.once("error", () => finish(null));
-    client.once("close", () => finish(null));
+    // mqtt.js can emit close during a handshake that still connects; wait a tick.
+    client.once("close", () => {
+      setTimeout(() => {
+        if (!settled && !client.connected) finish(null);
+      }, 80);
+    });
+  });
+}
+
+function waitForCampaign(client: MqttClient, topic: string, waitMs: number): Promise<Campaign | null> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (value: Campaign | null) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      client.removeListener("message", onMessage);
+      resolve(value);
+    };
+    const onMessage = (_topic: string, payload: { toString(): string }) => {
+      const campaign = decodeCampaign(payload.toString());
+      if (campaign) finish(campaign);
+    };
+    const timer = setTimeout(() => finish(null), waitMs);
+    client.on("message", onMessage);
+    client.subscribe(topic, { qos: 1 }, (error) => {
+      if (error) finish(null);
+    });
+  });
+}
+
+async function discoverBroker(
+  mqtt: (typeof import("mqtt"))["default"],
+  url: string,
+  code: string,
+  waitMs: number,
+): Promise<Discovered | null> {
+  const client = await tryBroker(mqtt, url, clientId(code));
+  if (!client) return null;
+  const campaign = await waitForCampaign(client, topicFor(code), waitMs);
+  if (!client.connected) {
+    closeClient(client);
+    return campaign ? { url, client: null, campaign } : null;
+  }
+  return { url, client, campaign };
+}
+
+function pickDiscovered(rows: Array<Discovered | null>): {
+  chosen: Discovered | null;
+  connected: boolean;
+} {
+  const found = rows.filter((row): row is Discovered => Boolean(row));
+  const withCampaign = found.filter((row) => row.campaign);
+  const campaign = freshestCampaign(withCampaign.map((row) => row.campaign));
+  const winner =
+    (campaign && withCampaign.find((row) => row.campaign === campaign)) ||
+    (campaign &&
+      withCampaign.find(
+        (row) => row.campaign?.id === campaign.id && row.campaign?.revision === campaign.revision,
+      )) ||
+    (!campaign ? found[0] : undefined);
+  for (const row of found) {
+    if (row !== winner) closeClient(row.client);
+  }
+  return { chosen: winner ?? null, connected: found.length > 0 };
+}
+
+async function discoverFirst(
+  mqtt: (typeof import("mqtt"))["default"],
+  urls: string[],
+  code: string,
+  waitMs: number,
+): Promise<{ chosen: Discovered | null; connected: boolean }> {
+  if (urls.length === 0) return { chosen: null, connected: false };
+  if (urls.length === 1) {
+    const row = await discoverBroker(mqtt, urls[0], code, waitMs);
+    return { chosen: row, connected: Boolean(row) };
+  }
+
+  return new Promise((resolve) => {
+    let settled = false;
+    let pending = urls.length;
+    const rows: Discovered[] = [];
+    const finish = (chosen: Discovered | null, connected: boolean) => {
+      if (settled) return;
+      settled = true;
+      for (const row of rows) {
+        if (row !== chosen) closeClient(row.client);
+      }
+      resolve({ chosen, connected });
+    };
+
+    for (const url of urls) {
+      void discoverBroker(mqtt, url, code, waitMs).then((row) => {
+        pending -= 1;
+        if (settled) {
+          closeClient(row?.client);
+          return;
+        }
+        if (row) rows.push(row);
+        if (row?.campaign) {
+          finish(row, true);
+          return;
+        }
+        if (pending === 0) {
+          const picked = pickDiscovered(rows);
+          finish(picked.chosen, picked.connected);
+        }
+      });
+    }
   });
 }
 
@@ -107,6 +283,7 @@ export function connectRoom(
   let best: Campaign | null = null;
   let stopped = false;
   let republishTimer: ReturnType<typeof setTimeout> | null = null;
+  let heartbeat: ReturnType<typeof setInterval> | null = null;
   options.onStatus?.("connecting");
 
   const remember = (campaign: Campaign) => {
@@ -139,9 +316,13 @@ export function connectRoom(
     publishNow(queued);
   };
 
-  const attach = (next: MqttClient) => {
+  const attach = (next: MqttClient, seeded?: Campaign | null) => {
     client = next;
     if (next.options) next.options.reconnectPeriod = 4000;
+    if (seeded) {
+      remember(seeded);
+      options.onCampaign(seeded);
+    }
     let live = false;
     const goLive = () => {
       if (stopped || live) return;
@@ -153,6 +334,11 @@ export function connectRoom(
         // lobby on this phone cannot overwrite a championship that already started.
         republishTimer = setTimeout(publishQueued, 400);
       });
+      if (heartbeat) clearInterval(heartbeat);
+      heartbeat = setInterval(() => {
+        if (stopped || !client?.connected || queued?.phase !== "lobby") return;
+        publishQueued();
+      }, LOBBY_HEARTBEAT_MS);
     };
     next.on("connect", goLive);
     next.on("reconnect", () => {
@@ -181,16 +367,40 @@ export function connectRoom(
     if (stopped) return;
     const mqtt = mod.default;
     const urls = brokerList(code, options);
-    for (const url of urls) {
-      if (stopped) return;
-      const next = await tryBroker(mqtt, url, clientId(code));
+    if (urls.length <= 1) {
+      const url = urls[0];
+      const next = url ? await tryBroker(mqtt, url, clientId(code)) : null;
       if (stopped) {
-        next?.end(true);
+        next && closeClient(next);
+        return;
+      }
+      if (next && url) {
+        rememberRoomBroker(code, url);
+        attach(next);
+        return;
+      }
+      if (!stopped) options.onStatus?.("offline");
+      return;
+    }
+
+    const { chosen } = await discoverFirst(mqtt, urls, code, DISCOVER_WAIT_MS);
+    if (stopped) {
+      closeClient(chosen?.client);
+      return;
+    }
+    if (chosen) {
+      rememberRoomBroker(code, chosen.url);
+      let next = chosen.client;
+      if (!next?.connected) {
+        closeClient(next);
+        next = await tryBroker(mqtt, chosen.url, clientId(code));
+      }
+      if (stopped) {
+        closeClient(next);
         return;
       }
       if (next) {
-        rememberRoomBroker(code, url);
-        attach(next);
+        attach(next, chosen.campaign);
         return;
       }
     }
@@ -203,50 +413,28 @@ export function connectRoom(
     disconnect: () => {
       stopped = true;
       if (republishTimer) clearTimeout(republishTimer);
+      if (heartbeat) clearInterval(heartbeat);
       options.onStatus?.("offline");
-      client?.end(true);
+      closeClient(client);
       client = null;
     },
   };
 }
 
-export function probeRoom(code: string, timeoutMs = 10_000, brokerUrl?: string): Promise<RoomProbe> {
+export async function probeRoom(code: string, timeoutMs = 10_000, brokerUrl?: string | string[]): Promise<RoomProbe> {
   const normalised = normaliseCode(code);
-  if (normalised.length < 4) return Promise.resolve({ connected: false, campaign: null });
+  if (normalised.length < 4) return { connected: false, campaign: null };
 
-  return new Promise((resolve) => {
-    let settled = false;
-    let connected = false;
-    let campaign: Campaign | null = null;
-    let hold: ReturnType<typeof setTimeout> | null = null;
-    const finish = () => {
-      if (settled) return;
-      settled = true;
-      if (hold) clearTimeout(hold);
-      clearTimeout(timer);
-      handle.disconnect();
-      resolve({ connected, campaign, brokerUrl: roomBroker(normalised) });
-    };
-
-    const handle = connectRoom(normalised, {
-      brokerUrl,
-      onStatus: (status) => {
-        if (status !== "live") return;
-        connected = true;
-        if (campaign) {
-          finish();
-          return;
-        }
-        if (hold) clearTimeout(hold);
-        hold = setTimeout(finish, 900);
-      },
-      onCampaign: (next) => {
-        campaign = next;
-        if (connected) finish();
-      },
-    });
-    const timer = setTimeout(finish, timeoutMs);
-  });
+  const mqtt = (await import("mqtt")).default;
+  const urls = searchBrokerList(normalised, brokerUrl);
+  const waitMs = Math.min(DISCOVER_WAIT_MS, Math.max(250, timeoutMs));
+  const { chosen, connected } = await discoverFirst(mqtt, urls, normalised, waitMs);
+  closeClient(chosen?.client);
+  if (chosen?.campaign) {
+    rememberRoomBroker(normalised, chosen.url);
+    return { connected: true, campaign: chosen.campaign, brokerUrl: chosen.url };
+  }
+  return { connected, campaign: null, brokerUrl: roomBroker(normalised) };
 }
 
 export async function fetchRoom(code: string, timeoutMs = 10_000, brokerUrl?: string): Promise<Campaign | null> {

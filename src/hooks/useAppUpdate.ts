@@ -1,12 +1,14 @@
 import { Capacitor } from "@capacitor/core";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  apkDownloadUrl,
   builtAppVersion,
   isNewerVersion,
   isUpdateDemo,
   manifestRequestUrl,
   parseUpdateManifest,
   pluginErrorCode,
+  pluginErrorMessage,
   type UpdateManifest,
 } from "../lib/appUpdate";
 import { AppUpdate, type DownloadProgress } from "../lib/appUpdateNative";
@@ -23,10 +25,22 @@ export type UpdatePhase =
 const DEMO_MANIFEST: UpdateManifest = {
   versionCode: 9999,
   versionName: "1.0.9999",
-  apkUrl: "https://github.com/RoryOL/ChampManager/raw/main/releases/ChampManager.apk",
+  apkUrl: "https://raw.githubusercontent.com/RoryOL/ChampManager/main/releases/ChampManager.apk",
 };
 
 const FALLBACK_VERSION = builtAppVersion();
+
+async function readManifestText(): Promise<string> {
+  try {
+    const { text } = await AppUpdate.fetchText({ url: manifestRequestUrl() });
+    if (text.trim()) return text;
+  } catch {
+    // WebView fetch still works when the native plugin is late or blocked.
+  }
+  const response = await fetch(manifestRequestUrl(), { cache: "no-store" });
+  if (!response.ok) throw new Error(`GitHub returned HTTP ${response.status}`);
+  return response.text();
+}
 
 export function useAppUpdate() {
   const demo = isUpdateDemo();
@@ -39,10 +53,12 @@ export function useAppUpdate() {
   const [error, setError] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(demo);
   const [dismissed, setDismissed] = useState(false);
+  const dismissedRef = useRef(false);
+  const phaseRef = useRef<UpdatePhase>("idle");
 
   const available = Boolean(manifest && isNewerVersion(current.versionCode, manifest.versionCode));
 
-  const check = useCallback(async () => {
+  const check = useCallback(async (opts?: { open?: boolean }) => {
     if (demo) {
       setManifest(DEMO_MANIFEST);
       setCurrent({ versionName: "1.0.1", versionCode: 1 });
@@ -50,48 +66,83 @@ export function useAppUpdate() {
       setSheetOpen(true);
       setDismissed(false);
       setError(null);
-      return;
+      return "update" as const;
     }
+    if (phaseRef.current === "downloading" || phaseRef.current === "installing") return "ok" as const;
     setPhase(native ? "checking" : "idle");
     setError(null);
     try {
-      const version = await AppUpdate.getVersion();
-      const currentCode = Number(version.versionCode) || FALLBACK_VERSION.versionCode;
-      const currentName = version.versionName || FALLBACK_VERSION.versionName;
+      let currentCode = FALLBACK_VERSION.versionCode;
+      let currentName = FALLBACK_VERSION.versionName;
+      try {
+        const version = await AppUpdate.getVersion();
+        currentCode = Number(version.versionCode) || FALLBACK_VERSION.versionCode;
+        currentName = version.versionName || FALLBACK_VERSION.versionName;
+      } catch {
+        // Corner version still comes from the JS build if the plugin is late.
+      }
       setCurrent({ versionName: currentName, versionCode: currentCode });
-      if (!native) return;
-      const { text } = await AppUpdate.fetchText({ url: manifestRequestUrl() });
+      if (!native) return "ok" as const;
+      const text = await readManifestText();
       const latest = parseUpdateManifest(JSON.parse(text) as unknown);
       if (!latest || !isNewerVersion(currentCode, latest.versionCode)) {
         setManifest(latest);
         setPhase("idle");
-        return;
+        return "ok" as const;
       }
       setManifest(latest);
       setPhase("available");
-      setSheetOpen(true);
-      setDismissed(false);
+      if (opts?.open || !dismissedRef.current) {
+        setSheetOpen(true);
+        setDismissed(false);
+      }
+      return "update" as const;
     } catch (caught) {
       setPhase("idle");
-      setError(caught instanceof Error ? caught.message : "Could not check GitHub for an update.");
+      setError(pluginErrorMessage(caught, "Could not check GitHub for an update."));
+      return "fail" as const;
     }
   }, [demo, native]);
 
   useEffect(() => {
-    void check();
+    dismissedRef.current = dismissed;
+  }, [dismissed]);
+
+  useEffect(() => {
+    phaseRef.current = phase;
+  }, [phase]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        if (cancelled) return;
+        const result = await check();
+        if (cancelled || result !== "fail") return;
+        await new Promise((resolve) => window.setTimeout(resolve, 500 * (attempt + 1)));
+      }
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
   }, [check]);
 
   useEffect(() => {
-    if (phase !== "need-permission") return;
     const onVisible = () => {
       if (document.visibilityState !== "visible") return;
-      void AppUpdate.canInstall().then(({ allowed }) => {
-        if (allowed) setPhase("available");
-      });
+      if (phaseRef.current === "need-permission") {
+        void AppUpdate.canInstall().then(({ allowed }) => {
+          if (allowed) setPhase("available");
+        });
+      }
+      if (native && phaseRef.current !== "downloading" && phaseRef.current !== "installing") {
+        void check();
+      }
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);
-  }, [phase]);
+  }, [check, native]);
 
   const startUpdate = async () => {
     if (!manifest) return;
@@ -115,11 +166,9 @@ export function useAppUpdate() {
         return;
       }
       setPhase("downloading");
-      const apkUrl = new URL(manifest.apkUrl);
-      apkUrl.searchParams.set("v", String(manifest.versionCode));
       const handle = await AppUpdate.addListener("downloadProgress", setProgress);
       try {
-        await AppUpdate.downloadAndInstall({ url: apkUrl.toString() });
+        await AppUpdate.downloadAndInstall({ url: apkDownloadUrl(manifest.apkUrl, manifest.versionCode) });
         setPhase("installing");
       } finally {
         await handle.remove();
@@ -130,7 +179,7 @@ export function useAppUpdate() {
         setSheetOpen(true);
         return;
       }
-      setError(caught instanceof Error ? caught.message : "Could not install the GitHub update.");
+      setError(pluginErrorMessage(caught, "Could not install the GitHub update."));
       setPhase("error");
       setSheetOpen(true);
     }
@@ -140,7 +189,7 @@ export function useAppUpdate() {
     try {
       await AppUpdate.openInstallSettings();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not open Android install settings.");
+      setError(pluginErrorMessage(caught, "Could not open Android install settings."));
       setPhase("error");
     }
   };

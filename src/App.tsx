@@ -59,7 +59,22 @@ export default function App() {
         <span>Capture the Canon</span>
         <span className="status-bar__trail">
           <span>{game.campaign ? game.campaign.code : "SHC 26"}</span>
-          {update.current.versionName ? <span className="status-bar__version">{update.current.versionName}</span> : null}
+          {update.current.versionName ? (
+            <button
+              type="button"
+              className={`status-bar__version${update.error ? " is-warn" : ""}`}
+              onClick={() => void update.check({ open: true })}
+              title={
+                update.error
+                  ? update.error
+                  : update.available
+                    ? `Update ${update.manifest?.versionName ?? ""}`
+                    : "Check GitHub for an update"
+              }
+            >
+              {update.current.versionName}
+            </button>
+          ) : null}
           {game.save ? <HelpButton onOpen={() => setHelpOpen(true)} /> : null}
         </span>
       </div>

@@ -1,6 +1,9 @@
 export const UPDATE_MANIFEST_URL =
   "https://raw.githubusercontent.com/RoryOL/ChampManager/main/releases/version.json";
 
+export const UPDATE_APK_URL =
+  "https://raw.githubusercontent.com/RoryOL/ChampManager/main/releases/ChampManager.apk";
+
 export type UpdateManifest = {
   versionCode: number;
   versionName: string;
@@ -11,6 +14,30 @@ export function manifestRequestUrl(now = Date.now()): string {
   const url = new URL(UPDATE_MANIFEST_URL);
   url.searchParams.set("t", String(now));
   return url.toString();
+}
+
+export function toRawGitHubFileUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.toLowerCase();
+    const match = host === "github.com" ? parsed.pathname.match(/^\/([^/]+)\/([^/]+)\/raw\/([^/]+)\/(.+)$/) : null;
+    if (match) {
+      return `https://raw.githubusercontent.com/${match[1]}/${match[2]}/${match[3]}/${match[4]}`;
+    }
+    if (host === "raw.githubusercontent.com") {
+      return `${parsed.origin}${parsed.pathname}`;
+    }
+    return url;
+  } catch {
+    return url;
+  }
+}
+
+export function apkDownloadUrl(apkUrl: string, versionCode: number, now = Date.now()): string {
+  const parsed = new URL(toRawGitHubFileUrl(apkUrl));
+  parsed.searchParams.set("v", String(versionCode));
+  parsed.searchParams.set("t", String(now));
+  return parsed.toString();
 }
 
 export function isAllowedApkUrl(url: string): boolean {
@@ -56,6 +83,15 @@ export function pluginErrorCode(error: unknown): string {
     if (typeof code === "string") return code;
   }
   return "";
+}
+
+export function pluginErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message.trim()) return error.message;
+  if (error && typeof error === "object" && "message" in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === "string" && message.trim()) return message;
+  }
+  return fallback;
 }
 
 export function builtAppVersion(): { versionName: string; versionCode: number } {
