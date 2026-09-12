@@ -1944,26 +1944,27 @@ html.native-app .device {
   grid-template-columns: minmax(0, 1fr) 36px;
 }
 
-.match-ratings__side b {
+.match-ratings__side strong {
   font-size: 13px;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
 
-.match-ratings__side--them b {
+.match-ratings__side--them strong {
   text-align: left;
 }
 
-.match-ratings__side b.is-up {
+.match-ratings__side strong.is-up {
   color: #7dce8a;
 }
 
-.match-ratings__side b.is-down {
+.match-ratings__side strong.is-down {
   color: #f0a3a3;
 }
 
 .match-ratings__bar {
-  height: 8px;
+  height: 10px;
   background: #102033;
   border-radius: 99px;
   overflow: hidden;
