@@ -66,9 +66,10 @@ export function UpdateSheet({
   onLater,
   onRetry,
 }: Props) {
-  const busy = phase === "downloading" || phase === "installing";
+  const downloading = phase === "downloading";
+  const busy = downloading || phase === "installing";
   return (
-    <div className="update-scrim" role="presentation" onClick={busy ? undefined : onLater}>
+    <div className="update-scrim" role="presentation" onClick={downloading ? undefined : onLater}>
       <section
         className="welcome-card update-card"
         role="dialog"
@@ -107,7 +108,7 @@ export function UpdateSheet({
               {busy ? "Downloading…" : "Update now"}
             </button>
           )}
-          <button type="button" className="btn btn--ghost" disabled={busy} onClick={onLater}>
+          <button type="button" className="btn btn--ghost" disabled={downloading} onClick={onLater}>
             Later
           </button>
         </div>
