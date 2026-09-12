@@ -2,6 +2,7 @@ import { Capacitor } from "@capacitor/core";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
+import { BootErrorBoundary } from "./components/BootErrorBoundary";
 import "./index.css";
 
 if (Capacitor.isNativePlatform()) {
@@ -18,7 +19,9 @@ async function boot() {
   }
   createRoot(document.getElementById("root")!).render(
     <StrictMode>
-      <App />
+      <BootErrorBoundary>
+        <App />
+      </BootErrorBoundary>
     </StrictMode>,
   );
 }

@@ -14,25 +14,62 @@ function readJson<T>(key: string): T | null {
   }
 }
 
+function writeJson(key: string, value: unknown): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    /* quota, private mode */
+  }
+}
+
 function rooms(): Record<string, Campaign> {
   return readJson<Record<string, Campaign>>(ROOMS_KEY) ?? {};
 }
 
 function writeRooms(next: Record<string, Campaign>): void {
-  localStorage.setItem(ROOMS_KEY, JSON.stringify(next));
+  writeJson(ROOMS_KEY, next);
+}
+
+function campaignForStorage(campaign: Campaign): Campaign {
+  const lives: Campaign["week"]["lives"] = {};
+  for (const [id, live] of Object.entries(campaign.week?.lives ?? {})) {
+    if (!live || live.combined || campaign.reports?.[id]) continue;
+    lives[id] = live;
+  }
+  const clubs: Campaign["clubs"] = { ...campaign.clubs };
+  for (const clubId of Object.keys(clubs)) {
+    const club = clubs[clubId];
+    if (club && Array.isArray(club.inbox) && club.inbox.length > 24) {
+      clubs[clubId] = { ...club, inbox: club.inbox.slice(0, 24) };
+    }
+  }
+  return {
+    ...campaign,
+    clubs,
+    week: { ...(campaign.week ?? { locked: false, deadlineAt: null, ready: {} }), lives },
+  };
 }
 
 export function persistCampaign(campaign: Campaign): void {
-  localStorage.setItem(CAMPAIGN_KEY, JSON.stringify(campaign));
-  writeRooms({ ...rooms(), [campaign.code]: campaign });
+  const stored = campaignForStorage(campaign);
+  writeJson(CAMPAIGN_KEY, stored);
+  writeRooms({ ...rooms(), [stored.code]: stored });
 }
 
 export function loadCampaign(now = Date.now()): Campaign | null {
   const stored = readJson<Campaign>(CAMPAIGN_KEY);
   if (!stored || stored.version !== 1 || !stored.code) return null;
-  const ticked = tickCampaign(withCampaignDefaults(stored), now);
-  if (ticked.revision !== stored.revision) persistCampaign(ticked);
-  return ticked;
+  try {
+    const ticked = tickCampaign(withCampaignDefaults(stored), now);
+    if (ticked.revision !== stored.revision) persistCampaign(ticked);
+    return ticked;
+  } catch {
+    try {
+      return withCampaignDefaults(stored);
+    } catch {
+      return null;
+    }
+  }
 }
 
 export function loadRoom(code: string, now = Date.now()): Campaign | null {

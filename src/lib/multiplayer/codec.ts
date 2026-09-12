@@ -53,19 +53,21 @@ export function unwrapCampaignJson(raw: string): string | null {
 
 export function slimCampaignForWire(campaign: Campaign): Campaign {
   const lives: Campaign["week"]["lives"] = {};
-  for (const [id, live] of Object.entries(campaign.week.lives)) {
-    if (live.combined || campaign.reports[id]) continue;
+  for (const [id, live] of Object.entries(campaign.week?.lives ?? {})) {
+    if (!live || live.combined || campaign.reports?.[id]) continue;
     lives[id] = live;
   }
   const clubs: Campaign["clubs"] = { ...campaign.clubs };
   for (const clubId of Object.keys(clubs)) {
     const club = clubs[clubId];
-    if (club && club.inbox.length > 24) clubs[clubId] = { ...club, inbox: club.inbox.slice(0, 24) };
+    if (club && Array.isArray(club.inbox) && club.inbox.length > 24) {
+      clubs[clubId] = { ...club, inbox: club.inbox.slice(0, 24) };
+    }
   }
   return {
     ...campaign,
     clubs,
-    week: { ...campaign.week, lives },
+    week: { ...(campaign.week ?? { locked: false, deadlineAt: null, ready: {} }), lives },
   };
 }
 

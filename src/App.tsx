@@ -91,6 +91,27 @@ export default function App() {
         />
       )}
 
+      {game.campaign && game.campaign.phase !== "lobby" && !game.save && (
+        <section className="card" style={{ margin: 16 }}>
+          <p className="kicker">Together · {game.campaign.code}</p>
+          <h2>This championship is under way</h2>
+          <p className="hint">
+            This phone is not signed into a manager, so there is nothing to draw. Pick your seat if you were already in
+            the room, or leave and join again with the code.
+          </p>
+          <div className="row-actions">
+            {game.campaign.seats.map((seat) => (
+              <button key={seat.playerId} type="button" className="btn" onClick={() => game.claimSeat(seat.playerId)}>
+                Continue as {seat.name}
+              </button>
+            ))}
+            <button type="button" className="btn btn--ghost" onClick={game.leaveCampaign}>
+              Leave
+            </button>
+          </div>
+        </section>
+      )}
+
       {game.campaign && game.campaign.phase === "lobby" && (
         <LobbyScreen
           campaign={game.campaign}
