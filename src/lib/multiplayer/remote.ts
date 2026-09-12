@@ -18,6 +18,7 @@ export function connectRoom(
   options: {
     onCampaign: (campaign: Campaign) => void;
     onStatus?: (status: RoomStatus) => void;
+    brokerUrl?: string;
   },
 ): { publish: (campaign: Campaign) => void; remember: (campaign: Campaign) => void; disconnect: () => void } {
   const topic = topicFor(code);
@@ -61,7 +62,7 @@ export function connectRoom(
   void import("mqtt").then((mod) => {
     if (stopped) return;
     const mqtt = mod.default;
-    client = mqtt.connect(BROKER_URL, {
+    client = mqtt.connect(options.brokerUrl ?? BROKER_URL, {
       clientId: `cm-${normaliseCode(code).slice(0, 4)}-${Math.random().toString(16).slice(2, 10)}`,
       clean: true,
       reconnectPeriod: 4000,
