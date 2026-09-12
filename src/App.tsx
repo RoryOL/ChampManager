@@ -59,6 +59,7 @@ export default function App() {
         <span>Capture the Canon</span>
         <span className="status-bar__trail">
           <span>{game.campaign ? game.campaign.code : "SHC 26"}</span>
+          {update.current.versionName ? <span className="status-bar__version">{update.current.versionName}</span> : null}
           {game.save ? <HelpButton onOpen={() => setHelpOpen(true)} /> : null}
         </span>
       </div>
