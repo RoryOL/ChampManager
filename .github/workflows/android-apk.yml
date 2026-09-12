@@ -46,7 +46,9 @@ jobs:
           fi
           mkdir -p releases
           cp android/app/build/outputs/apk/debug/app-debug.apk releases/ChampManager.apk
-          git add releases/ChampManager.apk
+          VERSION_CODE="$(git rev-list --count HEAD)"
+          printf '{\n  "versionCode": %s,\n  "versionName": "1.0.%s",\n  "apkUrl": "https://github.com/RoryOL/ChampManager/raw/main/releases/ChampManager.apk"\n}\n' "$VERSION_CODE" "$VERSION_CODE" > releases/version.json
+          git add releases/ChampManager.apk releases/version.json
           if git diff --cached --quiet; then
             echo "Sideload APK already up to date"
             exit 0
