@@ -37,7 +37,9 @@ export function CampaignWeekCard({
   const waitingWeek = waitingOnClub(campaign, clubId);
   const waitingRound = waitingOnEarlierRound(campaign, clubId);
   const live = liveForClub(campaign, clubId);
-  const waitingHalf = live && !live.combined ? waitingOnSecondHalf(campaign, live.matchId) : [];
+  const waitingHalf = live && !live.combined
+    ? waitingOnSecondHalf(campaign, live.matchId).filter((seat) => seat.clubId !== clubId)
+    : [];
   const isHost = campaign.hostPlayerId === playerId;
   const isReady = Boolean(campaign.week.ready[clubId]);
   const inSeason = clubInSeason(campaign, clubId);

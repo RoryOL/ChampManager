@@ -498,7 +498,7 @@ export function waitingOnWeek(campaign: Campaign): Seat[] {
 export function waitingOnClub(campaign: Campaign, clubId: string): Seat[] {
   if (campaign.phase === "lobby" || !clubId) return [];
   const live = liveForClub(campaign, clubId);
-  if (live) return waitingOnSecondHalf(campaign, live.matchId);
+  if (live) return waitingOnSecondHalf(campaign, live.matchId).filter((seat) => seat.clubId !== clubId);
   if (!clubInSeason(campaign, clubId) || !campaign.week.ready[clubId]) return [];
   const match = nextMatchForClub(campaign, clubId);
   if (!match) return [];

@@ -194,6 +194,7 @@ describe("multiplayer campaign", () => {
     let campaign = throughPreseason(splitGroupCampaign());
     campaign = readyClub(campaign, "ballyea", NOW + 100);
     expect(liveForClub(campaign, "ballyea")).toBeTruthy();
+    expect(waitingOnClub(campaign, "ballyea")).toEqual([]);
     expect(liveForClub(campaign, "eire-og")).toBeUndefined();
     expect(campaign.week.ready["eire-og"]).toBeFalsy();
     const championship = championshipOf(campaign);
