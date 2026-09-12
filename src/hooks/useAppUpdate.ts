@@ -1,6 +1,7 @@
 import { Capacitor } from "@capacitor/core";
 import { useCallback, useEffect, useState } from "react";
 import {
+  builtAppVersion,
   isNewerVersion,
   isUpdateDemo,
   manifestRequestUrl,
@@ -25,12 +26,14 @@ const DEMO_MANIFEST: UpdateManifest = {
   apkUrl: "https://github.com/RoryOL/ChampManager/raw/main/releases/ChampManager.apk",
 };
 
+const FALLBACK_VERSION = builtAppVersion();
+
 export function useAppUpdate() {
   const demo = isUpdateDemo();
   const native = Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android";
   const supported = native || demo;
   const [phase, setPhase] = useState<UpdatePhase>("idle");
-  const [current, setCurrent] = useState({ versionName: demo ? "1.0.1" : "", versionCode: demo ? 1 : 0 });
+  const [current, setCurrent] = useState(demo ? { versionName: "1.0.1", versionCode: 1 } : FALLBACK_VERSION);
   const [manifest, setManifest] = useState<UpdateManifest | null>(demo ? DEMO_MANIFEST : null);
   const [progress, setProgress] = useState<DownloadProgress>({ received: 0, total: 0 });
   const [error, setError] = useState<string | null>(null);
@@ -40,7 +43,6 @@ export function useAppUpdate() {
   const available = Boolean(manifest && isNewerVersion(current.versionCode, manifest.versionCode));
 
   const check = useCallback(async () => {
-    if (!supported) return;
     if (demo) {
       setManifest(DEMO_MANIFEST);
       setCurrent({ versionName: "1.0.1", versionCode: 1 });
@@ -50,12 +52,14 @@ export function useAppUpdate() {
       setError(null);
       return;
     }
-    setPhase("checking");
+    setPhase(native ? "checking" : "idle");
     setError(null);
     try {
       const version = await AppUpdate.getVersion();
-      const currentCode = Number(version.versionCode) || 0;
-      setCurrent({ versionName: version.versionName, versionCode: currentCode });
+      const currentCode = Number(version.versionCode) || FALLBACK_VERSION.versionCode;
+      const currentName = version.versionName || FALLBACK_VERSION.versionName;
+      setCurrent({ versionName: currentName, versionCode: currentCode });
+      if (!native) return;
       const { text } = await AppUpdate.fetchText({ url: manifestRequestUrl() });
       const latest = parseUpdateManifest(JSON.parse(text) as unknown);
       if (!latest || !isNewerVersion(currentCode, latest.versionCode)) {
@@ -71,7 +75,7 @@ export function useAppUpdate() {
       setPhase("idle");
       setError(caught instanceof Error ? caught.message : "Could not check GitHub for an update.");
     }
-  }, [demo, supported]);
+  }, [demo, native]);
 
   useEffect(() => {
     void check();

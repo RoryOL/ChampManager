@@ -27,7 +27,7 @@ On a phone, open that URL in Chrome. If Android blocks the install, allow **Inst
 
 This is a **sideload-signed** APK (fine for installing from GitHub; not a Play Store build). Every push to `main` rebuilds it, commits `releases/ChampManager.apk`, and uploads a copy under **Actions → Android APK → Artifacts**.
 
-Once that APK is on the phone, later builds do not need a zip from Actions. Open the app and it checks GitHub for a newer APK. Tap **Update now**, allow installs from Capture the Canon if Android asks, and the new build installs over the current one. A save already on the phone is kept.
+Once that APK is on the phone, later builds do not need a zip from Actions. Open the app and it checks GitHub for a newer APK. Tap **Update now**, allow installs from Capture the Canon if Android asks, and the new build installs over the current one. A save already on the phone is kept. The build number is in the top right, so you can see exactly which APK is running.
 
 Android will only update an existing install if the new APK is signed with the **same key**. Older GitHub zips were signed with a fresh debug key on every CI run, so the phone treated each zip as a different app and asked you to uninstall first. Builds from this repo now share one sideload key, and the version code goes up with each commit, so GitHub updates install in place.
 

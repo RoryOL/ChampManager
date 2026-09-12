@@ -58,6 +58,15 @@ export function pluginErrorCode(error: unknown): string {
   return "";
 }
 
+export function builtAppVersion(): { versionName: string; versionCode: number } {
+  const versionCode = typeof __APP_VERSION_CODE__ === "number" && __APP_VERSION_CODE__ > 0 ? __APP_VERSION_CODE__ : 1;
+  const versionName =
+    typeof __APP_VERSION_NAME__ === "string" && __APP_VERSION_NAME__.trim()
+      ? __APP_VERSION_NAME__.trim()
+      : `1.0.${versionCode}`;
+  return { versionName, versionCode };
+}
+
 export function isUpdateDemo(): boolean {
   if (!import.meta.env.DEV) return false;
   try {

@@ -36,7 +36,7 @@ export const HELP_SECTIONS: HelpSection[] = [
     title: "Updates",
     paragraphs: [
       "On the Android app, Capture the Canon checks GitHub when you open it. If a newer APK is there, tap Update and Android installs it over this one. You do not need to download a zip from Actions. A save already on the phone is kept.",
-      "The first update may ask you to allow installs from this app. After that, later GitHub builds should install in place while they share the same sideload key.",
+      "The build number is in the top right. After an update it should match the new GitHub APK. The first update may ask you to allow installs from this app. After that, later GitHub builds should install in place while they share the same sideload key.",
     ],
   },
 ];

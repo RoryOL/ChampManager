@@ -115,6 +115,11 @@ html.native-app .device {
   gap: 8px;
 }
 
+.status-bar__version {
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+}
+
 .help-btn {
   width: 22px;
   height: 22px;

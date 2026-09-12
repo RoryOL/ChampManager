@@ -1,4 +1,5 @@
 import { registerPlugin, WebPlugin, type PluginListenerHandle } from "@capacitor/core";
+import { builtAppVersion } from "./appUpdate";
 
 export type AppVersionInfo = {
   versionName: string;
@@ -24,7 +25,7 @@ export interface AppUpdatePlugin {
 
 class AppUpdateWeb extends WebPlugin implements AppUpdatePlugin {
   async getVersion(): Promise<AppVersionInfo> {
-    return { versionName: "web", versionCode: 0 };
+    return builtAppVersion();
   }
 
   async canInstall(): Promise<{ allowed: boolean }> {

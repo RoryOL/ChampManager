@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  builtAppVersion,
   isAllowedApkUrl,
   isNewerVersion,
   parseUpdateManifest,
@@ -59,5 +60,11 @@ describe("GitHub app updates", () => {
     expect(manifestRequestUrl(123).endsWith("t=123")).toBe(true);
     expect(pluginErrorCode({ code: "NEED_PERMISSION" })).toBe("NEED_PERMISSION");
     expect(pluginErrorCode(new Error("fail"))).toBe("");
+  });
+
+  it("exposes the sideload build number for the status bar", () => {
+    const version = builtAppVersion();
+    expect(version.versionCode).toBeGreaterThan(0);
+    expect(version.versionName).toBe(`1.0.${version.versionCode}`);
   });
 });
