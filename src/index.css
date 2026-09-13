@@ -1863,6 +1863,124 @@ html.native-app .device {
   margin-top: 10px;
 }
 
+.match-ratings {
+  margin: 10px 0 4px;
+  padding: 10px;
+  background: var(--surface-2);
+  border-radius: 10px;
+}
+
+.match-ratings .kicker {
+  margin: 0 0 8px;
+}
+
+.match-ratings__heads {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.match-ratings__club {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.match-ratings__club--them {
+  text-align: right;
+  justify-content: flex-end;
+}
+
+.match-ratings__row + .match-ratings__row {
+  margin-top: 8px;
+}
+
+.match-ratings__label {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 4px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.match-ratings__delta {
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.match-ratings__delta.is-up {
+  color: #7dce8a;
+}
+
+.match-ratings__delta.is-down {
+  color: #f0a3a3;
+}
+
+.match-ratings__duel {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  align-items: center;
+}
+
+.match-ratings__side {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 6px;
+  align-items: center;
+}
+
+.match-ratings__side--them {
+  grid-template-columns: minmax(0, 1fr) 36px;
+}
+
+.match-ratings__side strong {
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.match-ratings__side--them strong {
+  text-align: left;
+}
+
+.match-ratings__side strong.is-up {
+  color: #7dce8a;
+}
+
+.match-ratings__side strong.is-down {
+  color: #f0a3a3;
+}
+
+.match-ratings__bar {
+  height: 10px;
+  background: #102033;
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+.match-ratings__bar--us {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.match-ratings__bar i {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+}
+
 .attr-lock {
   color: var(--muted);
   font-style: normal;

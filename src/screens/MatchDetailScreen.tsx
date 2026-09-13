@@ -3,7 +3,7 @@ import { MatchStatsPanel } from "../components/MatchStatsPanel";
 import { ClubBadge } from "../components/ClubBadge";
 import { aggressionLabel, buildLabel, pressureLabel, puckoutLabel } from "../lib/attributes";
 import { compactName, sideLabel, windSidesFor } from "../lib/display";
-import { buildPreMatchBriefing } from "../lib/briefing";
+import { buildPreMatchBriefing, matchBriefingInput } from "../lib/briefing";
 import { clubTactics, ratedSquad } from "../lib/players";
 import { resolveMatchSides, teamById } from "../lib/resolve";
 import { formatDate, formatScore, matchPlayed, stageLabel } from "../lib/scoring";
@@ -136,16 +136,7 @@ export function MatchDetailScreen({ championship, save, match, report, onBack, o
               This tie was played before match charts were kept. New championship days will store full stats.
             </p>
           ) : homeId === save.clubId || awayId === save.clubId ? (
-            buildPreMatchBriefing({
-              clubId: save.clubId,
-              match,
-              championship,
-              tactics: save.tactics,
-              sheet: save.sheet,
-              condition: save.condition,
-              seed: save.seed,
-              balance: save.balance,
-            }).notes.map((note) => (
+            buildPreMatchBriefing(matchBriefingInput(save, championship, match)).notes.map((note) => (
               <p key={note} className="tactic-copy">
                 {note}
               </p>
