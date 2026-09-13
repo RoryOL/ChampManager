@@ -38,7 +38,7 @@ import {
   setPlayerName,
 } from "../lib/multiplayer/identity";
 import { applyRemoteCampaign, freshestCampaign } from "../lib/multiplayer/merge";
-import { connectRoom, forgetRoomBroker, probeRoom, roomBroker, type JoinPreview, type RoomStatus } from "../lib/multiplayer/remote";
+import { connectRoom, forgetRoomBroker, probeRoom, type JoinPreview, type RoomStatus } from "../lib/multiplayer/remote";
 import {
   clearCampaign,
   exportCampaign,
@@ -315,6 +315,12 @@ export function useGame() {
   }, [campaign?.code, roomEpoch]);
 
   useEffect(() => {
+    if (!campaign?.code || roomStatus !== "offline") return;
+    const timer = window.setTimeout(() => setRoomEpoch((value) => value + 1), 8_000);
+    return () => window.clearTimeout(timer);
+  }, [campaign?.code, roomStatus, roomEpoch]);
+
+  useEffect(() => {
     if (!campaign) return;
     const timer = window.setInterval(() => {
       setCampaign((current) => {
@@ -396,7 +402,7 @@ export function useGame() {
   const refreshRoom = useCallback(async () => {
     const current = campaignRef.current;
     if (!current?.code) return;
-    const probe = await probeRoom(current.code, 10_000, roomBroker(current.code));
+    const probe = await probeRoom(current.code, 10_000);
     if (probe.campaign) {
       setCampaign((local) => {
         if (!local || local.code !== probe.campaign!.code) return local;
@@ -416,7 +422,7 @@ export function useGame() {
     async (payload: { name: string; clubId: string; code: string; snapshot?: string }) => {
       const snapshot = payload.snapshot ? parseCampaignInvite(payload.snapshot) : null;
       const local = loadRoom(payload.code) ?? (campaign?.code === payload.code ? campaign : null);
-      const probe = await probeRoom(payload.code, 12_000, roomBroker(payload.code));
+    const probe = await probeRoom(payload.code, 12_000);
       const room = freshestCampaign([probe.campaign, snapshot, local]);
       if (!room) {
         return {
@@ -461,7 +467,7 @@ export function useGame() {
     const snapshotCampaign = snapshot ? parseCampaignInvite(snapshot) : null;
     const local = loadRoom(code) ?? (campaign?.code === code ? campaign : null);
     const probe = code.trim().length >= 4
-      ? await probeRoom(code, 12_000, roomBroker(code))
+      ? await probeRoom(code, 12_000)
       : { connected: false, campaign: null };
     const room = freshestCampaign([probe.campaign, snapshotCampaign, local]);
     const source: JoinPreview["source"] = probe.campaign
@@ -474,6 +480,7 @@ export function useGame() {
     return {
       connected: probe.connected,
       found: Boolean(room),
+      liveFound: Boolean(probe.campaign),
       clubs: room?.seats.map((seat) => seat.clubId) ?? [],
       hostName: room?.seats.find((seat) => seat.playerId === room.hostPlayerId)?.name,
       source,

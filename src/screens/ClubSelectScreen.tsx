@@ -123,6 +123,7 @@ export function ClubSelectScreen({ onTakeCharge, onHost, onJoin, onPreviewTaken 
       onPreviewTaken?.(normaliseCode(code), snapshot) ?? {
         connected: false,
         found: false,
+        liveFound: false,
         clubs: [],
         source: "none" as const,
       },
@@ -147,9 +148,12 @@ export function ClubSelectScreen({ onTakeCharge, onHost, onJoin, onPreviewTaken 
       return "The live room is up, but nothing is published on that code yet. Check the digits, or wait for the host to stay in the lobby.";
     }
     if (preview.source === "snapshot" && preview.found) {
+      if (preview.liveFound) {
+        return "Snapshot loaded and the live lobby was found. Pick a club — the host should see you join.";
+      }
       return preview.connected
-        ? "Snapshot loaded and the live room is up. Pick a club — the host should see you join."
-        : "Snapshot loaded, but the live room is not up. You can still join locally; the host will not see you until Check room succeeds.";
+        ? "Snapshot loaded. A broker is reachable but this lobby is not on it yet. You can still join; we will keep looking so the host can see you."
+        : "Snapshot loaded, but the live room is not up. You can still join locally; we will keep looking so the host can see you.";
     }
     if (preview.found) {
       return "Found a local copy of that championship. Pick a club to rejoin.";
