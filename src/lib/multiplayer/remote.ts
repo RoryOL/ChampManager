@@ -14,7 +14,9 @@ export const BROKER_URLS = [
 const USER_AGENT = "ChampManager/1.0";
 const BROKER_STORE = "capture-the-canon-room-brokers";
 const DISCOVER_WAIT_MS = 800;
+const PROBE_WAIT_MS = 5_000;
 const ROOM_HEARTBEAT_MS = 4000;
+const REPUBLISH_MS = 400;
 
 export type RoomStatus = "offline" | "connecting" | "live";
 
@@ -27,6 +29,8 @@ export type RoomProbe = {
 export type JoinPreview = {
   connected: boolean;
   found: boolean;
+  /** True only when the live MQTT lobby for this code was actually read. */
+  liveFound: boolean;
   clubs: string[];
   hostName?: string;
   source: "live" | "snapshot" | "local" | "none";
@@ -103,14 +107,19 @@ function uniqueUrls(urls: Array<string | undefined>): string[] {
   return list;
 }
 
+function isPublicBroker(url: string): boolean {
+  return BROKER_URLS.includes(url);
+}
+
 function brokerList(code: string, options: { brokerUrl?: string; brokerUrls?: string[] }): string[] {
   if (options.brokerUrl) return [options.brokerUrl];
   if (options.brokerUrls?.length) return options.brokerUrls;
   const preferred = roomBroker(code);
-  // Once a code has a broker, stay there. Failover publishes the lobby onto a
-  // different public broker, and the host never sees the joiner.
-  if (preferred) return [preferred];
-  return BROKER_URLS;
+  // Lab brokers (and a dead pin) stay exclusive so tests do not hit the public net.
+  // Public rooms mesh every working broker: a snapshot joiner on Mosquitto still
+  // reaches a host who landed on HiveMQ.
+  if (preferred && !isPublicBroker(preferred)) return [preferred];
+  return uniqueUrls([preferred, ...BROKER_URLS]);
 }
 
 function searchBrokerList(code: string, brokerUrl?: string | string[]): string[] {
@@ -277,14 +286,24 @@ export function connectRoom(
   },
 ): { publish: (campaign: Campaign) => void; remember: (campaign: Campaign) => void; disconnect: () => void } {
   const topic = topicFor(code);
-  let client: MqttClient | null = null;
+  const attached = new Map<string, MqttClient>();
   let lastSent = "";
   let queued: Campaign | null = null;
   let best: Campaign | null = null;
   let stopped = false;
-  let republishTimer: ReturnType<typeof setTimeout> | null = null;
+  let pendingConnects = 0;
+  const republishTimers = new Set<ReturnType<typeof setTimeout>>();
   let heartbeat: ReturnType<typeof setInterval> | null = null;
   options.onStatus?.("connecting");
+
+  const anyConnected = () => [...attached.values()].some((client) => client.connected);
+
+  const reportStatus = () => {
+    if (stopped) return;
+    if (anyConnected()) options.onStatus?.("live");
+    else if (pendingConnects > 0) options.onStatus?.("connecting");
+    else options.onStatus?.("offline");
+  };
 
   const remember = (campaign: Campaign) => {
     if (normaliseCode(campaign.code) !== normaliseCode(code)) return;
@@ -302,11 +321,14 @@ export function connectRoom(
     // Throw-in is ~160KB raw and public brokers drop it; lobby JSON stays plain.
     const payload = encodeCampaign(campaign);
     remember(campaign);
-    if (!client?.connected) return;
+    const live = [...attached.values()].filter((client) => client.connected);
+    if (live.length === 0) return;
     lastSent = payload;
-    client.publish(topic, payload, { qos: 1, retain: true }, (error) => {
-      if (error) lastSent = "";
-    });
+    for (const client of live) {
+      client.publish(topic, payload, { qos: 1, retain: true }, (error) => {
+        if (error && lastSent === payload) lastSent = "";
+      });
+    }
   };
 
   const publishQueued = () => {
@@ -318,47 +340,48 @@ export function connectRoom(
     publishNow(queued);
   };
 
-  const attach = (next: MqttClient, seeded?: Campaign | null) => {
-    client = next;
+  const attach = (next: MqttClient, url: string) => {
+    attached.set(url, next);
     if (next.options) next.options.reconnectPeriod = 4000;
-    if (seeded) {
-      remember(seeded);
-      options.onCampaign(seeded);
-    }
-    let live = false;
+    let subscribed = false;
     const goLive = () => {
-      if (stopped || live) return;
-      live = true;
-      options.onStatus?.("live");
+      if (stopped || subscribed) return;
+      subscribed = true;
+      reportStatus();
       next.subscribe(topic, { qos: 1 }, () => {
-        if (republishTimer) clearTimeout(republishTimer);
-        // Let the retained championship arrive before we republish, so a stale
+        // Let retained championships arrive before we republish, so a stale
         // lobby on this phone cannot overwrite a championship that already started.
-        republishTimer = setTimeout(publishQueued, 400);
+        const timer = setTimeout(publishQueued, REPUBLISH_MS);
+        republishTimers.add(timer);
       });
-      if (heartbeat) clearInterval(heartbeat);
-      heartbeat = setInterval(() => {
-        if (stopped || !client?.connected || !queued) return;
-        publishQueued();
-      }, ROOM_HEARTBEAT_MS);
+      if (!heartbeat) {
+        heartbeat = setInterval(() => {
+          if (stopped || !queued || !anyConnected()) return;
+          publishQueued();
+        }, ROOM_HEARTBEAT_MS);
+      }
     };
-    next.on("connect", goLive);
+    next.on("connect", () => {
+      subscribed = false;
+      goLive();
+    });
     next.on("reconnect", () => {
-      live = false;
-      if (!stopped) options.onStatus?.("connecting");
+      subscribed = false;
+      if (!stopped && !anyConnected()) options.onStatus?.("connecting");
     });
     next.on("close", () => {
-      live = false;
-      if (!stopped) options.onStatus?.("offline");
+      subscribed = false;
+      reportStatus();
     });
     next.on("error", () => {
-      if (!stopped) options.onStatus?.("offline");
+      reportStatus();
     });
     next.on("message", (_topic, payload) => {
       const text = payload.toString();
       if (!text || text === lastSent) return;
       const campaign = decodeCampaign(text);
       if (!campaign || normaliseCode(campaign.code) !== normaliseCode(code)) return;
+      rememberRoomBroker(code, url);
       remember(campaign);
       options.onCampaign(campaign);
     });
@@ -369,44 +392,25 @@ export function connectRoom(
     if (stopped) return;
     const mqtt = mod.default;
     const urls = brokerList(code, options);
-    if (urls.length <= 1) {
-      const url = urls[0];
-      const next = url ? await tryBroker(mqtt, url, clientId(code)) : null;
-      if (stopped) {
-        next && closeClient(next);
-        return;
-      }
-      if (next && url) {
-        rememberRoomBroker(code, url);
-        attach(next);
-        return;
-      }
-      if (!stopped) options.onStatus?.("offline");
+    if (urls.length === 0) {
+      options.onStatus?.("offline");
       return;
     }
-
-    const { chosen } = await discoverFirst(mqtt, urls, code, DISCOVER_WAIT_MS);
-    if (stopped) {
-      closeClient(chosen?.client);
-      return;
+    pendingConnects = urls.length;
+    for (const url of urls) {
+      void tryBroker(mqtt, url, clientId(code)).then((next) => {
+        if (stopped) {
+          closeClient(next);
+          return;
+        }
+        pendingConnects -= 1;
+        if (next) {
+          rememberRoomBroker(code, url);
+          attach(next, url);
+        }
+        reportStatus();
+      });
     }
-    if (chosen) {
-      rememberRoomBroker(code, chosen.url);
-      let next = chosen.client;
-      if (!next?.connected) {
-        closeClient(next);
-        next = await tryBroker(mqtt, chosen.url, clientId(code));
-      }
-      if (stopped) {
-        closeClient(next);
-        return;
-      }
-      if (next) {
-        attach(next, chosen.campaign);
-        return;
-      }
-    }
-    if (!stopped) options.onStatus?.("offline");
   });
 
   return {
@@ -414,11 +418,14 @@ export function connectRoom(
     remember,
     disconnect: () => {
       stopped = true;
-      if (republishTimer) clearTimeout(republishTimer);
+      pendingConnects = 0;
+      for (const timer of republishTimers) clearTimeout(timer);
+      republishTimers.clear();
       if (heartbeat) clearInterval(heartbeat);
+      heartbeat = null;
       options.onStatus?.("offline");
-      closeClient(client);
-      client = null;
+      for (const client of attached.values()) closeClient(client);
+      attached.clear();
     },
   };
 }
@@ -429,7 +436,7 @@ export async function probeRoom(code: string, timeoutMs = 10_000, brokerUrl?: st
 
   const mqtt = (await import("mqtt")).default;
   const urls = searchBrokerList(normalised, brokerUrl);
-  const waitMs = Math.min(DISCOVER_WAIT_MS, Math.max(250, timeoutMs));
+  const waitMs = Math.min(PROBE_WAIT_MS, Math.max(DISCOVER_WAIT_MS, timeoutMs));
   const { chosen, connected } = await discoverFirst(mqtt, urls, normalised, waitMs);
   closeClient(chosen?.client);
   if (chosen?.campaign) {

@@ -280,4 +280,61 @@ describe("live room", () => {
     expect(found.campaign?.id).toBe(campaign.id);
     expect(found.brokerUrl).toBe(brokerUrl);
   }, 15_000);
+
+  it("lets a snapshot joiner publish onto the host broker even if they found an empty one first", async () => {
+    const emptyBroker = await Aedes.createBroker();
+    const emptyServer = createServer(emptyBroker.handle);
+    await new Promise<void>((resolve) => emptyServer.listen(0, "127.0.0.1", resolve));
+    const emptyUrl = `mqtt://127.0.0.1:${(emptyServer.address() as AddressInfo).port}`;
+
+    const created = createCampaign({
+      hostPlayerId: "host",
+      hostName: "Rory",
+      clubId: "ballyea",
+      waitHours: 0,
+      now: NOW,
+      seed: 7,
+      code: `J${Math.random().toString(36).slice(2, 7).toUpperCase()}`,
+    });
+    const joined = addSeat(created, { playerId: "guest", name: "Siobhan", clubId: "inagh-kilnamona" });
+    if (!joined.ok) throw new Error(joined.error);
+
+    let hostCopy = created;
+    const host = openRoom(created.code, {
+      onCampaign: (remote) => {
+        const applied = applyRemoteCampaign(hostCopy, remote);
+        hostCopy = applied.campaign;
+        if (applied.publish) host.publish(applied.publish);
+      },
+    });
+    await waitUntilLive(created.code);
+    host.publish(created);
+
+    const guest = connectRoom(created.code, {
+      brokerUrls: [emptyUrl, brokerUrl],
+      onCampaign: (remote) => {
+        const applied = applyRemoteCampaign(joined.campaign, remote);
+        if (applied.publish) guest.publish(applied.publish);
+        else guest.publish(joined.campaign);
+      },
+    });
+    guest.publish(joined.campaign);
+
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("host did not see the snapshot joiner")), 10_000);
+      const wait = setInterval(() => {
+        if (hostCopy.seats.some((seat) => seat.clubId === "inagh-kilnamona")) {
+          clearInterval(wait);
+          clearTimeout(timer);
+          resolve();
+        }
+      }, 50);
+    });
+
+    host.disconnect();
+    guest.disconnect();
+    await new Promise<void>((resolve) => emptyBroker.close(() => resolve()));
+    await new Promise<void>((resolve) => emptyServer.close(() => resolve()));
+    expect(hostCopy.seats.map((seat) => seat.clubId).sort()).toEqual(["ballyea", "inagh-kilnamona"]);
+  }, 20_000);
 });
