@@ -17,6 +17,7 @@ import { newsItem } from "./news";
 import { ratedSquad, computeOverall } from "./players";
 import { calendarDate } from "./scoring";
 import { championshipWinnerId } from "./season";
+import { createRng, seedFrom } from "./rng";
 import { defaultCondition, ensureCondition, squadNames } from "./training";
 
 /**
@@ -27,6 +28,11 @@ import { defaultCondition, ensureCondition, squadNames } from "./training";
  * From 30, attributes slip. A full summer slows that drop; a season on the
  * bench steepens it. Pace goes first. Composure, vision and hurling under
  * pressure can still rise into the early thirties.
+ *
+ * Training lifts from the year stack on top of that. Only the upward work
+ * is kept, and only a share of it: more at 19, little past 35, with a
+ * winter-to-winter swing so the same player does not bank the same fraction
+ * every time. Neglected stats that drifted down in training clear.
  */
 
 export const YOUTH_FULL_AGE = 19;
@@ -120,6 +126,17 @@ export type AttributeStep = {
   after: number;
   /** Fractional change applied this winter, before the bank crossed an integer. */
   delta: number;
+  /** Natural winter change, before any training is banked. */
+  natural: number;
+  /** Share of this year's positive training lift that stuck. */
+  trainingKept: number;
+};
+
+/** Positive training lifts from the season just finished. */
+export type SeasonTraining = {
+  boosts?: Partial<Record<AttributeKey, number>>;
+  /** Stable seed so the same winter keeps the same fraction. */
+  seed: number;
 };
 
 export type PlayerAdvance = {
@@ -195,6 +212,33 @@ function maturityFormFactor(form: number): number {
   return Math.max(0.2, 0.62 + factor * 0.38);
 }
 
+/**
+ * Mean share of a positive training lift that becomes part of the card.
+ * Quick at 19, still useful through the mid-twenties, thin from 30.
+ */
+export function trainingKeepBase(age: number): number {
+  if (age <= 19) return 0.34;
+  if (age >= 38) return 0.05;
+  if (age <= 25) return 0.34 - ((age - 19) / 6) * 0.12;
+  if (age <= 30) return 0.22 - ((age - 25) / 5) * 0.07;
+  return 0.15 - Math.min(1, (age - 30) / 8) * 0.1;
+}
+
+/** Age sets the share. `roll` in 0–1 swings it by about ±0.11. */
+export function trainingKeepShare(age: number, roll: number): number {
+  const swing = (Math.max(0, Math.min(1, roll)) - 0.5) * 0.22;
+  return Math.max(0, Math.min(0.55, trainingKeepBase(age) + swing));
+}
+
+export function retainedTrainingDelta(age: number, boost: number, roll: number): number {
+  if (!(boost > 0)) return 0;
+  return Math.round(boost * trainingKeepShare(age, roll) * 1000) / 1000;
+}
+
+function trainingRoll(seed: number, name: string): number {
+  return createRng(seedFrom(`${seed}:${name}:training-keep`))();
+}
+
 function emptyRatings(ratings: PlayerRatings): Record<AttributeKey, number> {
   const next = {} as Record<AttributeKey, number>;
   for (const key of ATTRIBUTE_KEYS) next[key] = ratings[key];
@@ -267,14 +311,20 @@ function applyBank(value: number, bank: number, delta: number): { value: number;
   return { value: next, bank: Math.round(carried * 1000) / 1000 };
 }
 
-export function advancePlayer(player: RatedPlayer, usage: SeasonUsage, bank: DevelopmentBank = {}): PlayerAdvance {
+export function advancePlayer(
+  player: RatedPlayer,
+  usage: SeasonUsage,
+  bank: DevelopmentBank = {},
+  training?: SeasonTraining,
+): PlayerAdvance {
   const current = emptyRatings(player.ratings);
   const next = { ...current };
   const nextBank: DevelopmentBank = {};
   const steps: AttributeStep[] = [];
+  const roll = training ? trainingRoll(training.seed, player.name) : 0.5;
 
   for (const key of ATTRIBUTE_KEYS) {
-    const delta = attributeSeasonDelta({
+    const natural = attributeSeasonDelta({
       age: player.age,
       games: usage.games,
       form: usage.form,
@@ -283,10 +333,19 @@ export function advancePlayer(player: RatedPlayer, usage: SeasonUsage, bank: Dev
       position: player.position,
       overall: player.ratings.overall,
     });
+    const trainingKept = training ? retainedTrainingDelta(player.age, training.boosts?.[key] ?? 0, roll) : 0;
+    const delta = natural + trainingKept;
     const applied = applyBank(current[key], bank[key] ?? 0, delta);
     next[key] = applied.value;
     if (applied.bank !== 0) nextBank[key] = applied.bank;
-    steps.push({ key, before: current[key], after: applied.value, delta: Math.round(delta * 1000) / 1000 });
+    steps.push({
+      key,
+      before: current[key],
+      after: applied.value,
+      delta: Math.round(delta * 1000) / 1000,
+      natural: Math.round(natural * 1000) / 1000,
+      trainingKept,
+    });
   }
 
   const ratings: PlayerRatings = {
@@ -348,6 +407,8 @@ type WinterChange = {
   overallDelta: number;
   up: AttributeKey[];
   down: AttributeKey[];
+  /** Positive training lifts from the year that were written onto the card. */
+  trainingKept: number;
 };
 
 function advanceClub(save: GameSave, teamId: string): { book: Record<string, PlayerCareer>; changes: WinterChange[] } {
@@ -361,21 +422,26 @@ function advanceClub(save: GameSave, teamId: string): { book: Record<string, Pla
       games: gamesInReports(save.reports, teamId, player.name),
       form: formValue(condition[player.name]),
     };
-    const advanced = advancePlayer(player, usage, existing[player.name]?.bank ?? {});
+    const advanced = advancePlayer(player, usage, existing[player.name]?.bank ?? {}, {
+      boosts: condition[player.name]?.boosts,
+      seed: save.seed + (save.year ?? 0),
+    });
     const up = advanced.steps.filter((step) => step.after > step.before).map((step) => step.key);
     const down = advanced.steps.filter((step) => step.after < step.before).map((step) => step.key);
+    const trainingKept = advanced.steps.reduce((sum, step) => sum + step.trainingKept, 0);
     book[player.name] = {
       age: advanced.age,
       ratings: careerRatingsOf(advanced.ratings),
       bank: Object.keys(advanced.bank).length > 0 ? advanced.bank : undefined,
     };
-    if (up.length > 0 || down.length > 0 || advanced.ratings.overall !== player.ratings.overall) {
+    if (up.length > 0 || down.length > 0 || advanced.ratings.overall !== player.ratings.overall || trainingKept > 0) {
       changes.push({
         name: player.name,
         age: advanced.age,
         overallDelta: advanced.ratings.overall - player.ratings.overall,
         up,
         down,
+        trainingKept,
       });
     }
   }
@@ -431,6 +497,10 @@ export function winterPanelNews(changes: WinterChange[], year: number, seed: num
       "A year older, and the hurling on the card is much the same. The lads who were going to come on needed games and form.",
     );
   }
+  const kept = changes.reduce((sum, change) => sum + change.trainingKept, 0);
+  if (kept >= 1.5) {
+    sentences.push("Some of the year's training has stuck. The younger lads kept more of it.");
+  }
   sentences.push("Same panel. New summer.");
   return newsItem({
     id: `${seed}-winter-${year}`,
@@ -459,7 +529,7 @@ function resetRival(runtime: ClubRuntime, names: string[], seed: number): ClubRu
   };
 }
 
-/** Roll the same panels into the next Clare SHC. Training lifts clear. Natural ratings move. */
+/** Roll the same panels into the next Clare SHC. A share of the year's training is written onto the card, then the lifts clear. */
 export function continueChampionship(save: GameSave): GameSave {
   const finished = championshipFromSave(save);
   const year = (save.year ?? finished.year) + 1;

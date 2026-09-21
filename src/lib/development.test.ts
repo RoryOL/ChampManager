@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { championshipFromSave, migrateSave, newSave } from "./gameStorage";
-import { advancePlayer, continueChampionship, youthAgeFactor } from "./development";
+import { advancePlayer, continueChampionship, trainingKeepShare, youthAgeFactor } from "./development";
 import { ratedSquad } from "./players";
 import type { DevelopmentBank } from "./development";
 import type { RatedPlayer } from "../types";
@@ -64,6 +64,35 @@ describe("winter development", () => {
     );
     expect(later.ratings.composure).toBeGreaterThan(ryan.ratings.composure);
     expect(later.ratings.overall).toBeGreaterThanOrEqual(ryan.ratings.overall - 1);
+  });
+
+  it("keeps a share of the year's training, more of it when the player is young", () => {
+    expect(trainingKeepShare(19, 0.5)).toBeGreaterThan(trainingKeepShare(25, 0.5));
+    expect(trainingKeepShare(25, 0.5)).toBeGreaterThan(trainingKeepShare(34, 0.5));
+    expect(trainingKeepShare(19, 1)).toBeGreaterThan(trainingKeepShare(19, 0));
+    expect(trainingKeepShare(38, 0)).toBe(0);
+
+    const thomas = find("st-josephs", "Thomas O'Connor");
+    const tony = find("ballyea", "Tony Kelly");
+    const boosts = { speed: 1.2, shooting: 0.8 };
+    const young = advancePlayer(thomas, { games: 5, form: 74 }, {}, { boosts, seed: 11 });
+    const bare = advancePlayer(thomas, { games: 5, form: 74 }, {}, { boosts: {}, seed: 11 });
+    const old = advancePlayer(tony, { games: 5, form: 70 }, {}, { boosts, seed: 11 });
+    const youngSpeed = young.steps.find((step) => step.key === "speed")!;
+    const bareSpeed = bare.steps.find((step) => step.key === "speed")!;
+    const oldSpeed = old.steps.find((step) => step.key === "speed")!;
+    expect(youngSpeed.trainingKept).toBeGreaterThan(0);
+    expect(youngSpeed.trainingKept).toBeLessThan(1.2);
+    expect(youngSpeed.delta).toBeCloseTo(youngSpeed.natural + youngSpeed.trainingKept, 5);
+    expect(youngSpeed.delta).toBeGreaterThan(bareSpeed.delta);
+    expect(youngSpeed.trainingKept).toBeGreaterThan(oldSpeed.trainingKept);
+
+    const neglected = advancePlayer(thomas, { games: 5, form: 74 }, {}, { boosts: { speed: -0.8 }, seed: 11 });
+    expect(neglected.steps.find((step) => step.key === "speed")?.trainingKept).toBe(0);
+    expect(neglected.steps.find((step) => step.key === "speed")?.delta).toBe(bareSpeed.delta);
+
+    const otherWinter = advancePlayer(thomas, { games: 5, form: 74 }, {}, { boosts, seed: 99 });
+    expect(otherWinter.steps.find((step) => step.key === "speed")?.trainingKept).not.toBe(youngSpeed.trainingKept);
   });
 
   it("drops pace faster when a player over 29 does not play", () => {
@@ -131,6 +160,48 @@ describe("continue championship", () => {
     expect(again.year).toBe(2028);
     expect(thomasLater.age).toBe(thomas.age + 2);
     expect(thomasLater.ratings.speed).toBe(thomasAfter.ratings.speed);
+  });
+
+  it("writes a share of training onto the card and clears the seasonal lift", () => {
+    const rolled = newSave("st-josephs");
+    const base = { ...rolled, seed: 7 };
+    const thomas = ratedSquad("st-josephs", base).find((player) => player.name === "Thomas O'Connor")!;
+    const reports = Object.fromEntries(
+      [1, 2, 3, 4, 5].map((index) => [
+        `m${index}`,
+        { players: [{ teamId: "st-josephs", name: thomas.name, minutes: 58 }] },
+      ]),
+    );
+    const condition = {
+      ...base.condition,
+      [thomas.name]: {
+        ...(base.condition[thomas.name] ?? { fatigue: 0, sharpness: 40 }),
+        form: 74,
+        boosts: { shooting: 1.6 },
+      },
+    };
+    const withTraining = continueChampionship({
+      ...base,
+      condition,
+      reports: reports as typeof base.reports,
+    });
+    const without = continueChampionship({
+      ...base,
+      condition: {
+        ...condition,
+        [thomas.name]: { ...condition[thomas.name], boosts: undefined },
+      },
+      reports: reports as typeof base.reports,
+    });
+    const trained = withTraining.careers?.["st-josephs"]?.[thomas.name];
+    const plain = without.careers?.["st-josephs"]?.[thomas.name];
+    const kept =
+      (trained?.ratings.shooting ?? 0) -
+      (plain?.ratings.shooting ?? 0) +
+      ((trained?.bank?.shooting ?? 0) - (plain?.bank?.shooting ?? 0));
+    expect(kept).toBeGreaterThan(0.2);
+    expect(kept).toBeLessThan(1.6);
+    expect(withTraining.condition[thomas.name]?.boosts).toBeUndefined();
   });
 
   it("keeps a carried panel on a migrated save", () => {

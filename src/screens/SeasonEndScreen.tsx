@@ -126,7 +126,7 @@ export function SeasonEndScreen({
           <p>
             {together
               ? "The Canon Hamilton is decided. Leave this championship, or stay a while with the table and the news."
-              : `Start the ${championship.year + 1} championship in charge of ${clubName}? The same panel comes back. Young lads who played and finished in form come on over the winter, quickly at 19 and hardly at all by 25. From 30 the attributes slip, and a summer on the bench costs more than a summer in the jersey.`}
+              : `Start the ${championship.year + 1} championship in charge of ${clubName}? The same panel comes back. Young lads who played and finished in form come on over the winter, quickly at 19 and hardly at all by 25. From 30 the attributes slip, and a summer on the bench costs more than a summer in the jersey. Some of the year's training stays on the card, more of it when they are young.`}
           </p>
           <div className="row-actions">
             <button type="button" className="btn" onClick={onStartNewSeason}>
