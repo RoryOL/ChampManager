@@ -234,10 +234,24 @@ export type Difficulty = "junior" | "intermediate" | "senior" | "intercounty";
 /** How panels are generated when a season starts. */
 export type SquadBalance = "standard" | "balanced";
 
-/** Career seed plus panel mode, accepted by `ratedSquad` and friends. */
+/** Natural 1–20 card, without familiarity or the derived overall. */
+export type CareerRatings = Omit<PlayerRatings, "familiarity" | "overall">;
+
+/** Age and natural ratings carried from one championship into the next. */
+export type PlayerCareer = {
+  age: number;
+  ratings: CareerRatings;
+  /** Fractional progress toward the next integer change. */
+  bank?: Partial<CareerRatings>;
+};
+
+/** club id → player name → winter card */
+export type CareerBook = Record<string, Record<string, PlayerCareer>>;
+
 export type RatingsContext = {
   seed?: number;
   balance?: SquadBalance;
+  careers?: CareerBook;
 };
 
 export type NewsKind = "chairman" | "match" | "press" | "injury" | "training" | "recovery" | "briefing";
@@ -477,6 +491,11 @@ export type GameSave = {
   rivals: Record<string, ClubRuntime>;
   nextMatchPrep?: MatchPrep;
   seasonWrap?: SeasonWrap;
+  /** Championship year. Omitted on a first season, which is 2026. */
+  year?: number;
+  defendingChampionId?: string;
+  /** Natural ratings after winters. Absent until the first new season. */
+  careers?: CareerBook;
 };
 
 export type LivePhase =

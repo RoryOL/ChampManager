@@ -6,6 +6,7 @@ import type {
   PositionFamiliarity,
   PositionLine,
   RatedPlayer,
+  PlayerCareer,
   RatingsContext,
   SquadBalance,
   Tactics,
@@ -487,12 +488,28 @@ function balancedPack(gameSeed?: number): Map<string, RatedPlayer[]> {
   return pack;
 }
 
-export function ratedSquad(teamId: string, ctx?: number | RatingsContext): RatedPlayer[] {
-  const { seed, balance } = parseRatings(ctx);
-  if (balance === "balanced") {
-    return balancedPack(seed).get(teamId) ?? buildRatedSquad(teamId, seed);
+function overlayCareer(player: RatedPlayer, career: PlayerCareer | undefined): RatedPlayer {
+  if (!career) return player;
+  const ratings = { ...player.ratings };
+  for (const key of ATTRIBUTE_KEYS) {
+    const value = career.ratings[key];
+    if (typeof value !== "number" || !Number.isFinite(value)) continue;
+    ratings[key] = clampStat(value);
   }
-  return buildRatedSquad(teamId, seed);
+  ratings.overall = computeOverall(ratings, ratings.familiarity, player.position);
+  const age = Number.isFinite(career.age) ? Math.max(16, Math.min(50, Math.round(career.age))) : player.age;
+  return { ...player, age, ratings };
+}
+
+export function ratedSquad(teamId: string, ctx?: number | RatingsContext): RatedPlayer[] {
+  const { seed, balance, careers } = parseRatings(ctx);
+  const generated =
+    balance === "balanced"
+      ? (balancedPack(seed).get(teamId) ?? buildRatedSquad(teamId, seed))
+      : buildRatedSquad(teamId, seed);
+  const book = careers?.[teamId];
+  if (!book) return generated;
+  return generated.map((player) => overlayCareer(player, book[player.name]));
 }
 
 /** Fifteen starters plus the rest of the panel on the bench. */

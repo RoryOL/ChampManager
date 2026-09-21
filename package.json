@@ -10,6 +10,7 @@
     "test": "vitest run",
     "sim:tactics": "vite-node scripts/tactics-sim.ts",
     "sim:championship": "vite-node scripts/championship-sim.ts",
+    "sim:development": "vite-node scripts/development-sim.ts",
     "cap:sync": "npm run build && npx cap sync android",
     "apk": "npm run cap:sync && npm run apk:gradle",
     "apk:gradle": "cd android && ./gradlew assembleDebug -PsideloadVersionCode=\"$(git rev-list --count HEAD)\" && cp app/build/outputs/apk/debug/app-debug.apk ../ChampManager.apk"

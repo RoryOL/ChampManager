@@ -40,12 +40,17 @@ export function balanceCopy(balance: SquadBalance): string {
 export function parseRatings(ctx?: number | RatingsContext | null): {
   seed: number | undefined;
   balance: SquadBalance;
+  careers: RatingsContext["careers"];
 } {
-  if (ctx == null) return { seed: undefined, balance: "standard" };
-  if (typeof ctx === "number") return { seed: ctx, balance: "standard" };
-  return { seed: ctx.seed, balance: migrateBalance(ctx.balance) };
+  if (ctx == null) return { seed: undefined, balance: "standard", careers: undefined };
+  if (typeof ctx === "number") return { seed: ctx, balance: "standard", careers: undefined };
+  return { seed: ctx.seed, balance: migrateBalance(ctx.balance), careers: ctx.careers };
 }
 
-export function ratingsCtx(seed: number | undefined, balance?: SquadBalance): RatingsContext {
-  return { seed, balance };
+export function ratingsCtx(
+  seed: number | undefined,
+  balance?: SquadBalance,
+  careers?: RatingsContext["careers"],
+): RatingsContext {
+  return { seed, balance, careers };
 }

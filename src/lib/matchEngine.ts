@@ -2571,6 +2571,8 @@ export function simulateMatch(options: {
     awayTactics,
     gameSeed: options.gameSeed,
     balance: options.balance,
+    homeSquad: rawHomeRoster,
+    awaySquad: rawAwayRoster,
     homeChaseEffort,
     awayChaseEffort,
   });
@@ -2664,6 +2666,8 @@ export function applyKnockoutExtraTime(
     awayName: options.awayName ?? "the other side",
     clubId: options.clubId,
     condition: options.clubId === sim.homeId ? options.homeCondition : options.awayCondition,
+    homeSquad: options.homeSquad,
+    awaySquad: options.awaySquad,
   };
   const playExtra = (period: "et1" | "et2", from: SimulatedMatch) =>
     simulateMatch({

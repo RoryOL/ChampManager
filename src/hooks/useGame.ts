@@ -60,7 +60,8 @@ import { resolveMatchSides, teamById } from "../lib/resolve";
 import { nextBatch } from "../lib/schedule";
 import { championshipWinnerId, seasonFinaleStep } from "../lib/season";
 import { knockoutNeedsExtraTime, replayFixture, scoresAreLevel, withReplayFixture } from "../lib/knockout";
-import { formatDate, formatScore, matchPlayed, matchStageLabel, scoreTotal } from "../lib/scoring";
+import { calendarDate, formatDate, formatScore, matchPlayed, matchStageLabel, scoreTotal } from "../lib/scoring";
+import { continueChampionship } from "../lib/development";
 import {
   applyInjury,
   injuredNamesFromEvents,
@@ -197,7 +198,12 @@ function preparedRivals(save: GameSave, championship: Championship): GameSave["r
     reports: save.reports,
     userCondition: save.condition,
     balance: save.balance,
+    careers: save.careers,
   });
+}
+
+function seasonDate(save: GameSave, iso: string): string {
+  return calendarDate(iso, save.year ?? seedChampionship.year);
 }
 
 function decorateUserMatch(
@@ -547,8 +553,10 @@ export function useGame() {
       return;
     }
     if (!save) return;
-    takeCharge(save.clubId, save.difficulty, save.balance);
-  }, [campaign, leaveCampaign, save, takeCharge]);
+    commitSolo(continueChampionship(save));
+    setLive(null);
+    setPicked(null);
+  }, [campaign, commitSolo, leaveCampaign, save]);
 
   const setTactics = useCallback(
     (tactics: Tactics) => {
@@ -980,6 +988,7 @@ export function useGame() {
           base.clubId,
           base.seed,
           base.balance,
+          base.careers,
         ),
       };
       commitSolo(next);
@@ -1053,6 +1062,7 @@ export function useGame() {
             seed: save.seed,
             difficulty: save.difficulty,
             balance: save.balance,
+            careers: save.careers,
           })
         : null;
       const extraPause = live.phase === "extra-time" || live.phase === "extra-half";
@@ -1117,6 +1127,7 @@ export function useGame() {
         homeName: homeTeam ? compactName(homeTeam) : "one side",
         awayName: awayTeam ? compactName(awayTeam) : "the other side",
         condition: save.condition,
+        careers: save.careers,
       });
       const injuries = [...live.injuries, ...decorated.injuries];
       const join = first.events.length;
@@ -1321,7 +1332,7 @@ export function useGame() {
       const club = teamById(championship, save.clubId);
       const date =
         save.phase === "preseason"
-          ? (PRESEASON_DATES[save.preseasonWeek - 1] ?? PRESEASON_DATES.at(-1) ?? "")
+          ? seasonDate(save, PRESEASON_DATES[save.preseasonWeek - 1] ?? PRESEASON_DATES.at(-1) ?? "")
           : championship.matches.find((match) => !matchPlayed(match))?.date ?? "";
       const sessionsDone = save.sessionsDone ?? 0;
       const result = applyWeekSession({
@@ -1369,7 +1380,7 @@ export function useGame() {
               newsItem({
                 id: `${save.seed}-preseason-done`,
                 kind: "training",
-                date: "2026-07-23",
+                date: seasonDate(save, "2026-07-23"),
                 title: "Championship week",
                 body: `${result.summary} Preseason is over. The panel have their legs back. Work one aspect before Round 1, or go straight to the match.`,
               }),
@@ -1391,7 +1402,7 @@ export function useGame() {
             newsItem({
               id: `${save.seed}-coach-${save.preseasonWeek}`,
               kind: "briefing",
-              date: week > PRESEASON_WEEKS ? "2026-07-23" : date,
+              date: week > PRESEASON_WEEKS ? seasonDate(save, "2026-07-23") : date,
               title: coach.title,
               body: coach.body,
               tone: coach.tone,
@@ -1466,7 +1477,7 @@ export function useGame() {
       const club = teamById(championship, save.clubId);
       const date =
         save.phase === "preseason"
-          ? (PRESEASON_DATES[save.preseasonWeek - 1] ?? PRESEASON_DATES.at(-1) ?? "")
+          ? seasonDate(save, PRESEASON_DATES[save.preseasonWeek - 1] ?? PRESEASON_DATES.at(-1) ?? "")
           : championship.matches.find((match) => !matchPlayed(match))?.date ?? "";
       const sessionsDone = save.sessionsDone ?? 0;
       const result = applyFullTrainingWeek({
@@ -1513,7 +1524,7 @@ export function useGame() {
             newsItem({
               id: `${save.seed}-preseason-done`,
               kind: "training",
-              date: "2026-07-23",
+              date: seasonDate(save, "2026-07-23"),
               title: "Championship week",
               body: `${result.summary} Preseason is over. The panel have their legs back. Work one aspect before Round 1, or go straight to the match.`,
             }),
@@ -1546,7 +1557,7 @@ export function useGame() {
             newsItem({
               id: `${save.seed}-coach-${save.preseasonWeek}`,
               kind: "briefing",
-              date: week > PRESEASON_WEEKS ? "2026-07-23" : date,
+              date: week > PRESEASON_WEEKS ? seasonDate(save, "2026-07-23") : date,
               title: coach.title,
               body: coach.body,
               tone: coach.tone,
