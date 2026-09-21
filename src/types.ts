@@ -237,12 +237,24 @@ export type SquadBalance = "standard" | "balanced";
 /** Natural 1–20 card, without familiarity or the derived overall. */
 export type CareerRatings = Omit<PlayerRatings, "familiarity" | "overall">;
 
+/** A hurler who was not on the original panel. */
+export type SquadJoin = {
+  number: number;
+  position: PositionLine;
+  grade: PlayerGrade;
+  familiarity: PositionFamiliarity;
+};
+
 /** Age and natural ratings carried from one championship into the next. */
 export type PlayerCareer = {
   age: number;
   ratings: CareerRatings;
   /** Fractional progress toward the next integer change. */
   bank?: Partial<CareerRatings>;
+  /** Set when this name came in as a recruit. Copied forward each winter. */
+  joined?: SquadJoin;
+  /** Called it a day. Kept so the original panel name does not reappear. */
+  retired?: boolean;
 };
 
 /** club id → player name → winter card */

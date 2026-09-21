@@ -34,6 +34,10 @@ import type {
   NewsItem,
   PlayerCareer,
   PlayerCondition,
+  PlayerGrade,
+  PositionFamiliarity,
+  PositionLine,
+  SquadJoin,
   Score,
   SeasonWrap,
   SquadBalance,
@@ -328,6 +332,29 @@ function migrateBank(raw: unknown): PlayerCareer["bank"] {
   return Object.keys(bank).length > 0 ? bank : undefined;
 }
 
+function migrateJoined(raw: unknown): SquadJoin | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const parsed = raw as { number?: unknown; position?: unknown; grade?: unknown; familiarity?: unknown };
+  const lines: PositionLine[] = ["GK", "FB", "HB", "MF", "HF", "FF"];
+  if (!lines.includes(parsed.position as PositionLine)) return undefined;
+  const grades: PlayerGrade[] = ["A", "B", "C", "D"];
+  if (!grades.includes(parsed.grade as PlayerGrade)) return undefined;
+  if (typeof parsed.number !== "number" || !Number.isFinite(parsed.number)) return undefined;
+  if (!parsed.familiarity || typeof parsed.familiarity !== "object") return undefined;
+  const familiarity = {} as PositionFamiliarity;
+  for (const line of lines) {
+    const value = (parsed.familiarity as Record<string, unknown>)[line];
+    if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
+    familiarity[line] = clampStat(value);
+  }
+  return {
+    number: Math.max(1, Math.round(parsed.number)),
+    position: parsed.position as PositionLine,
+    grade: parsed.grade as PlayerGrade,
+    familiarity,
+  };
+}
+
 function migrateCareers(raw: unknown): CareerBook | undefined {
   if (!raw || typeof raw !== "object") return undefined;
   const book: CareerBook = {};
@@ -337,7 +364,7 @@ function migrateCareers(raw: unknown): CareerBook | undefined {
     const players: Record<string, PlayerCareer> = {};
     for (const [name, career] of Object.entries(squad as Record<string, unknown>)) {
       if (!career || typeof career !== "object") continue;
-      const parsed = career as { age?: unknown; ratings?: unknown; bank?: unknown };
+      const parsed = career as { age?: unknown; ratings?: unknown; bank?: unknown; joined?: unknown; retired?: unknown };
       if (typeof parsed.age !== "number" || !Number.isFinite(parsed.age)) continue;
       if (!parsed.ratings || typeof parsed.ratings !== "object") continue;
       const ratings = {} as CareerRatings;
@@ -349,7 +376,14 @@ function migrateCareers(raw: unknown): CareerBook | undefined {
         count += 1;
       }
       if (count !== ATTRIBUTE_KEYS.length) continue;
-      players[name] = { age: Math.round(parsed.age), ratings, bank: migrateBank(parsed.bank) };
+      const joined = migrateJoined(parsed.joined);
+      players[name] = {
+        age: Math.round(parsed.age),
+        ratings,
+        bank: migrateBank(parsed.bank),
+        ...(joined ? { joined } : {}),
+        ...(parsed.retired === true ? { retired: true } : {}),
+      };
     }
     if (Object.keys(players).length > 0) book[clubId] = players;
   }

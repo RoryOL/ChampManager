@@ -489,7 +489,7 @@ function balancedPack(gameSeed?: number): Map<string, RatedPlayer[]> {
 }
 
 function overlayCareer(player: RatedPlayer, career: PlayerCareer | undefined): RatedPlayer {
-  if (!career) return player;
+  if (!career || career.retired) return player;
   const ratings = { ...player.ratings };
   for (const key of ATTRIBUTE_KEYS) {
     const value = career.ratings[key];
@@ -501,6 +501,27 @@ function overlayCareer(player: RatedPlayer, career: PlayerCareer | undefined): R
   return { ...player, age, ratings };
 }
 
+function recruitFromCareer(name: string, career: PlayerCareer): RatedPlayer | null {
+  const joined = career.joined;
+  if (!joined || career.retired) return null;
+  const familiarity = joined.familiarity;
+  const ratings = {
+    ...career.ratings,
+    familiarity,
+    overall: computeOverall(career.ratings, familiarity, joined.position),
+  };
+  return {
+    name,
+    number: joined.number,
+    starts: 0,
+    appearances: 0,
+    position: joined.position,
+    age: Math.max(16, Math.min(50, Math.round(career.age))),
+    grade: joined.grade,
+    ratings,
+  };
+}
+
 export function ratedSquad(teamId: string, ctx?: number | RatingsContext): RatedPlayer[] {
   const { seed, balance, careers } = parseRatings(ctx);
   const generated =
@@ -509,7 +530,18 @@ export function ratedSquad(teamId: string, ctx?: number | RatingsContext): Rated
       : buildRatedSquad(teamId, seed);
   const book = careers?.[teamId];
   if (!book) return generated;
-  return generated.map((player) => overlayCareer(player, book[player.name]));
+  const active = generated
+    .filter((player) => !book[player.name]?.retired)
+    .map((player) => overlayCareer(player, book[player.name]));
+  const present = new Set(active.map((player) => player.name));
+  const recruits: RatedPlayer[] = [];
+  for (const [name, career] of Object.entries(book)) {
+    if (present.has(name)) continue;
+    const recruit = recruitFromCareer(name, career);
+    if (recruit) recruits.push(recruit);
+  }
+  recruits.sort((a, b) => a.number - b.number || a.name.localeCompare(b.name));
+  return [...active, ...recruits];
 }
 
 /** Fifteen starters plus the rest of the panel on the bench. */

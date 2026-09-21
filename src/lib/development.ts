@@ -14,11 +14,13 @@ import { ATTRIBUTE_KEYS, ATTRIBUTE_LABELS, positionWeight, type AttributeKey } f
 import { formValue, withStartingForm } from "./form";
 import { championshipFromSave } from "./gameStorage";
 import { newsItem } from "./news";
-import { ratedSquad, computeOverall } from "./players";
+import { ratedSquad, computeOverall, expandSheetToPanel } from "./players";
 import { calendarDate } from "./scoring";
 import { championshipWinnerId } from "./season";
 import { createRng, seedFrom } from "./rng";
 import { defaultCondition, ensureCondition, squadNames } from "./training";
+import { activeNames, carryPanel, scrubTactics, settlePanels, STAR_OVERALL, type PanelMove } from "./turnover";
+import { compactName } from "./display";
 
 /**
  * Winter development between championships.
@@ -433,6 +435,7 @@ function advanceClub(save: GameSave, teamId: string): { book: Record<string, Pla
       age: advanced.age,
       ratings: careerRatingsOf(advanced.ratings),
       bank: Object.keys(advanced.bank).length > 0 ? advanced.bank : undefined,
+      joined: existing[player.name]?.joined,
     };
     if (up.length > 0 || down.length > 0 || advanced.ratings.overall !== player.ratings.overall || trainingKept > 0) {
       changes.push({
@@ -445,6 +448,7 @@ function advanceClub(save: GameSave, teamId: string): { book: Record<string, Pla
       });
     }
   }
+  carryPanel(existing, book);
   return { book, changes };
 }
 
@@ -458,7 +462,38 @@ function attrPhrase(keys: AttributeKey[]): string {
   return joinNames(keys.slice(0, 3).map((key) => ATTRIBUTE_LABELS[key].toLowerCase()));
 }
 
-export function winterPanelNews(changes: WinterChange[], year: number, seed: number): NewsItem {
+function panelSentences(move: PanelMove | undefined, elsewhere: PanelMove[]): string[] {
+  const sentences: string[] = [];
+  if (move && move.retired.length > 0) {
+    const who = joinNames(move.retired.slice(0, 3).map((player) => player.name));
+    sentences.push(`${who} ${move.retired.length === 1 ? "has" : "have"} called it a day.`);
+  }
+  const promising = move?.arrived.find((player) => player.promising);
+  if (promising) {
+    sentences.push(`${promising.name} (${promising.age}) comes in with a real shout already.`);
+  } else if (move && move.arrived.length > 0) {
+    const who = joinNames(move.arrived.slice(0, 2).map((player) => `${player.name} (${player.age})`));
+    sentences.push(`${who} ${move.arrived.length === 1 ? "joins" : "join"} the panel.`);
+  }
+  const star = elsewhere
+    .flatMap((club) => club.retired.filter((player) => player.overall >= STAR_OVERALL).map((player) => ({ ...player, clubId: club.clubId })))
+    .sort((a, b) => b.overall - a.overall)[0];
+  if (star) {
+    const club = seedChampionship.teams.find((team) => team.id === star.clubId);
+    sentences.push(`${star.name} has stepped away${club ? ` from ${compactName(club)}` : ""}.`);
+  }
+  return sentences;
+}
+
+export function winterPanelNews(
+  changes: WinterChange[],
+  year: number,
+  seed: number,
+  move?: PanelMove,
+  elsewhere: PanelMove[] = [],
+): NewsItem {
+  const gone = new Set(move?.retired.map((player) => player.name) ?? []);
+  changes = changes.filter((change) => !gone.has(change.name));
   const risers = changes
     .filter((change) => change.overallDelta > 0 || (change.up.length > 0 && change.down.length === 0))
     .sort((a, b) => b.overallDelta - a.overallDelta || b.up.length - a.up.length);
@@ -501,7 +536,10 @@ export function winterPanelNews(changes: WinterChange[], year: number, seed: num
   if (kept >= 1.5) {
     sentences.push("Some of the year's training has stuck. The younger lads kept more of it.");
   }
-  sentences.push("Same panel. New summer.");
+  const panel = panelSentences(move, elsewhere);
+  sentences.push(...panel);
+  const changed = (move?.retired.length ?? 0) > 0 || (move?.arrived.length ?? 0) > 0;
+  sentences.push(changed ? "New summer." : "Same panel. New summer.");
   return newsItem({
     id: `${seed}-winter-${year}`,
     kind: "press",
@@ -513,9 +551,12 @@ export function winterPanelNews(changes: WinterChange[], year: number, seed: num
   });
 }
 
-function resetRival(runtime: ClubRuntime, names: string[], seed: number): ClubRuntime {
+function resetRival(runtime: ClubRuntime, names: string[], seed: number, clubId: string, ctx: { seed: number; balance?: GameSave["balance"]; careers: CareerBook }): ClubRuntime {
+  const squad = ratedSquad(clubId, ctx);
   return {
     ...runtime,
+    tactics: scrubTactics(runtime.tactics, activeNames(squad)),
+    sheet: expandSheetToPanel(clubId, runtime.sheet, ctx),
     condition: withStartingForm(ensureCondition(names, {}, defaultCondition()), names, seed),
     inbox: [],
     trainingDue: true,
@@ -541,16 +582,30 @@ export function continueChampionship(save: GameSave): GameSave {
     careers[team.id] = advanced.book;
     if (team.id === save.clubId) ours = advanced.changes;
   }
+  const turned = settlePanels({
+    careers,
+    reports: save.reports,
+    seed: save.seed,
+    year,
+    balance: save.balance,
+  });
+  const ctx = { seed: save.seed, balance: save.balance, careers: turned.careers };
   const rivals: Record<string, ClubRuntime> = {};
   for (const [clubId, runtime] of Object.entries(save.rivals)) {
-    rivals[clubId] = resetRival(runtime, squadNames(clubId, save.seed), save.seed + year);
+    rivals[clubId] = resetRival(runtime, squadNames(clubId, ctx), save.seed + year, clubId, ctx);
   }
-  const names = squadNames(save.clubId, save.seed);
+  const names = squadNames(save.clubId, ctx);
+  const oursMove = turned.moves.find((move) => move.clubId === save.clubId);
+  const living = new Set(names);
   return {
     ...save,
     year,
     defendingChampionId: winnerId ?? save.defendingChampionId,
-    careers,
+    careers: turned.careers,
+    tactics: scrubTactics(save.tactics, living),
+    sheet: expandSheetToPanel(save.clubId, save.sheet, ctx),
+    plans: Object.fromEntries(Object.entries(save.plans).filter(([name]) => living.has(name))),
+    lastSheet: undefined,
     matches: seedChampionship.matches.map((match) => ({
       id: match.id,
       homeScore: null,
@@ -568,6 +623,15 @@ export function continueChampionship(save: GameSave): GameSave {
     seasonWrap: undefined,
     condition: withStartingForm(ensureCondition(names, {}, defaultCondition()), names, save.seed + year),
     rivals,
-    inbox: [winterPanelNews(ours, year, save.seed), ...save.inbox].slice(0, 80),
+    inbox: [
+      winterPanelNews(
+        ours,
+        year,
+        save.seed,
+        oursMove,
+        turned.moves.filter((move) => move.clubId !== save.clubId),
+      ),
+      ...save.inbox,
+    ].slice(0, 80),
   };
 }
