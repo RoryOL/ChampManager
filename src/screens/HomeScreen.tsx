@@ -192,8 +192,8 @@ export function HomeScreen({
           </h3>
           <p className="hint hint--tight">
             {champion.id === save.clubId
-              ? "The Canon is in the cabinet. Start a new Clare SHC when you are ready."
-              : "The championship is over. Start a new season, or stay and read the news."}
+              ? "The Canon is in the cabinet. The panel comes back a year older. Some of the year's training stays on the card, and a player over 30 who barely played may have called it a day."
+              : "The championship is over. Start the next one with this panel, or stay and read the news."}
           </p>
           <div className="row-actions">
             <button type="button" className="btn" onClick={onStartNewSeason}>

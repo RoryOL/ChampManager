@@ -97,6 +97,7 @@ export function MatchScreen({
   const chart = liveStats(live.user, Math.max(live.cursor, 1), {
     home: homeId === save.clubId ? save.condition : undefined,
     away: awayId === save.clubId ? save.condition : undefined,
+    careers: save.careers,
   });
   const atHalfTime = live.phase === "half-time" || live.phase === "extra-time" || live.phase === "extra-half";
   const ourThrowInSheet = save.clubId === homeId ? live.user.homeSheet : live.user.awaySheet;

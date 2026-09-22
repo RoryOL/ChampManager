@@ -2,11 +2,12 @@ import { seedChampionship } from "../data/championship";
 import { createManagedClub, seedRivals } from "./aiManager";
 import { DEFAULT_DIFFICULTY, migrateDifficulty } from "./difficulty";
 import { DEFAULT_BALANCE, migrateBalance } from "./balance";
-import { DEFAULT_TACTICS, defaultSheet, expandSheetToPanel } from "./players";
+import { DEFAULT_TACTICS, clampStat, defaultSheet, expandSheetToPanel } from "./players";
 import { ATTRIBUTE_KEYS, clampDial } from "./attributes";
 import { ambitionFor, migrateNewsItem } from "./news";
 import { withStartingForm } from "./form";
 import { insertReplay } from "./knockout";
+import { calendarDate } from "./scoring";
 import {
   clampBoost,
   clampFatigue,
@@ -26,10 +27,17 @@ import type {
   ClubRuntime,
   Difficulty,
   GameSave,
+  CareerBook,
+  CareerRatings,
   MatchPrep,
   MatchReport,
   NewsItem,
+  PlayerCareer,
   PlayerCondition,
+  PlayerGrade,
+  PositionFamiliarity,
+  PositionLine,
+  SquadJoin,
   Score,
   SeasonWrap,
   SquadBalance,
@@ -215,6 +223,9 @@ export function migrateSave(raw: unknown): GameSave | null {
     nextMatchPrep?: unknown;
     extraMatches?: unknown;
     seasonWrap?: unknown;
+    year?: unknown;
+    defendingChampionId?: unknown;
+    careers?: unknown;
   };
   if (!parsed.clubId || !parsed.sheet || !Array.isArray(parsed.matches)) return null;
   if (
@@ -300,7 +311,83 @@ export function migrateSave(raw: unknown): GameSave | null {
     nextMatchPrep: migrateMatchPrep(parsed.nextMatchPrep),
     extraMatches: Array.isArray(parsed.extraMatches) ? parsed.extraMatches : [],
     seasonWrap: migrateSeasonWrap(parsed.seasonWrap),
+    year: typeof parsed.year === "number" && Number.isFinite(parsed.year) ? Math.round(parsed.year) : undefined,
+    defendingChampionId:
+      typeof parsed.defendingChampionId === "string" &&
+      seedChampionship.teams.some((team) => team.id === parsed.defendingChampionId)
+        ? parsed.defendingChampionId
+        : undefined,
+    careers: migrateCareers(parsed.careers),
   };
+}
+
+function migrateBank(raw: unknown): PlayerCareer["bank"] {
+  if (!raw || typeof raw !== "object") return undefined;
+  const bank: Partial<CareerRatings> = {};
+  for (const key of ATTRIBUTE_KEYS) {
+    const value = (raw as Record<string, unknown>)[key];
+    if (typeof value !== "number" || !Number.isFinite(value) || value === 0) continue;
+    bank[key] = Math.max(-0.99, Math.min(0.99, Math.round(value * 1000) / 1000));
+  }
+  return Object.keys(bank).length > 0 ? bank : undefined;
+}
+
+function migrateJoined(raw: unknown): SquadJoin | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const parsed = raw as { number?: unknown; position?: unknown; grade?: unknown; familiarity?: unknown };
+  const lines: PositionLine[] = ["GK", "FB", "HB", "MF", "HF", "FF"];
+  if (!lines.includes(parsed.position as PositionLine)) return undefined;
+  const grades: PlayerGrade[] = ["A", "B", "C", "D"];
+  if (!grades.includes(parsed.grade as PlayerGrade)) return undefined;
+  if (typeof parsed.number !== "number" || !Number.isFinite(parsed.number)) return undefined;
+  if (!parsed.familiarity || typeof parsed.familiarity !== "object") return undefined;
+  const familiarity = {} as PositionFamiliarity;
+  for (const line of lines) {
+    const value = (parsed.familiarity as Record<string, unknown>)[line];
+    if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
+    familiarity[line] = clampStat(value);
+  }
+  return {
+    number: Math.max(1, Math.round(parsed.number)),
+    position: parsed.position as PositionLine,
+    grade: parsed.grade as PlayerGrade,
+    familiarity,
+  };
+}
+
+function migrateCareers(raw: unknown): CareerBook | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const book: CareerBook = {};
+  for (const [clubId, squad] of Object.entries(raw as Record<string, unknown>)) {
+    if (!seedChampionship.teams.some((team) => team.id === clubId)) continue;
+    if (!squad || typeof squad !== "object") continue;
+    const players: Record<string, PlayerCareer> = {};
+    for (const [name, career] of Object.entries(squad as Record<string, unknown>)) {
+      if (!career || typeof career !== "object") continue;
+      const parsed = career as { age?: unknown; ratings?: unknown; bank?: unknown; joined?: unknown; retired?: unknown };
+      if (typeof parsed.age !== "number" || !Number.isFinite(parsed.age)) continue;
+      if (!parsed.ratings || typeof parsed.ratings !== "object") continue;
+      const ratings = {} as CareerRatings;
+      let count = 0;
+      for (const key of ATTRIBUTE_KEYS) {
+        const value = (parsed.ratings as Record<string, unknown>)[key];
+        if (typeof value !== "number" || !Number.isFinite(value)) continue;
+        ratings[key] = clampStat(value);
+        count += 1;
+      }
+      if (count !== ATTRIBUTE_KEYS.length) continue;
+      const joined = migrateJoined(parsed.joined);
+      players[name] = {
+        age: Math.round(parsed.age),
+        ratings,
+        bank: migrateBank(parsed.bank),
+        ...(joined ? { joined } : {}),
+        ...(parsed.retired === true ? { retired: true } : {}),
+      };
+    }
+    if (Object.keys(players).length > 0) book[clubId] = players;
+  }
+  return Object.keys(book).length > 0 ? book : undefined;
 }
 
 function migrateSeasonWrap(raw: unknown): SeasonWrap | undefined {
@@ -366,11 +453,23 @@ export function newSave(
 
 export function championshipFromSave(save: GameSave): Championship {
   const championship = structuredClone(seedChampionship);
+  const year = typeof save.year === "number" ? save.year : championship.year;
+  championship.year = year;
+  if (
+    save.defendingChampionId &&
+    championship.teams.some((team) => team.id === save.defendingChampionId)
+  ) {
+    championship.defendingChampionId = save.defendingChampionId;
+  }
   const byId = new Map(save.matches.map((match) => [match.id, match]));
   championship.matches = championship.matches.map((match) => {
     const saved = byId.get(match.id);
-    if (!saved) return match;
-    return { ...match, homeScore: saved.homeScore, awayScore: saved.awayScore };
+    return {
+      ...match,
+      date: calendarDate(match.date, year),
+      homeScore: saved ? saved.homeScore : match.homeScore,
+      awayScore: saved ? saved.awayScore : match.awayScore,
+    };
   });
   for (const extra of save.extraMatches ?? []) {
     if (championship.matches.some((item) => item.id === extra.id)) continue;

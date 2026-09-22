@@ -11,6 +11,7 @@ import type {
   TrainingIntensity,
   TrainingMix,
   TrainingPlans,
+  RatingsContext,
   TrainingType,
   WeekSession,
   WeekShape,
@@ -534,8 +535,8 @@ export function ensureCondition(
   return next;
 }
 
-export function squadNames(teamId: string, gameSeed?: number): string[] {
-  return ratedSquad(teamId, gameSeed).map((player) => player.name);
+export function squadNames(teamId: string, ctx?: number | RatingsContext): string[] {
+  return ratedSquad(teamId, ctx).map((player) => player.name);
 }
 
 export function conditionFor(name: string, map: Record<string, PlayerCondition>): PlayerCondition {

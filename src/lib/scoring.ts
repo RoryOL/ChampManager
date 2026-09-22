@@ -25,6 +25,12 @@ export function winnerOf(match: Match): "home" | "away" | "draw" | null {
   return "draw";
 }
 
+/** Keep the month and day, move the fixture into a later championship year. */
+export function calendarDate(iso: string, year: number): string {
+  if (!iso) return iso;
+  return iso.replace(/^\d{4}/, String(year));
+}
+
 export function formatDate(iso: string): string {
   const date = new Date(`${iso}T12:00:00`);
   return date.toLocaleDateString("en-IE", {

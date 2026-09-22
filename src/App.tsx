@@ -58,7 +58,7 @@ export default function App() {
       <div className="status-bar">
         <span>Capture the Canon</span>
         <span className="status-bar__trail">
-          <span>{game.campaign ? game.campaign.code : "SHC 26"}</span>
+          <span>{game.campaign ? game.campaign.code : `SHC ${String(game.championship.year).slice(-2)}`}</span>
           {update.current.versionName ? (
             <button
               type="button"
@@ -168,7 +168,7 @@ export default function App() {
             <ClubBadge team={club} size="sm" variant="crest" />
             <div>
               <p>
-                {game.campaign ? `Together · ${game.campaign.code}` : "Clare SHC 2026"}
+                {game.campaign ? `Together · ${game.campaign.code}` : `Clare SHC ${game.championship.year}`}
                 {game.save ? ` · ${difficultyTitle(game.save.difficulty)}` : ""}
                 {game.save && game.save.balance !== "standard" ? ` · ${balanceTitle(game.save.balance)}` : ""}
               </p>

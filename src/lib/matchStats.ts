@@ -1,8 +1,10 @@
 import type {
+  CareerBook,
   MatchEvent,
   MatchReport,
   PlayerCondition,
   PlayerMatchStats,
+  RatedPlayer,
   SimulatedMatch,
   SquadBalance,
   StatCredit,
@@ -272,6 +274,9 @@ export function statsFromEvents(
     upTo?: number;
     gameSeed?: number;
     balance?: SquadBalance;
+    careers?: CareerBook;
+    homeSquad?: RatedPlayer[];
+    awaySquad?: RatedPlayer[];
     homeChaseEffort?: number;
     awayChaseEffort?: number;
   },
@@ -302,8 +307,9 @@ export function statsFromEvents(
     }
   }
 
-  const homeSquad = ratedSquad(options.homeId, { seed: options.gameSeed, balance: options.balance });
-  const awaySquad = ratedSquad(options.awayId, { seed: options.gameSeed, balance: options.balance });
+  const ratings = { seed: options.gameSeed, balance: options.balance, careers: options.careers };
+  const homeSquad = options.homeSquad ?? ratedSquad(options.homeId, ratings);
+  const awaySquad = options.awaySquad ?? ratedSquad(options.awayId, ratings);
   const byName = new Map(
     [...homeSquad.map((player) => [player.name, { player, teamId: options.homeId }] as const),
      ...awaySquad.map((player) => [player.name, { player, teamId: options.awayId }] as const)],
@@ -456,6 +462,9 @@ export function combineHalves(
     awayName: string;
     clubId?: string;
     condition?: Record<string, PlayerCondition>;
+    careers?: CareerBook;
+    homeSquad?: RatedPlayer[];
+    awaySquad?: RatedPlayer[];
   },
 ): SimulatedMatch {
   const events = [...first.events, ...second.events];
@@ -472,6 +481,9 @@ export function combineHalves(
     awayTactics: second.awayTactics,
     gameSeed: first.gameSeed ?? second.gameSeed,
     balance: first.balance ?? second.balance,
+    careers: names.careers,
+    homeSquad: names.homeSquad,
+    awaySquad: names.awaySquad,
     homeChaseEffort: Math.min(1, (first.homeChaseEffort ?? 0) + (second.homeChaseEffort ?? 0)),
     awayChaseEffort: Math.min(1, (first.awayChaseEffort ?? 0) + (second.awayChaseEffort ?? 0)),
   });
@@ -520,6 +532,7 @@ export function liveStats(
   conditions?: {
     home?: Record<string, PlayerCondition>;
     away?: Record<string, PlayerCondition>;
+    careers?: CareerBook;
   },
 ): { players: PlayerMatchStats[]; homeStats: TeamMatchStats; awayStats: TeamMatchStats } {
   return statsFromEvents(sim.events, {
@@ -534,6 +547,7 @@ export function liveStats(
     upTo: cursor,
     gameSeed: sim.gameSeed,
     balance: sim.balance,
+    careers: conditions?.careers,
     homeChaseEffort: sim.homeChaseEffort,
     awayChaseEffort: sim.awayChaseEffort,
   });
