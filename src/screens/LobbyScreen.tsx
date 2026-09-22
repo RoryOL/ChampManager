@@ -61,7 +61,7 @@ export function LobbyScreen({
         <h2 className="invite-code">{campaign.code}</h2>
         <p className="hint">
           {roomStatus === "live"
-            ? "Live room is up. Friends can join from another phone with this code — they should press Check room after typing it."
+            ? "Live room is up. Friends join with this code — they should press Check room after typing it. If they had to paste a snapshot, stay here; they keep looking until they land in this room."
             : roomStatus === "connecting"
               ? "Opening the live room so other phones can find this code…"
               : "Live room is down, so other phones cannot join with the code yet. Stay here and press Retry live room, or share a snapshot."}{" "}
