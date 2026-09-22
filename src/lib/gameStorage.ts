@@ -2,6 +2,7 @@ import { seedChampionship } from "../data/championship";
 import { createManagedClub, seedRivals } from "./aiManager";
 import { DEFAULT_DIFFICULTY, migrateDifficulty } from "./difficulty";
 import { DEFAULT_BALANCE, migrateBalance } from "./balance";
+import { backfillDevelopment, migrateDevelopment, openingDevelopment } from "./developmentLog";
 import { DEFAULT_TACTICS, clampStat, defaultSheet, expandSheetToPanel } from "./players";
 import { ATTRIBUTE_KEYS, clampDial } from "./attributes";
 import { ambitionFor, migrateNewsItem } from "./news";
@@ -226,6 +227,7 @@ export function migrateSave(raw: unknown): GameSave | null {
     year?: unknown;
     defendingChampionId?: unknown;
     careers?: unknown;
+    development?: unknown;
   };
   if (!parsed.clubId || !parsed.sheet || !Array.isArray(parsed.matches)) return null;
   if (
@@ -269,6 +271,10 @@ export function migrateSave(raw: unknown): GameSave | null {
     parsed.weekDeltas && typeof parsed.weekDeltas === "object"
       ? (parsed.weekDeltas as Record<string, AttributeBoosts>)
       : {};
+  const balance = migrateBalance(parsed.balance);
+  const year = typeof parsed.year === "number" && Number.isFinite(parsed.year) ? Math.round(parsed.year) : undefined;
+  const careers = migrateCareers(parsed.careers);
+  const migratedDevelopment = migrateDevelopment(parsed.development);
   return {
     version: SAVE_VERSION,
     clubId: parsed.clubId,
@@ -307,17 +313,26 @@ export function migrateSave(raw: unknown): GameSave | null {
     weekDeltas,
     rivals: migrateRivals(parsed.clubId, seed, parsed.rivals),
     difficulty: migrateDifficulty(parsed.difficulty),
-    balance: migrateBalance(parsed.balance),
+    balance,
     nextMatchPrep: migrateMatchPrep(parsed.nextMatchPrep),
     extraMatches: Array.isArray(parsed.extraMatches) ? parsed.extraMatches : [],
     seasonWrap: migrateSeasonWrap(parsed.seasonWrap),
-    year: typeof parsed.year === "number" && Number.isFinite(parsed.year) ? Math.round(parsed.year) : undefined,
+    year,
     defendingChampionId:
       typeof parsed.defendingChampionId === "string" &&
       seedChampionship.teams.some((team) => team.id === parsed.defendingChampionId)
         ? parsed.defendingChampionId
         : undefined,
-    careers: migrateCareers(parsed.careers),
+    careers,
+    development: migratedDevelopment?.[parsed.clubId]
+      ? migratedDevelopment
+      : backfillDevelopment({
+          clubId: parsed.clubId,
+          seed,
+          balance,
+          year,
+          careers,
+        }),
   };
 }
 
@@ -448,6 +463,7 @@ export function newSave(
     weekDeltas: {},
     rivals: seedRivals(clubId, seed, migrateBalance(balance)),
     extraMatches: [],
+    development: openingDevelopment(clubId, seed, migrateBalance(balance), championship.year),
   };
 }
 

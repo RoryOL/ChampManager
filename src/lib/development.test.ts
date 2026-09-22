@@ -212,5 +212,75 @@ describe("continue championship", () => {
     expect(migrated?.careers?.ballyea?.["Tony Kelly"]?.age).toBe(
       ratedSquad("ballyea", next).find((player) => player.name === "Tony Kelly")?.age,
     );
+    expect(migrated?.development?.ballyea?.["Tony Kelly"]?.map((snap) => snap.year)).toEqual(
+      next.development?.ballyea?.["Tony Kelly"]?.map((snap) => snap.year),
+    );
+  });
+});
+
+describe("development log", () => {
+  it("records the opening card and each winter after it", () => {
+    const rolled = newSave("st-josephs");
+    const save = { ...rolled, seed: 7 };
+    const thomas = ratedSquad("st-josephs", save).find((player) => player.name === "Thomas O'Connor")!;
+    expect(save.development?.["st-josephs"]?.[thomas.name]?.map((snap) => snap.year)).toEqual([2026]);
+
+    const reports = Object.fromEntries(
+      [1, 2, 3, 4, 5].map((index) => [
+        `m${index}`,
+        { players: [{ teamId: "st-josephs", name: thomas.name, minutes: 58 }] },
+      ]),
+    );
+    const next = continueChampionship({
+      ...save,
+      condition: {
+        ...save.condition,
+        [thomas.name]: { ...(save.condition[thomas.name] ?? { fatigue: 0, sharpness: 40 }), form: 74 },
+      },
+      reports: reports as typeof save.reports,
+    });
+    const history = next.development?.["st-josephs"]?.[thomas.name];
+    expect(history?.map((snap) => snap.year)).toEqual([2026, 2027]);
+    expect(history?.[0]?.ratings.speed).toBe(thomas.ratings.speed);
+    expect(history?.[1]?.ratings.speed).toBeGreaterThan(thomas.ratings.speed);
+    expect(history?.[1]?.age).toBe(thomas.age + 1);
+
+    const again = continueChampionship(next);
+    expect(again.development?.["st-josephs"]?.[thomas.name]?.map((snap) => snap.year)).toEqual([2026, 2027, 2028]);
+  });
+
+  it("shows a veteran slipping and a recruit from the year he arrives", () => {
+    const save = { ...newSave("ballyea"), seed: 7 };
+    const tony = ratedSquad("ballyea", save).find((player) => player.name === "Tony Kelly")!;
+    const next = continueChampionship(save);
+    const history = next.development?.ballyea?.["Tony Kelly"];
+    expect(history?.[1]?.ratings.speed).toBeLessThan(history?.[0]?.ratings.speed ?? tony.ratings.speed);
+    expect(history?.[1]?.ratings.speed).toBe(
+      ratedSquad("ballyea", next).find((player) => player.name === "Tony Kelly")?.ratings.speed,
+    );
+
+    let recruit: string | undefined;
+    let years: number[] | undefined;
+    for (let seed = 1; seed <= 24 && !recruit; seed += 1) {
+      const rolled = continueChampionship({ ...newSave("clonlara"), seed });
+      const found = Object.entries(rolled.careers?.clonlara ?? {}).find(([, career]) => career.joined && !career.retired);
+      if (!found) continue;
+      recruit = found[0];
+      years = rolled.development?.clonlara?.[found[0]]?.map((snap) => snap.year);
+    }
+    expect(recruit).toBeTruthy();
+    expect(years).toEqual([2027]);
+  });
+
+  it("rebuilds start and now when an older save has no log", () => {
+    const save = { ...newSave("ballyea"), seed: 7 };
+    const next = continueChampionship(save);
+    const migrated = migrateSave({ ...next, development: undefined });
+    const logged = next.development?.ballyea?.["Tony Kelly"];
+    const rebuilt = migrated?.development?.ballyea?.["Tony Kelly"];
+    expect(rebuilt?.map((snap) => snap.year)).toEqual([2026, 2027]);
+    expect(rebuilt?.[0]?.ratings.speed).toBe(logged?.[0]?.ratings.speed);
+    expect(rebuilt?.[1]?.ratings.speed).toBe(logged?.[1]?.ratings.speed);
+    expect(rebuilt?.[1]?.overall).toBe(logged?.[1]?.overall);
   });
 });
