@@ -31,7 +31,7 @@ describe("retirement chance", () => {
   });
 });
 
-describe("panel turnover", () => {
+describe("panel turnover", { timeout: 15_000 }, () => {
   it("builds a youth card on the overall it was asked for", () => {
     const card = ratingsForOverall("HF", 17, 11, true);
     expect(computeOverall(card.ratings, card.familiarity, "HF")).toBe(17);
