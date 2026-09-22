@@ -18,6 +18,7 @@ import { eliteStatKeys } from "../lib/eliteStats";
 import { formatPair, seasonStatsFor } from "../lib/matchStats";
 import { defaultSheet, expandSheetToPanel, matchOrderIndex, matchShirtNumber, ratedSquad } from "../lib/players";
 import { FORMATION_ROWS } from "../lib/squads";
+import { changedStats, playerArc, type PlayerArc } from "../lib/developmentLog";
 import { conditionFor, fitnessOf, isOvertrained, matchRatings, toneClass, trainedRatings, trainingDelta } from "../lib/training";
 import { injuryLine, isInjured, isSuspended } from "../lib/injuries";
 
@@ -30,6 +31,7 @@ type Props = {
   picked: string | null;
   onTapPlayer: (name: string) => void;
   onOpenTraining?: () => void;
+  onOpenDevelopment?: (name?: string) => void;
   onOpenMatch?: (match: Match) => void;
 };
 
@@ -45,18 +47,37 @@ function formatDelta(delta: number): string {
   return "";
 }
 
+function DevelopmentGlance({ arc }: { arc: PlayerArc }) {
+  const moved = changedStats(arc);
+  return (
+    <div className="attr-group">
+      <h4>{arc.joined ? `Since joining in ${arc.start.year}` : `Since ${arc.start.year}`}</h4>
+      <p className="hint hint--tight">
+        Overall {arc.start.overall}
+        {arc.history.length > 1 ? ` to ${arc.current.overall}` : ""}
+        {arc.overallDelta !== 0 ? ` (${formatDelta(arc.overallDelta)})` : ""}.{" "}
+        {moved.length === 0
+          ? "The attributes are where they were on that first card. They move between seasons."
+          : moved.map((stat) => `${ATTRIBUTE_LABELS[stat.key].toLowerCase()} ${formatDelta(stat.delta)}`).join(", ") + "."}
+      </p>
+    </div>
+  );
+}
+
 function PlayerDetail({
   player,
   condition,
   showCondition,
   season,
   colours,
+  arc,
 }: {
   player: RatedPlayer;
   condition?: PlayerCondition;
   showCondition: boolean;
   season: PlayerMatchStats;
   colours: { primary: string; secondary: string };
+  arc?: PlayerArc;
 }) {
   const match = showCondition && condition ? matchRatings(player, condition) : player.ratings;
   const trained = showCondition && condition ? trainedRatings(player, condition) : player.ratings;
@@ -96,6 +117,7 @@ function PlayerDetail({
         </div>
         <b className={overallDelta > 0 ? "is-up" : overallDelta < 0 ? "is-down" : ""}>{match.overall}</b>
       </header>
+      {arc ? <DevelopmentGlance arc={arc} /> : null}
       {showCondition && condition ? (
         <div className="attr-group">
           <h4>Condition</h4>
@@ -193,6 +215,7 @@ export function SquadScreen({
   picked,
   onTapPlayer,
   onOpenTraining,
+  onOpenDevelopment,
   onOpenMatch,
 }: Props) {
   const ownTeam = viewTeamId === save.clubId;
@@ -241,10 +264,19 @@ export function SquadScreen({
             <h1>{compactName(viewed)}</h1>
             <span className="colour-label">{viewed.colours.label}</span>
           </div>
-          {ownTeam && onOpenTraining ? (
-            <button type="button" className="btn" onClick={onOpenTraining}>
-              Training
-            </button>
+          {ownTeam && (onOpenTraining || onOpenDevelopment) ? (
+            <div className="banner-actions">
+              {onOpenDevelopment ? (
+                <button type="button" className="btn btn--ghost" onClick={() => onOpenDevelopment()}>
+                  Development
+                </button>
+              ) : null}
+              {onOpenTraining ? (
+                <button type="button" className="btn" onClick={onOpenTraining}>
+                  Training
+                </button>
+              ) : null}
+            </div>
           ) : !ownTeam ? (
             <button type="button" className="btn btn--ghost" onClick={() => onViewTeam(save.clubId)}>
               Your squad
@@ -364,6 +396,11 @@ export function SquadScreen({
         >
           <div className="player-overlay__panel" onClick={(event) => event.stopPropagation()}>
             <div className="player-overlay__bar">
+              {ownTeam && onOpenDevelopment ? (
+                <button type="button" className="btn" onClick={() => onOpenDevelopment(selected.name)}>
+                  Over time
+                </button>
+              ) : null}
               <button type="button" className="btn btn--ghost" onClick={() => onTapPlayer(selected.name)}>
                 Close
               </button>
@@ -374,6 +411,7 @@ export function SquadScreen({
               showCondition={ownTeam}
               season={seasonStatsFor(save.reports, viewTeamId, selected.name)}
               colours={viewed?.colours ?? { primary: "#1a3d7c", secondary: "#e8c547" }}
+              arc={ownTeam ? playerArc(save, selected.name) : undefined}
             />
           </div>
         </div>

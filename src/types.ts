@@ -103,7 +103,7 @@ export type StandingRow = TeamStats & {
   status: "quarter-final" | "safe" | "relegation" | "pending";
 };
 
-export type PageId = "home" | "squad" | "tactics" | "fixtures" | "table" | "training";
+export type PageId = "home" | "squad" | "tactics" | "fixtures" | "table" | "training" | "development";
 
 export type PositionLine = "GK" | "FB" | "HB" | "MF" | "HF" | "FF";
 
@@ -259,6 +259,17 @@ export type PlayerCareer = {
 
 /** club id → player name → winter card */
 export type CareerBook = Record<string, Record<string, PlayerCareer>>;
+
+/** Natural card at the start of one championship. */
+export type RatingSnapshot = {
+  year: number;
+  age: number;
+  overall: number;
+  ratings: CareerRatings;
+};
+
+/** club id → player name → cards from the first season onward */
+export type DevelopmentLog = Record<string, Record<string, RatingSnapshot[]>>;
 
 export type RatingsContext = {
   seed?: number;
@@ -508,6 +519,8 @@ export type GameSave = {
   defendingChampionId?: string;
   /** Natural ratings after winters. Absent until the first new season. */
   careers?: CareerBook;
+  /** Natural cards at the start of each championship, for the club you manage. */
+  development?: DevelopmentLog;
 };
 
 export type LivePhase =

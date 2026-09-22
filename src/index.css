@@ -847,7 +847,17 @@ html.native-app .device {
 .player-overlay__bar {
   display: flex;
   justify-content: flex-end;
+  gap: 8px;
   margin-bottom: 4px;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--bg, #121820);
+  padding-bottom: 6px;
+}
+
+.player-overlay__bar .btn:first-child:not(:last-child) {
+  margin-right: auto;
 }
 
 .player-overlay .player-card {
@@ -1857,6 +1867,53 @@ html.native-app .device {
 .club-banner--overview .btn {
   margin-left: auto;
   flex-shrink: 0;
+}
+
+.banner-actions {
+  margin-left: auto;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.club-banner--overview .banner-actions .btn {
+  margin-left: 0;
+  padding: 10px 12px;
+  font-size: 14px;
+}
+
+.squad-table-wrap--page {
+  max-height: none;
+}
+
+.dev-table th.name,
+.dev-table td.name {
+  min-width: 132px;
+  max-width: 176px;
+  white-space: normal;
+}
+
+.dev-ovr {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.15;
+}
+
+.dev-ovr small {
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.dev-group td {
+  text-align: left;
+  color: var(--saffron);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: var(--surface-2);
 }
 
 .coach-brief {

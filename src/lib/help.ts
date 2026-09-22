@@ -9,7 +9,7 @@ export const HELP_SECTIONS: HelpSection[] = [
     id: "squad",
     title: "Squad",
     paragraphs: [
-      "Tap a row for the full card. Team changes are on Tactics. Other clubs are on the Table tab.",
+      "Tap a row for the full card. Team changes are on Tactics. Other clubs are on the Table tab. Development, beside Training, shows how every natural rating has moved since the first season. On a player, Over time lists each season on his card.",
       "Green and red on a rating are training lifts from his natural number. Training can lift a stat a little (up to +2), and the work slows once a rating is already high. Work one area hard and neglected stats can drift. Small lifts stack even when the card still shows the same integer.",
       "Younger players take the work better and get match fitness back quicker; veterans feel the legs longer. Workrate, composure and ability under pressure do not change in training. Teamwork rises when the same lads play together.",
       "Between seasons the card itself moves. A young player who got a run of games and finished in form comes on, quickly at 19 and hardly at all by 25. From 30 the attributes slip, faster if he barely played. Composure, vision and hurling under pressure can still improve with age. Training from the year stacks on top of that, but only a share of the upward work stays on the card. Younger players keep more of it, and some winters it sticks better than others. A stat that drifted down because it was neglected is back to the natural number.",

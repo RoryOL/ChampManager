@@ -15,6 +15,7 @@ import { LobbyScreen } from "./screens/LobbyScreen";
 import { HomeScreen } from "./screens/HomeScreen";
 import { SquadScreen } from "./screens/SquadScreen";
 import { TrainingScreen } from "./screens/TrainingScreen";
+import { DevelopmentScreen } from "./screens/DevelopmentScreen";
 import { TacticsScreen } from "./screens/TacticsScreen";
 import { FixturesScreen } from "./screens/FixturesScreen";
 import { MatchDetailScreen } from "./screens/MatchDetailScreen";
@@ -27,6 +28,7 @@ export default function App() {
   const update = useAppUpdate();
   const [page, setPage] = useState<PageId>("home");
   const [fixtureId, setFixtureId] = useState<string | null>(null);
+  const [developmentName, setDevelopmentName] = useState<string | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
   const club = game.save ? teamById(game.championship, game.save.clubId) : undefined;
   const winner = game.championId ? teamById(game.championship, game.championId) : undefined;
@@ -228,6 +230,10 @@ export default function App() {
               picked={game.picked}
               onTapPlayer={game.tapPlayer}
               onOpenTraining={() => setPage("training")}
+              onOpenDevelopment={(name) => {
+                setDevelopmentName(name ?? null);
+                setPage("development");
+              }}
               onOpenMatch={openMatch}
             />
           )}
@@ -240,6 +246,14 @@ export default function App() {
               onSetPlans={game.setPlans}
               onSetIntensity={game.setIntensity}
               onSetWeekShape={game.setWeekShape}
+            />
+          )}
+          {page === "development" && (
+            <DevelopmentScreen
+              save={game.save}
+              playerName={developmentName}
+              onBack={() => setPage("squad")}
+              onSelect={setDevelopmentName}
             />
           )}
           {page === "tactics" && (

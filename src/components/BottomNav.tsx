@@ -20,7 +20,11 @@ export function BottomNav({ page, onChange }: Props) {
         <button
           key={item.id}
           type="button"
-          className={page === item.id || (page === "training" && item.id === "squad") ? "is-active" : ""}
+          className={
+            page === item.id || ((page === "training" || page === "development") && item.id === "squad")
+              ? "is-active"
+              : ""
+          }
           onClick={() => onChange(item.id)}
         >
           <svg viewBox="0 0 24 24" aria-hidden="true">

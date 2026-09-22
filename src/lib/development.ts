@@ -12,6 +12,7 @@ import type {
 } from "../types";
 import { ATTRIBUTE_KEYS, ATTRIBUTE_LABELS, positionWeight, type AttributeKey } from "./attributes";
 import { formValue, withStartingForm } from "./form";
+import { OPENING_YEAR, appendClubSeason, backfillDevelopment } from "./developmentLog";
 import { championshipFromSave } from "./gameStorage";
 import { newsItem } from "./news";
 import { ratedSquad, computeOverall, expandSheetToPanel } from "./players";
@@ -597,11 +598,23 @@ export function continueChampionship(save: GameSave): GameSave {
   const names = squadNames(save.clubId, ctx);
   const oursMove = turned.moves.find((move) => move.clubId === save.clubId);
   const living = new Set(names);
+  const playedYear = save.year ?? OPENING_YEAR;
+  const prior =
+    save.development ??
+    backfillDevelopment({
+      clubId: save.clubId,
+      seed: save.seed,
+      balance: save.balance,
+      year: save.year,
+      careers: save.careers,
+    });
+  const played = appendClubSeason(prior, save.clubId, ratedSquad(save.clubId, save), playedYear);
   return {
     ...save,
     year,
     defendingChampionId: winnerId ?? save.defendingChampionId,
     careers: turned.careers,
+    development: appendClubSeason(played, save.clubId, ratedSquad(save.clubId, ctx), year),
     tactics: scrubTactics(save.tactics, living),
     sheet: expandSheetToPanel(save.clubId, save.sheet, ctx),
     plans: Object.fromEntries(Object.entries(save.plans).filter(([name]) => living.has(name))),
