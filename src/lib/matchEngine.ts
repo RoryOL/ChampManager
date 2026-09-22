@@ -780,6 +780,7 @@ export function simulateMatch(options: {
   injuryBudget?: { total: number; home: number; away: number };
   forcedRemovals?: { minute: number; teamId: string; name: string; kind: "red" | "injury" }[];
   performanceBoost?: { clubIds: string[]; amount: number };
+  oppositionBoost?: { excludeClubIds: string[]; amount: number };
   homePrep?: MatchPrep;
   awayPrep?: MatchPrep;
   stage?: MatchStage;
@@ -827,10 +828,16 @@ export function simulateMatch(options: {
   let awayNames = reshapeTo625(awaySlots, awayOut);
   let homeLiveTactics: Tactics = homeNames.length < 15 ? { ...homeTactics, shape: "traditional" } : homeTactics;
   let awayLiveTactics: Tactics = awayNames.length < 15 ? { ...awayTactics, shape: "traditional" } : awayTactics;
-  const homeLift =
-    options.performanceBoost?.clubIds.includes(options.homeId) ? (options.performanceBoost.amount ?? 0) : 0;
-  const awayLift =
-    options.performanceBoost?.clubIds.includes(options.awayId) ? (options.performanceBoost.amount ?? 0) : 0;
+  const ratingLift = (clubId: string) => {
+    const human = options.performanceBoost?.clubIds.includes(clubId) ? (options.performanceBoost.amount ?? 0) : 0;
+    const opposition =
+      options.oppositionBoost && !options.oppositionBoost.excludeClubIds.includes(clubId)
+        ? (options.oppositionBoost.amount ?? 0)
+        : 0;
+    return human + opposition;
+  };
+  const homeLift = ratingLift(options.homeId);
+  const awayLift = ratingLift(options.awayId);
   const rawHomeRoster = options.homeSquad ?? sheetPlayers(options.homeId, homeSheet, ratings);
   const rawAwayRoster = options.awaySquad ?? sheetPlayers(options.awayId, awaySheet, ratings);
   const homeRoster = liftSquadForPrep(liftSquadRatings(rawHomeRoster, homeLift), options.homePrep);
@@ -2652,6 +2659,7 @@ export function applyKnockoutExtraTime(
     gameSeed?: number;
     balance?: SquadBalance;
     performanceBoost?: { clubIds: string[]; amount: number };
+    oppositionBoost?: { excludeClubIds: string[]; amount: number };
     homePrep?: MatchPrep;
     awayPrep?: MatchPrep;
     stage?: MatchStage;
@@ -2702,6 +2710,7 @@ export function applyKnockoutExtraTime(
       },
       injuryBudget: remainingInjuryBudget(from.events, sim.homeId, sim.awayId),
       performanceBoost: options.performanceBoost,
+      oppositionBoost: options.oppositionBoost,
       homePrep: options.homePrep,
       awayPrep: options.awayPrep,
       stage,

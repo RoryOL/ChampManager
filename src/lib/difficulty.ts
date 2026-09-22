@@ -34,13 +34,13 @@ export const DIFFICULTY_OPTIONS: {
     value: "senior",
     title: "Senior",
     subtitle: "Difficult",
-    copy: "No helping hand. The other managers pick a fifteen and a plan for each match, and they will change at half-time.",
+    copy: "The other panels play a grade stronger. Managers pick a fifteen and a plan for each match, and they will change at half-time.",
   },
   {
     value: "intercounty",
     title: "Intercounty",
     subtitle: "Very difficult",
-    copy: "No lift. They read previous days, injuries and strengths, then review the first half and chase the match.",
+    copy: "The other panels play two grades stronger. They read previous days, name a marker, and chase the match. Leaving the default setup will not be enough.",
   },
 ];
 
@@ -68,11 +68,32 @@ export function performanceLift(difficulty: Difficulty): number {
   return 0;
 }
 
+/** Extra rating lift for computer panels. Junior and intermediate stay honest. */
+export function oppositionLift(difficulty: Difficulty): number {
+  if (difficulty === "intercounty") return 2;
+  if (difficulty === "senior") return 1;
+  return 0;
+}
+
 /** How far a computer manager moves off their club personality toward a match-specific plan. */
 export function cpuAdaptWeight(difficulty: Difficulty): number {
   if (difficulty === "junior") return 0;
   if (difficulty === "intermediate") return 0.4;
   return 1;
+}
+
+/** How much stronger the other attack must be before the computer sits in. */
+export function cpuContainGap(difficulty: Difficulty): number {
+  if (difficulty === "intercounty") return 0.28;
+  if (difficulty === "senior") return 0.5;
+  return 0.85;
+}
+
+/** How much stronger our attack must be before the computer pushes on. */
+export function cpuAttackGap(difficulty: Difficulty): number {
+  if (difficulty === "intercounty") return 0.4;
+  if (difficulty === "senior") return 0.65;
+  return 0.85;
 }
 
 export function cpuReadsHistory(difficulty: Difficulty): boolean {
@@ -105,6 +126,7 @@ export function blendTactics(base: Tactics, adapted: Tactics, weight: number): T
     shortFreeTaker: t >= 0.5 ? adapted.shortFreeTaker : base.shortFreeTaker,
     sidelineTaker: t >= 0.5 ? adapted.sidelineTaker : base.sidelineTaker,
     puckoutTarget: t >= 0.5 ? adapted.puckoutTarget : base.puckoutTarget,
+    manMarks: t >= 0.5 ? adapted.manMarks : base.manMarks,
   };
 }
 
@@ -145,6 +167,26 @@ export function performanceBoostFor(
   const amount = performanceLift(difficulty);
   if (amount <= 0 || clubIds.length === 0) return undefined;
   return { clubIds, amount };
+}
+
+export function oppositionBoostFor(
+  difficulty: Difficulty,
+  humanClubIds: string[],
+): { excludeClubIds: string[]; amount: number } | undefined {
+  const amount = oppositionLift(difficulty);
+  if (amount <= 0) return undefined;
+  return { excludeClubIds: humanClubIds, amount };
+}
+
+export function matchBoostsFor(difficulty: Difficulty, humanClubIds: string[]) {
+  return {
+    performanceBoost: performanceBoostFor(difficulty, humanClubIds),
+    oppositionBoost: oppositionBoostFor(difficulty, humanClubIds),
+  };
+}
+
+export function clubMatchLift(clubId: string, difficulty: Difficulty, humanClubIds: string[]): number {
+  return humanClubIds.includes(clubId) ? performanceLift(difficulty) : oppositionLift(difficulty);
 }
 
 export function cpuDifficulty(raw?: Difficulty): Difficulty {

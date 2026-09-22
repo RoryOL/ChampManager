@@ -27,12 +27,15 @@ import {
   keepClubSheet,
   sitInjuredPlayers,
 } from "./injuries";
+import { markerSlot } from "./manMarking";
 import { simulateMatch, straightRedNamesFromEvents } from "./matchEngine";
 import { ratingsCtx } from "./balance";
 import {
   assumedOpponentTactics,
   blendTactics,
   cpuAdaptWeight,
+  cpuAttackGap,
+  cpuContainGap,
   cpuDifficulty,
   cpuHalfTimeSkill,
   inferOpponentTactics,
@@ -238,6 +241,30 @@ export function pickCpuSheet(options: {
   return { starters, subs: [...rankedSubs.map((player) => player.name), ...injuredRest.map((player) => player.name)] };
 }
 
+/** Track the opposition's most threatening forward with the matching defender. */
+export function pickCpuManMarks(
+  ourSheet: TeamSheet,
+  theirSheet: TeamSheet,
+  theirSquad: RatedPlayer[],
+): Record<string, string> | undefined {
+  const byName = new Map(theirSquad.map((player) => [player.name, player]));
+  let best: { name: string; index: number; threat: number } | undefined;
+  for (let index = 9; index <= 14; index += 1) {
+    const name = theirSheet.starters[index];
+    if (!name) continue;
+    const player = byName.get(name);
+    const threat =
+      (player?.ratings.shooting ?? 11) * 2 +
+      (player?.ratings.offTheBall ?? 11) +
+      (player?.ratings.overall ?? 11);
+    if (!best || threat > best.threat) best = { name, index, threat };
+  }
+  if (!best) return undefined;
+  const marker = ourSheet.starters[markerSlot(best.index)];
+  if (!marker) return undefined;
+  return { [marker]: best.name };
+}
+
 export function pickCpuTactics(options: {
   teamId: string;
   opponentId: string;
@@ -288,13 +315,16 @@ export function pickCpuTactics(options: {
   let aggression = base.aggression;
   let pressure = base.pressure;
   let shooting = base.shooting;
+  const containGap = cpuContainGap(difficulty);
+  const attackGap = cpuAttackGap(difficulty);
+  const sittingIn = theirs.attack > ours.defence + containGap;
 
-  if (theirs.attack > ours.defence + 0.85) {
+  if (sittingIn) {
     mentality = mentality === "attacking" ? "balanced" : "contain";
     shape = "sweeper";
     pressure = Math.min(pressure, 54);
   }
-  if (ours.attack > theirs.defence + 0.85) {
+  if (ours.attack > theirs.defence + attackGap) {
     mentality = mentality === "contain" ? "balanced" : "attacking";
   }
   if (opponentTactics.puckout <= 38) {
@@ -317,9 +347,14 @@ export function pickCpuTactics(options: {
     shooting = Math.max(shooting, 58);
     build = Math.max(build, 52);
   }
+  if (difficulty === "intercounty" && !sittingIn) {
+    pressure = Math.max(pressure, 60);
+    aggression = Math.max(aggression, 54);
+  }
 
   const jitter = (seedFrom(`${options.seed}:${options.matchKey}:cpu-tactics`) % 9) - 4;
   const xv = sheetPlayers(options.teamId, sheet, panel);
+  const theirXv = sheetPlayers(options.opponentId, opponentSheet, panel);
   const target = pickPuckoutTarget(xv, base.puckoutTarget, condition);
   const adapted: Tactics = {
     mentality,
@@ -330,6 +365,7 @@ export function pickCpuTactics(options: {
     pressure: clampDial(pressure),
     shooting: clampDial(shooting),
     puckoutTarget: clampDial(puckout) >= 55 ? target?.name : undefined,
+    manMarks: difficulty === "intercounty" ? pickCpuManMarks(sheet, opponentSheet, theirXv) : undefined,
   };
   return blendTactics(base, adapted, weight);
 }

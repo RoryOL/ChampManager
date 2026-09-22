@@ -31,6 +31,7 @@ export const HELP_SECTIONS: HelpSection[] = [
       "Sitting in or sitting off the press keeps the score down. Fewer scores mean more randomness — the better side is less sure of the win.",
       "Long frees and 65s, and close-in frees, can be named. Sideline cuts are taken by whoever is nearest the ball.",
       "Defenders can track a named forward; midfielders can track a named midfielder. Marking, pace, strength, workrate and hooking all go toward shutting him down. A full-back on a half-forward pushes onto the half-back line and a half-back drops. In tactics you can assign anyone on the panel; on match day only the fifteen on the field are offered.",
+      "The starting plan is a mid-block. Against a weaker defence, attacking and a more direct ball should outscore sitting in. Against a stronger attack, a sweeper and contain should cut the goals you concede. On Intercounty the other managers will not leave you that mid-block for free.",
     ],
   },
   {
